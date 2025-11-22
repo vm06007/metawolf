@@ -32,16 +32,16 @@ import { renderSendScreen } from './components/SendScreen';
 import { renderTransactionsScreen } from './components/TransactionsScreen';
 import { renderNetworkSelectorModal } from './components/NetworkSelectorModal';
 import { ethPriceService } from './services/eth-price-service';
-import { unifiedBalanceService, UnifiedBalanceData } from './services/unified-balance-service';
-import { transferService } from './services/transfer-service';
-import { createEIP1193Provider } from './services/eip1193-provider';
-import { fetchTransactionsFromOctav, OctavTransaction, fetchHistoricalBalanceFromOctav } from './services/transactions-service';
-import { renderRechartsChart } from './utils/recharts-renderer';
-import { formatChartTime, formatChartBalance } from './utils/balance-chart';
+import { unifiedBalanceService } from './services/unified-balance-service';
+import { fetchTransactionsFromOctav, OctavTransaction } from './services/transactions-service';
 import { HaloUI } from './halo-ui';
 import { isAddress, getAddress } from '@ethersproject/address';
 import { loadEthers } from './ethers-loader';
 import { type AppState, createInitialState, TRANSACTIONS_PAGE_SIZE } from './types/app-state';
+import * as BalanceModule from './modules/app-balance';
+import * as UIModule from './modules/app-ui';
+import * as TransferModule from './modules/app-transfers';
+import * as ModalModule from './modules/app-modals';
 
 export class PopupApp {
     public state: AppState = createInitialState();
@@ -136,255 +136,29 @@ export class PopupApp {
     }
 
     async initializeUnifiedBalance(account: any) {
-        if (!account || !account.address) {
-            return;
-        }
-
-        // For Halo chip accounts, fetch balance directly from node (no SDK needed)
-        if (account.isChipAccount && account.chipInfo) {
-            console.log('[PopupApp] Halo chip account detected, fetching balance directly from node');
-            await this.loadUnifiedBalances();
-            return;
-        }
-
-        // For watch-only addresses, use Octav portfolio API (no SDK needed)
-        if (account.isWatchOnly) {
-            console.log('[PopupApp] Watch-only account detected, fetching balance from Octav API');
-            await this.loadUnifiedBalances();
-            return;
-        }
-
-        // For regular accounts, use SDK with signing
-        let accountToUse = account;
-
-        // Ensure Buffer is available before initializing SDK
-        if (typeof (window as any).Buffer === 'undefined') {
-            console.warn('[PopupApp] Buffer not available, waiting for polyfills...');
-            // Wait a bit for polyfills to load
-            await new Promise(resolve => setTimeout(resolve, 100));
-
-            if (typeof (window as any).Buffer === 'undefined') {
-                console.error('[PopupApp] Buffer still not available after wait');
-                this.state.unifiedBalanceLoading = false;
-                this.state.unifiedBalanceData = {
-                    totalBalanceUSD: 0,
-                    assets: [],
-                    loading: false,
-                    error: 'Buffer polyfill not loaded',
-                };
-                return;
-            }
-        }
-
-        try {
-            // Clean up previous SDK instance
-            unifiedBalanceService.deinit();
-
-            // Get a provider for Ethereum mainnet (Nexus SDK needs a provider)
-            // Dynamically import ethers to avoid bundling conflicts
-            const ethersModule = await loadEthers();
-            const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
-            const provider = new ethers.JsonRpcProvider('https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73');
-
-            // Create EIP-1193 provider wrapper
-            // Use a non-watch-only account for signing (required for SIWE)
-            const eip1193Provider = createEIP1193Provider(provider, accountToUse.address);
-
-            // Initialize the SDK
-            // This may fail in browser extension context due to domain validation
-            // We handle the error and show a user-friendly message
-            await unifiedBalanceService.initialize(eip1193Provider, 'mainnet');
-
-            // Set SDK for transfer service
-            const sdk = (unifiedBalanceService as any).sdk;
-            if (sdk) {
-                transferService.setSDK(sdk);
-            }
-
-            // Fetch unified balances
-            await this.loadUnifiedBalances();
-            this.render(); // Update UI after loading
-        } catch (error: any) {
-            console.error('[PopupApp] Error initializing unified balance:', error);
-            this.state.unifiedBalanceLoading = false;
-            this.state.unifiedBalanceData = {
-                totalBalanceUSD: 0,
-                assets: [],
-                loading: false,
-                error: error.message || 'Failed to initialize unified balance',
-            };
-            this.render(); // Update UI to show error
-        }
+        await BalanceModule.initializeUnifiedBalance(account, this.getBalanceContext());
     }
 
     async loadUnifiedBalances() {
-        try {
-            this.state.unifiedBalanceLoading = true;
-            this.render(); // Show loading state
-
-            // Pass selected account to unified balance service
-            // This allows it to detect Halo chip accounts and fetch balance directly from node
-            const data = await unifiedBalanceService.getUnifiedBalances(this.state.selectedAccount);
-            this.state.unifiedBalanceData = data;
-
-            // Update the balance display with total USD value
-            if (data.totalBalanceUSD > 0) {
-                this.state.balance = data.totalBalanceUSD.toFixed(2);
-            }
-
-            console.log('[PopupApp] Unified balances loaded:', {
-                totalUSD: data.totalBalanceUSD,
-                assetCount: data.assets.length,
-                hasError: !!data.error
-            });
-
-            // Load historical balance data for view-only accounts
-            if (this.state.selectedAccount?.isWatchOnly && this.state.selectedAccount?.address) {
-                console.log('[PopupApp] Loading historical balances for view-only account');
-                await this.loadHistoricalBalances();
-            } else {
-                console.log('[PopupApp] Not a view-only account, skipping historical data');
-                this.state.historicalBalanceData = null;
-                this.state.historicalBalanceLoading = false;
-            }
-        } catch (error: any) {
-            console.error('[PopupApp] Error loading unified balances:', error);
-            this.state.unifiedBalanceData = {
-                totalBalanceUSD: 0,
-                assets: [],
-                loading: false,
-                error: error.message || 'Failed to load unified balances',
-            };
-            this.state.historicalBalanceData = null;
-            this.state.historicalBalanceLoading = false;
-        } finally {
-            this.state.unifiedBalanceLoading = false;
-            this.render(); // Update UI with results
-            // Render charts after DOM is updated - use longer timeout to ensure DOM is ready
-            setTimeout(() => {
-                console.log('[PopupApp] Rendering charts after loadUnifiedBalances');
-                this.renderCharts();
-            }, 100);
-        }
+        await BalanceModule.loadUnifiedBalances(this.getBalanceContext());
     }
 
     async loadHistoricalBalances() {
-        if (!this.state.selectedAccount?.address) {
-            return;
-        }
-
-        try {
-            this.state.historicalBalanceLoading = true;
-            this.render(); // Show loading state
-
-            const historicalData = await fetchHistoricalBalanceFromOctav({
-                address: this.state.selectedAccount.address,
-                hours: 24,
-                points: 24,
-            });
-
-            // Even if we get empty data, set it so placeholder can render
-            this.state.historicalBalanceData = historicalData && historicalData.length > 0 ? historicalData : null;
-            console.log('[PopupApp] Historical balances loaded:', {
-                points: historicalData?.length || 0,
-                firstBalance: historicalData?.[0]?.balance,
-                lastBalance: historicalData?.[historicalData.length - 1]?.balance,
-            });
-        } catch (error: any) {
-            console.error('[PopupApp] Error loading historical balances:', error);
-            // Set to null so placeholder chart will render
-            this.state.historicalBalanceData = null;
-        } finally {
-            this.state.historicalBalanceLoading = false;
-            this.render(); // Update UI
-            // Render charts after DOM is updated
-            setTimeout(() => {
-                console.log('[PopupApp] Rendering charts after loadHistoricalBalances');
-                this.renderCharts();
-            }, 100);
-        }
+        await BalanceModule.loadHistoricalBalances(this.getBalanceContext());
     }
 
     renderCharts() {
-        console.log('[PopupApp] renderCharts called', {
-            hasHistoricalData: !!this.state.historicalBalanceData,
-            dataLength: this.state.historicalBalanceData?.length || 0,
-            isLoading: this.state.historicalBalanceLoading,
-        });
+        BalanceModule.renderCharts(this.getBalanceContext());
+    }
 
-        // If we have historical data, render the real chart
-        if (this.state.historicalBalanceData && this.state.historicalBalanceData.length > 0) {
-            const chartColor = this.state.historicalBalanceData.length >= 2
-                ? (this.state.historicalBalanceData[this.state.historicalBalanceData.length - 1].balance >=
-                    this.state.historicalBalanceData[0].balance ? '#27C193' : '#F24822')
-                : '#27C193';
-
-            // Store reference to current balance and first balance for hover updates
-            const currentBalance = this.state.unifiedBalanceData?.totalBalanceUSD || 0;
-            const firstBalance = this.state.historicalBalanceData[0]?.balance || currentBalance;
-
-            // Render chart in UnifiedBalancePanel
-            const chartContainer = document.getElementById('unified-balance-chart-container');
-            if (chartContainer) {
-                console.log('[PopupApp] Rendering Recharts chart in UnifiedBalancePanel');
-                renderRechartsChart('unified-balance-chart-container', {
-                    data: this.state.historicalBalanceData,
-                    width: chartContainer.clientWidth || 300,
-                    height: 60,
-                    color: chartColor,
-                    gradientId: 'chartGradient',
-                    onHover: (data) => {
-                        const tooltip = document.getElementById('unified-balance-chart-tooltip');
-                        if (tooltip) {
-                            if (data.visible) {
-                                tooltip.textContent = `${formatChartTime(data.timestamp)} - ${formatChartBalance(data.balance)}`;
-                                tooltip.style.display = 'block';
-                            } else {
-                                tooltip.style.display = 'none';
-                            }
-                        }
-
-                        // Update balance display in both UnifiedBalancePanel and DashboardHeader
-                        this.updateBalanceDisplay(data, currentBalance, firstBalance);
-                    },
-                });
-            } else {
-                console.warn('[PopupApp] Chart container not found: unified-balance-chart-container');
-            }
-
-            // Render chart in DashboardHeader
-            const headerChartContainer = document.getElementById('unified-balance-chart-header-container');
-            if (headerChartContainer) {
-                console.log('[PopupApp] Rendering Recharts chart in DashboardHeader');
-                renderRechartsChart('unified-balance-chart-header-container', {
-                    data: this.state.historicalBalanceData,
-                    width: headerChartContainer.clientWidth || 300,
-                    height: 60,
-                    color: chartColor,
-                    gradientId: 'chartGradientHeader',
-                    onHover: (data) => {
-                        const tooltip = document.getElementById('unified-balance-chart-header-tooltip');
-                        if (tooltip) {
-                            if (data.visible) {
-                                tooltip.textContent = `${formatChartTime(data.timestamp)} - ${formatChartBalance(data.balance)}`;
-                                tooltip.style.display = 'block';
-                            } else {
-                                tooltip.style.display = 'none';
-                            }
-                        }
-
-                        // Update balance display in both DashboardHeader and UnifiedBalancePanel
-                        this.updateBalanceDisplay(data, currentBalance, firstBalance);
-                    },
-                });
-            } else {
-                console.warn('[PopupApp] Chart container not found: unified-balance-chart-header-container');
-            }
-        } else {
-            // Render placeholder chart if no data
-            console.log('[PopupApp] No historical data, rendering placeholder');
-            this.renderPlaceholderChart();
-        }
+    private getBalanceContext(): BalanceModule.BalanceContext {
+        return {
+            state: this.state,
+            render: () => this.render(),
+            updateBalanceDisplay: (hoverData, currentBalance, firstBalance) =>
+                this.updateBalanceDisplay(hoverData, currentBalance, firstBalance),
+            renderPlaceholderChart: () => this.renderPlaceholderChart(),
+        };
     }
 
     updateBalanceDisplay(
@@ -505,9 +279,9 @@ export class PopupApp {
                             <stop offset="100%" style="stop-color: var(--r-green-default); stop-opacity: 0"/>
                         </linearGradient>
                     </defs>
-                    <path d="M0,50 Q75,45 150,30 T300,10" 
-                          fill="url(#chartGradientPlaceholder)" 
-                          stroke="var(--r-green-default)" 
+                    <path d="M0,50 Q75,45 150,30 T300,10"
+                          fill="url(#chartGradientPlaceholder)"
+                          stroke="var(--r-green-default)"
                           stroke-width="2"/>
                 </svg>
             `;
@@ -524,9 +298,9 @@ export class PopupApp {
                             <stop offset="100%" style="stop-color: #27C193; stop-opacity: 0"/>
                         </linearGradient>
                     </defs>
-                    <path d="M0,50 Q75,45 150,30 T300,10" 
-                          fill="url(#chartGradientHeaderPlaceholder)" 
-                          stroke="#27C193" 
+                    <path d="M0,50 Q75,45 150,30 T300,10"
+                          fill="url(#chartGradientHeaderPlaceholder)"
+                          stroke="#27C193"
                           stroke-width="2"/>
                 </svg>
             `;
@@ -2175,73 +1949,19 @@ export class PopupApp {
         chainId: number;
         sourceChains?: number[];
     }): Promise<void> {
-        try {
-            // Check if this is a native token (ETH) or ERC20 token
-            const isNative = params.token.toUpperCase() === 'ETH' ||
-                params.token.toUpperCase() === 'MATIC' ||
-                params.token.toUpperCase() === 'BNB' ||
-                params.token.toUpperCase() === 'AVAX';
+        await TransferModule.handleSendTransfer(params, this.getTransferContext());
+    }
 
-            // Check if account is Halo chip account
-            const selectedAccount = await this.walletService.getSelectedAccount();
-            const isHaloChipAccount = selectedAccount?.isChipAccount && selectedAccount?.chipInfo;
-
-            if (isNative && isHaloChipAccount) {
-                // Handle ETH transfer with Halo chip (show QR code)
-                const result = await this.handleHaloETHTransfer({
-                    amount: params.amount,
-                    recipient: params.recipient,
-                    chainId: params.chainId,
-                });
-
-                if (result.success) {
-                    this.showSuccessMessage('Transfer successful!', result.transactionHash, params.chainId);
-                    await this.loadUnifiedBalances();
-                    this.state.showSendScreen = false;
-                    this.render();
-                } else {
-                    throw new Error(result.error || 'Transfer failed');
-                }
-            } else if (isNative) {
-                // Use Nexus SDK for native token transfers (cross-chain support)
-                const result = await transferService.transfer({
-                    token: params.token,
-                    amount: params.amount,
-                    chainId: params.chainId,
-                    recipient: params.recipient as `0x${string}`,
-                    sourceChains: params.sourceChains,
-                });
-
-                if (result.success) {
-                    this.showSuccessMessage('Transfer successful!', result.transactionHash, params.chainId);
-                    await this.loadUnifiedBalances();
-                    this.state.showSendScreen = false;
-                    this.render();
-                } else {
-                    throw new Error(result.error || 'Transfer failed');
-                }
-            } else {
-                // ERC20 token transfer - call token contract directly
-                const result = await this.handleERC20Transfer({
-                    token: params.token,
-                    amount: params.amount,
-                    recipient: params.recipient,
-                    chainId: params.chainId,
-                });
-
-                if (result.success) {
-                    this.showSuccessMessage('Transfer successful!', result.transactionHash, params.chainId);
-                    await this.loadUnifiedBalances();
-                    this.state.showSendScreen = false;
-                    this.render();
-                } else {
-                    throw new Error(result.error || 'Transfer failed');
-                }
-            }
-        } catch (error: any) {
-            console.error('[PopupApp] Transfer error:', error);
-            throw error;
-        }
+    private getTransferContext(): TransferModule.TransferContext {
+        return {
+            state: this.state,
+            walletService: this.walletService,
+            render: () => this.render(),
+            showSuccessMessage: (message, hash, chainId) => this.showSuccessMessage(message, hash, chainId),
+            showErrorMessage: (message) => this.showErrorMessage(message),
+            loadUnifiedBalances: () => this.loadUnifiedBalances(),
+            handleHaloETHTransfer: (params) => this.handleHaloETHTransfer(params),
+        };
     }
 
     private openTransactionsScreen() {
@@ -2334,137 +2054,7 @@ export class PopupApp {
         });
     }
 
-    private async handleERC20Transfer(params: {
-        token: string;
-        amount: string;
-        recipient: string;
-        chainId: number;
-    }): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
-        try {
-            // Get token info from unified balance
-            const asset = this.state.unifiedBalanceData?.assets.find(a => a.symbol === params.token);
-            if (!asset) {
-                throw new Error(`Token ${params.token} not found in balance`);
-            }
-
-            // Get token contract address
-            // Try to get from asset, or use a known address mapping
-            let tokenContractAddress: string | null = null;
-
-            // Check if asset has contractAddress property
-            if ((asset as any).contractAddress) {
-                tokenContractAddress = (asset as any).contractAddress;
-            } else if ((asset as any).address) {
-                tokenContractAddress = (asset as any).address;
-            } else {
-                // Import and use the helper function
-                const { getTokenContractAddress } = await import('./utils/erc20');
-                tokenContractAddress = getTokenContractAddress(params.token, params.chainId);
-            }
-
-            if (!tokenContractAddress) {
-                throw new Error(`Token contract address not found for ${params.token} on chain ${params.chainId}`);
-            }
-
-            // Get token decimals (default to 18)
-            const decimals = (asset as any).decimals || 18;
-
-            // Dynamically import ethers to avoid bundling conflicts
-            const ethersModule = await loadEthers();
-            const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
-
-            // Convert amount to token's smallest unit
-            const amountBigInt = ethers.parseUnits(params.amount, decimals);
-
-            // Encode ERC20 transfer function call
-            const { encodeERC20Transfer } = await import('./utils/erc20');
-            const data = encodeERC20Transfer(params.recipient, amountBigInt);
-
-            // Get selected account
-            const selectedAccount = await this.walletService.getSelectedAccount();
-            if (!selectedAccount) {
-                throw new Error('No account selected');
-            }
-
-            // Get provider - create it from the network
-            const networks = await this.walletService.getNetworks();
-            const network = networks.find(n => n.chainId === params.chainId) || networks[0];
-            if (!network || !network.rpcUrl) {
-                throw new Error(`Network not found for chainId ${params.chainId}`);
-            }
-            const provider = new ethers.JsonRpcProvider(network.rpcUrl);
-
-            // Build transaction
-            const transaction = {
-                to: tokenContractAddress,
-                value: '0x0', // No ETH sent for ERC20 transfers
-                data: data,
-                chainId: params.chainId,
-            };
-
-            // Estimate gas
-            let gasLimit: bigint;
-            try {
-                const estimatedGas = await provider.estimateGas({
-                    ...transaction,
-                    from: selectedAccount.address,
-                });
-                // Add 20% buffer
-                gasLimit = (estimatedGas * BigInt(120)) / BigInt(100);
-            } catch (error) {
-                console.warn('[handleERC20Transfer] Gas estimation failed, using default:', error);
-                // Default gas limit for ERC20 transfer is usually around 65,000
-                gasLimit = BigInt(65000);
-            }
-
-            // Get gas price
-            const feeData = await provider.getFeeData();
-            const maxFeePerGas = feeData.maxFeePerGas || feeData.gasPrice;
-            const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined;
-
-            // Build final transaction
-            const finalTransaction: any = {
-                ...transaction,
-                gasLimit: gasLimit,
-                maxFeePerGas: maxFeePerGas,
-                maxPriorityFeePerGas: maxPriorityFeePerGas,
-            };
-
-            // Sign and send transaction via background script
-            const response = await chrome.runtime.sendMessage({
-                type: 'SEND_TRANSACTION',
-                transaction: {
-                    to: finalTransaction.to,
-                    value: finalTransaction.value,
-                    data: finalTransaction.data,
-                    gasLimit: finalTransaction.gasLimit.toString(),
-                    maxFeePerGas: finalTransaction.maxFeePerGas?.toString(),
-                    maxPriorityFeePerGas: finalTransaction.maxPriorityFeePerGas?.toString(),
-                    chainId: finalTransaction.chainId,
-                },
-                address: selectedAccount.address,
-            });
-
-            if (chrome.runtime.lastError) {
-                throw new Error(chrome.runtime.lastError.message);
-            }
-
-            if (response?.success && response?.transactionHash) {
-                return {
-                    success: true,
-                    transactionHash: response.transactionHash,
-                };
-            } else {
-                throw new Error(response?.error || 'Transaction failed');
-            }
-        } catch (error: any) {
-            console.error('[PopupApp] ERC20 transfer error:', error);
-            return {
-                success: false,
-                error: error.message || 'ERC20 transfer failed',
-            };
-        }
-    }
+    // handleERC20Transfer is now in app-transfers.ts module
 
     private async handleHaloETHTransfer(params: {
         amount: string;
@@ -2690,111 +2280,30 @@ export class PopupApp {
     }
 
     private showSuccessMessage(message: string, transactionHash?: string, chainId?: number) {
-        // TODO: Replace with proper toast/notification component
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: var(--r-green-default);
-            color: white;
-            padding: 12px 20px;
-            border-radius: 8px;
-            z-index: 10000;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        `;
-
-        if (transactionHash) {
-            // Truncate hash: first 4 and last 4 characters (e.g., "0x12...abcd")
-            const truncatedHash = transactionHash.length > 8
-                ? `${transactionHash.slice(0, 4)}...${transactionHash.slice(-4)}`
-                : transactionHash;
-
-            // Determine chain ID for Etherscan URL (use provided chainId or default to mainnet)
-            const txChainId = chainId || this.state.selectedAccount?.chainId || 1;
-            const etherscanUrl = this.getEtherscanUrl(txChainId, transactionHash);
-
-            // Create simple text with clickable hash, matching the style of other success messages
-            const hashLink = document.createElement('a');
-            hashLink.href = etherscanUrl;
-            hashLink.target = '_blank';
-            hashLink.rel = 'noopener noreferrer';
-            hashLink.style.cssText = `
-                color: white;
-                text-decoration: underline;
-                cursor: pointer;
-            `;
-            hashLink.textContent = truncatedHash;
-
-            notification.textContent = `${message} `;
-            notification.appendChild(hashLink);
-        } else {
-            notification.textContent = message;
-        }
-
-        document.body.appendChild(notification);
-        setTimeout(() => notification.remove(), 3000);
+        UIModule.showSuccessMessage(message, transactionHash, chainId, { state: this.state });
     }
 
     private getEtherscanUrl(chainId: number, txHash: string): string {
-        // Map chain IDs to block explorers
-        const explorers: Record<number, string> = {
-            1: 'https://etherscan.io/tx', // Ethereum Mainnet
-            11155111: 'https://sepolia.etherscan.io/tx', // Sepolia
-            5: 'https://goerli.etherscan.io/tx', // Goerli
-            137: 'https://polygonscan.com/tx', // Polygon
-            42161: 'https://arbiscan.io/tx', // Arbitrum
-            48900: 'https://explorer.zircuit.com/tx', // Zircuit
-            10: 'https://optimistic.etherscan.io/tx', // Optimism
-            8453: 'https://basescan.org/tx', // Base
-            56: 'https://bscscan.com/tx', // BSC
-            43114: 'https://snowtrace.io/tx', // Avalanche
-        };
-
-        const baseUrl = explorers[chainId] || explorers[1]; // Default to Etherscan
-        return `${baseUrl}/${txHash}`;
+        return UIModule.getEtherscanUrl(chainId, txHash);
     }
 
     private showErrorMessage(message: string) {
-        const notification = document.createElement('div');
-        notification.style.cssText = `
-            position: fixed;
-            top: 20px;
-            right: 20px;
-            background: var(--r-red-default);
-            color: white;
-            padding: 12px 20px;
-            border-radius: 8px;
-            z-index: 10000;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
-        `;
-        notification.textContent = message;
-        document.body.appendChild(notification);
-        setTimeout(() => notification.remove(), 3000);
+        UIModule.showErrorMessage(message);
     }
 
     private showAccountSelector() {
-        // Check if modal already exists (to avoid re-animation)
-        const modalExists = document.getElementById('account-selector-overlay') !== null;
-        this.state.showAccountSelector = true;
-        // Only animate on first render
-        this.state.accountSelectorFirstRender = !modalExists;
-        this.render();
-        // Mark that we've rendered once
-        if (this.state.accountSelectorFirstRender) {
-            setTimeout(() => {
-                this.state.accountSelectorFirstRender = false;
-            }, 350); // After animation completes
-        } else {
-            this.state.accountSelectorFirstRender = false;
-        }
+        ModalModule.showAccountSelector(this.getModalContext());
     }
 
     private hideAccountSelector() {
-        this.state.showAccountSelector = false;
-        // Reset first render flag when closing so it animates on next open
-        this.state.accountSelectorFirstRender = true;
-        this.render();
+        ModalModule.hideAccountSelector(this.getModalContext());
+    }
+
+    private getModalContext(): ModalModule.ModalContext {
+        return {
+            state: this.state,
+            render: () => this.render(),
+        };
     }
 
     private async handleSelectAccount(account: any) {
@@ -2873,13 +2382,11 @@ export class PopupApp {
     }
 
     private showAddWalletModal() {
-        this.state.showAddWalletModal = true;
-        this.render();
+        ModalModule.showAddWalletModal(this.getModalContext());
     }
 
     private hideAddWalletModal() {
-        this.state.showAddWalletModal = false;
-        this.render();
+        ModalModule.hideAddWalletModal(this.getModalContext());
     }
 
     private handleAddWalletOption(optionId: string) {
@@ -2901,64 +2408,52 @@ export class PopupApp {
     }
 
     private showCreateAccountForm() {
-        this.state.showCreateAccountForm = true;
-        this.render();
+        ModalModule.showCreateAccountForm(this.getModalContext());
     }
 
     private hideCreateAccountForm() {
-        this.state.showCreateAccountForm = false;
-        this.render();
+        ModalModule.hideCreateAccountForm(this.getModalContext());
     }
 
     private showImportAccountForm() {
-        this.state.showImportAccountForm = true;
-        this.render();
+        ModalModule.showImportAccountForm(this.getModalContext());
     }
 
     private hideImportAccountForm() {
-        this.state.showImportAccountForm = false;
-        this.render();
+        ModalModule.hideImportAccountForm(this.getModalContext());
     }
 
     private showCreateMultisigForm() {
-        this.state.showCreateMultisigForm = true;
-        this.render();
+        ModalModule.showCreateMultisigForm(this.getModalContext());
     }
 
     private hideCreateMultisigForm() {
-        this.state.showCreateMultisigForm = false;
-        this.render();
+        ModalModule.hideCreateMultisigForm(this.getModalContext());
     }
 
     private showHaloChipNameForm() {
-        this.state.showHaloChipNameForm = true;
-        this.render();
+        ModalModule.showHaloChipNameForm(this.getModalContext());
     }
 
     private hideHaloChipNameForm() {
-        this.state.showHaloChipNameForm = false;
-        this.render();
+        ModalModule.hideHaloChipNameForm(this.getModalContext());
     }
 
     private showFireflyNameForm() {
-        this.state.showFireflyNameForm = true;
-        this.render();
+        ModalModule.showFireflyNameForm(this.getModalContext());
     }
 
     private hideFireflyNameForm() {
-        this.state.showFireflyNameForm = false;
-        this.render();
+        ModalModule.hideFireflyNameForm(this.getModalContext());
     }
 
     private showAddContactModal() {
-        this.state.showAddContactModal = true;
-        this.render();
+        ModalModule.showAddContactModal(this.getModalContext());
         this.attachContactModalListeners();
     }
 
     private hideAddContactModal() {
-        this.state.showAddContactModal = false;
-        this.render();
+        ModalModule.hideAddContactModal(this.getModalContext());
     }
 
     private async handleAddContactConfirm(address: string, name?: string) {
@@ -3142,14 +2637,11 @@ export class PopupApp {
     }
 
     private showSecurityConfirm() {
-        this.state.showSecurityConfirm = true;
-        this.render();
+        ModalModule.showSecurityConfirm(this.getModalContext());
     }
 
     private hideSecurityConfirm() {
-        this.state.showSecurityConfirm = false;
-        this.state.pendingHaloLink = undefined;
-        this.render();
+        ModalModule.hideSecurityConfirm(this.getModalContext());
     }
 
     private async handleSecurityConfirm(deleteKey: boolean) {
@@ -3191,8 +2683,7 @@ export class PopupApp {
     }
 
     private hideSettingsMenu() {
-        this.state.showSettingsMenu = false;
-        this.render();
+        ModalModule.hideSettingsMenu(this.getModalContext());
     }
 
     async handleLockWallet() {
@@ -3319,9 +2810,7 @@ export class PopupApp {
     }
 
     hideNetworkSelector() {
-        if (!this.state.showNetworkSelector) return; // Prevent unnecessary re-renders
-        this.state.showNetworkSelector = false;
-        this.render();
+        ModalModule.hideNetworkSelector(this.getModalContext());
     }
 
     async handleSelectNetwork(chainId: number) {
@@ -3352,7 +2841,7 @@ export class PopupApp {
                 console.log('[handleSelectNetwork] Re-checking delegation on new network:', chainId);
                 this.checkDelegationStatus(this.state.accountToEdit.address);
             }
-            
+
             // Update delegation modal if it's open to reflect new network
             if (this.state.showDelegationModal) {
                 // For Zircuit, reset to Zircuit delegator address
@@ -3436,9 +2925,7 @@ export class PopupApp {
     }
 
     hideDeleteAccountModal() {
-        this.state.showDeleteAccountModal = false;
-        this.state.accountToDelete = undefined;
-        this.render();
+        ModalModule.hideDeleteAccountModal(this.getModalContext());
     }
 
     private handleEditAccount(account: any) {
@@ -3476,11 +2963,7 @@ export class PopupApp {
     }
 
     private hideAccountDetailModal() {
-        this.state.showAccountDetailModal = false;
-        this.state.accountToEdit = undefined;
-        // Reset first render flag when closing so it animates on next open
-        this.state.accountDetailModalFirstRender = true;
-        this.render();
+        ModalModule.hideAccountDetailModal(this.getModalContext());
     }
 
     private async handleUpdateAccountName(address: string, name: string) {
@@ -3561,57 +3044,11 @@ export class PopupApp {
     }
 
     private showPrivateKeyModal(privateKey: string, shouldAnimate: boolean = true) {
-        // Check if modal is already showing (to avoid re-animation)
-        const wasShowing = this.state.showPrivateKeyModal;
-        const modalExists = document.getElementById('private-key-modal-overlay') !== null;
-        // Check if password modal is currently showing (before it gets closed)
-        const passwordModalWasShowing = this.state.showPasswordModal || document.getElementById('password-modal-overlay') !== null;
-
-        this.state.privateKeyToShow = privateKey;
-        this.state.showPrivateKeyModal = true;
-        this.state.privateKeyRevealed = false; // Start with key hidden
-
-        // If password modal was just showing, don't animate (smooth transition)
-        // Also respect the shouldAnimate parameter
-        const actuallyAnimate = shouldAnimate && !passwordModalWasShowing;
-
-        if (!wasShowing && !modalExists) {
-            // First time showing - allow animation only if requested and password modal isn't showing
-            this.state.privateKeyModalFirstRender = actuallyAnimate;
-            this.render();
-            // Mark that we've rendered once
-            if (actuallyAnimate) {
-                setTimeout(() => {
-                    this.state.privateKeyModalFirstRender = false;
-                }, 350); // After animation completes
-            } else {
-                // If no animation, mark immediately
-                this.state.privateKeyModalFirstRender = false;
-            }
-        } else if (wasShowing || modalExists) {
-            // If modal was already showing or exists in DOM, just update the content without re-rendering
-            const showKeyBtn = document.getElementById('show-private-key-btn');
-            const keyContainer = document.getElementById('private-key-container');
-            const copyBtn = document.getElementById('private-key-copy-btn');
-            const keyText = document.getElementById('private-key-text');
-
-            if (showKeyBtn) showKeyBtn.style.display = 'block';
-            if (keyContainer) keyContainer.style.display = 'none';
-            if (copyBtn) copyBtn.style.display = 'none';
-            if (keyText) keyText.textContent = '';
-
-            // Update state without animation
-            this.state.privateKeyModalFirstRender = false;
-        }
+        ModalModule.showPrivateKeyModal(privateKey, shouldAnimate, this.getModalContext());
     }
 
     private hidePrivateKeyModal() {
-        this.state.showPrivateKeyModal = false;
-        this.state.privateKeyToShow = undefined;
-        this.state.privateKeyRevealed = false;
-        // Reset first render flag when closing so it animates on next open
-        this.state.privateKeyModalFirstRender = true;
-        this.render();
+        ModalModule.hidePrivateKeyModal(this.getModalContext());
     }
 
     private revealPrivateKey() {
@@ -3705,33 +3142,12 @@ export class PopupApp {
     }
 
     private showPasswordModal(title: string, message: string, onConfirm: (password: string) => void) {
-        // Check if modal already exists or if we're transitioning from another modal
-        const modalExists = document.getElementById('password-modal-overlay') !== null;
-        const accountDetailModalShowing = this.state.showAccountDetailModal ||
-            document.getElementById('account-detail-overlay') !== null;
-
-        this.state.passwordModalConfig = { title, message, onConfirm };
-        this.state.showPasswordModal = true;
-        // Don't animate if modal exists or we're transitioning from account detail modal
-        this.state.passwordModalFirstRender = !modalExists && !accountDetailModalShowing;
-        this.render();
-        // Mark that we've rendered once
-        if (this.state.passwordModalFirstRender) {
-            setTimeout(() => {
-                this.state.passwordModalFirstRender = false;
-            }, 350); // After animation completes
-        } else {
-            this.state.passwordModalFirstRender = false;
-        }
+        ModalModule.showPasswordModal(title, message, onConfirm, this.getModalContext());
         this.attachPasswordModalListeners();
     }
 
     private hidePasswordModal() {
-        this.state.showPasswordModal = false;
-        this.state.passwordModalConfig = undefined;
-        // Reset first render flag when closing so it animates on next open (if not transitioning)
-        this.state.passwordModalFirstRender = true;
-        this.render();
+        ModalModule.hidePasswordModal(this.getModalContext());
     }
 
     private attachPasswordModalListeners() {
@@ -4365,7 +3781,7 @@ export class PopupApp {
                     }
                 });
             }
-            
+
             // For Zircuit, ensure input is always readonly and set to Zircuit address
             if (this.state.delegationModalIsUpgrade && this.state.selectedNetwork === 48900 && delegatorInput) {
                 const zircuitAddress = this.getDefaultDelegatorAddress(48900);
