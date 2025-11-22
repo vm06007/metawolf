@@ -30,6 +30,12 @@ export const ADD_WALLET_OPTIONS: AddWalletOption[] = [
         icon: 'multisig',
         description: 'Create multisig wallet requiring multiple chip signatures',
     },
+    {
+        id: 'add-contact',
+        label: 'Add Contacts',
+        icon: 'contact',
+        description: 'Add a view-only address to watch portfolio (cannot sign)',
+    },
 ];
 
 export function renderAddWalletModal(
@@ -178,6 +184,12 @@ function getOptionIcon(iconType: string): string {
                 <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 <path d="M2 17L12 22L22 17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 <path d="M2 12L12 17L22 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+            </svg>
+        `,
+        contact: `
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="12" cy="7" r="4" stroke-width="2"/>
             </svg>
         `,
     };

@@ -13,21 +13,23 @@ export function renderAccountSelectorModal(
     const accountsHtml = accounts.map(account => {
         const isSelected = selectedAccount?.address?.toLowerCase() === account.address?.toLowerCase();
         const displayName = getDisplayName(account);
-
+        
         // Account type badges
         let typeBadge = '';
-        if (account.isChipAccount) {
+        if (account.isWatchOnly) {
+            typeBadge = '<span style="font-size: 11px; color: var(--r-neutral-foot); margin-left: 6px;">👁️ View-Only</span>';
+        } else if (account.isChipAccount) {
             typeBadge = '<span style="font-size: 11px; color: var(--r-green-default); margin-left: 6px;">🔒 Chip</span>';
         } else if (account.multisig) {
             typeBadge = `<span style="font-size: 11px; color: var(--r-blue-default); margin-left: 6px;">🔐 Multisig (${account.multisig.threshold}/${account.multisig.chips.length})</span>`;
         } else if (account.haloLinked) {
             typeBadge = '<span style="font-size: 11px; color: var(--r-green-default); margin-left: 6px;">HaLo</span>';
         }
-
+        
         const canDelete = accounts.length > 1; // Can't delete if it's the last account
-
+        
         return `
-            <div class="account-selector-item ${isSelected ? 'selected' : ''}"
+            <div class="account-selector-item ${isSelected ? 'selected' : ''}" 
                  data-address="${account.address}"
                  style="
                      padding: 12px 16px;
@@ -86,7 +88,7 @@ export function renderAccountSelectorModal(
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
                     ${canDelete && onDeleteAccount ? `
-                        <button class="account-delete-btn"
+                        <button class="account-delete-btn" 
                                 data-address="${account.address}"
                                 onclick="event.stopPropagation();"
                                 style="

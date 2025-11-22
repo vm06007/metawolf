@@ -23,6 +23,8 @@ export interface Account {
     isChipAccount?: boolean; // True if account is directly from chip
     chipInfo?: ChipInfo; // Info for single chip account
     multisig?: MultisigConfig; // Configuration for multisig account
+    // View-only/watch-only address
+    isWatchOnly?: boolean; // True if this is a view-only address (no private key, cannot sign)
 }
 
 export interface Transaction {

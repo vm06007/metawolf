@@ -35,7 +35,7 @@ export class HaloChip {
         }
 
         try {
-            const reader = new window.NDEFReader();
+            const reader = new NDEFReader();
             await reader.scan();
             return true;
         } catch (error) {
@@ -82,8 +82,8 @@ export class HaloChip {
                             ? message.slice(2)
                             : message
                         : Array.from(message)
-                            .map((b) => b.toString(16).padStart(2, '0'))
-                            .join('');
+                              .map((b) => b.toString(16).padStart(2, '0'))
+                              .join('');
 
                 const result = await LibHaLoAdapter.signMessage(
                     messageHex,
@@ -110,8 +110,8 @@ export class HaloChip {
             typeof message === 'string'
                 ? message
                 : Array.from(message)
-                    .map((b) => b.toString(16).padStart(2, '0'))
-                    .join('');
+                      .map((b) => b.toString(16).padStart(2, '0'))
+                      .join('');
 
         const command = {
             action: 'sign',
@@ -154,69 +154,64 @@ export class HaloChip {
     }
 
     /**
-     * Get key information (address, etc.)
+     * Get key information (address, etc.) using Gateway
      */
     static async getKeyInfo(
-        slot: number = this.DEFAULT_SLOT
+        slot: number = this.DEFAULT_SLOT,
+        onPairing?: (pairInfo: any) => void
     ): Promise<HaloResponse> {
         try {
-            // Try LibHaLo first if available
+            // Use LibHaLo Gateway for phone-based NFC scanning
             const { LibHaLoAdapter } = await import('./libhalo-adapter.js');
-            if (LibHaLoAdapter.isAvailable()) {
-                const keyInfo = await LibHaLoAdapter.getKeyInfo(slot);
-                if (keyInfo) {
-                    return {
-                        success: true,
-                        data: {
-                            address: keyInfo.address,
-                            publicKey: keyInfo.publicKey,
-                            slot: keyInfo.slot,
-                        },
-                    };
-                }
+            const keyInfo = await LibHaLoAdapter.getKeyInfo(slot, onPairing);
+            
+            if (keyInfo) {
+                return {
+                    success: true,
+                    data: {
+                        address: keyInfo.address,
+                        publicKey: keyInfo.publicKey,
+                        slot: keyInfo.slot,
+                    },
+                };
             }
-        } catch (error) {
-            console.warn('LibHaLo not available, using fallback:', error);
+            
+            return {
+                success: false,
+                error: 'Failed to get key info from HaLo chip',
+            };
+        } catch (error: any) {
+            console.error('Error getting key info:', error);
+            return {
+                success: false,
+                error: error.message || 'Failed to get key info from HaLo chip',
+            };
         }
-
-        // Fallback to command-based approach
-        const command = {
-            action: 'get_key_info',
-            slot: slot,
-        };
-
-        return await this.executeCommand(JSON.stringify(command), { slot });
     }
 
     /**
      * Link account to HaLo chip slot
-     * Reads key info from chip and links it to wallet account
+     * Reads key info from chip and links it to wallet account using Gateway
      */
     static async linkAccount(
         address: string,
-        slot: number = this.DEFAULT_SLOT
+        slot: number = this.DEFAULT_SLOT,
+        onPairing?: (pairInfo: any) => void
     ): Promise<{ success: boolean; error?: string; keyInfo?: any }> {
         try {
-            // Request NFC permission first
-            if (!this.isAvailable()) {
-                return {
-                    success: false,
-                    error: 'NFC not available. Please use an NFC-enabled device or HaLo Gateway.',
-                };
-            }
-
-            // Get key info from HaLo chip
-            const info = await this.getKeyInfo(slot);
-
-            if (info.success && info.data && info.data.address) {
-                const chipAddress = info.data.address.toLowerCase();
+            // Use LibHaLo Gateway for phone-based NFC scanning
+            const { LibHaLoAdapter } = await import('./libhalo-adapter.js');
+            
+            const keyInfo = await LibHaLoAdapter.getKeyInfo(slot, onPairing);
+            
+            if (keyInfo && keyInfo.address) {
+                const chipAddress = keyInfo.address.toLowerCase();
                 const walletAddress = address.toLowerCase();
 
-                // Verify addresses match (if account exists, check match)
-                // For new accounts, just store the link
+                // Store link data
                 const linkData = {
                     slot: slot,
-                    publicKey: info.data.publicKey,
+                    publicKey: keyInfo.publicKey,
                     chipAddress: chipAddress,
                     walletAddress: walletAddress,
                     linkedAt: Date.now(),
@@ -234,7 +229,7 @@ export class HaloChip {
             } else {
                 return {
                     success: false,
-                    error: info.error || 'Failed to read key info from HaLo chip. Make sure chip is present and tap it.',
+                    error: 'Failed to read key info from HaLo chip. Make sure to scan the QR code with your phone and tap the chip.',
                 };
             }
         } catch (error: any) {
@@ -250,8 +245,29 @@ export class HaloChip {
      * Check if account is linked to HaLo chip
      */
     static async isAccountLinked(address: string): Promise<boolean> {
-        const stored = await chrome.storage.local.get(`halo_link_${address}`);
-        return !!stored[`halo_link_${address}`];
+        // Always use lowercase for consistency with storage keys
+        const normalizedAddress = address.toLowerCase();
+        const stored = await chrome.storage.local.get(`halo_link_${normalizedAddress}`);
+        return !!stored[`halo_link_${normalizedAddress}`];
+    }
+
+    /**
+     * Get link information for an account (including chip address)
+     */
+    static async getLinkInfo(address: string): Promise<{ chipAddress?: string; slot?: number; linkedAt?: number } | null> {
+        const normalizedAddress = address.toLowerCase();
+        const stored = await chrome.storage.local.get(`halo_link_${normalizedAddress}`);
+        const linkData = stored[`halo_link_${normalizedAddress}`];
+        
+        if (linkData) {
+            return {
+                chipAddress: linkData.chipAddress,
+                slot: linkData.slot,
+                linkedAt: linkData.linkedAt,
+            };
+        }
+        
+        return null;
     }
 
     /**
@@ -261,7 +277,7 @@ export class HaloChip {
         command: string,
         config?: HaloConfig
     ): Promise<HaloResponse> {
-        const reader = new window.NDEFReader();
+        const reader = new NDEFReader();
 
         try {
             await reader.scan();
@@ -356,7 +372,7 @@ export class HaloChip {
 // Type declarations for WebNFC
 declare global {
     interface Window {
-        NDEFReader: any;
+        NDEFReader: typeof NDEFReader;
     }
 }
 
@@ -382,3 +398,4 @@ interface NDEFRecord {
 interface NDEFReadingEvent {
     message: NDEFMessage;
 }
+

@@ -380,6 +380,11 @@ export class Wallet {
             throw new Error('No account selected');
         }
 
+        // Check if this is a watch-only account
+        if (account.isWatchOnly) {
+            throw new Error('Cannot sign transactions with a watch-only address. This is a view-only account.');
+        }
+
         // SECURITY CHECK: Block private key signing for HaLo-linked accounts
         // This prevents theft if storage is compromised - attacker cannot use stolen private keys
         try {
@@ -406,10 +411,59 @@ export class Wallet {
         const provider = await this.getProvider();
 
         // Populate missing fields
-        const populatedTx = await (provider as any).populateTransaction(transaction);
+        const populatedTx = await provider.populateTransaction(transaction);
         const signedTx = await wallet.signTransaction(populatedTx);
 
         return signedTx;
+    }
+
+    /**
+     * Add a watch-only (view-only) address to the wallet
+     * This allows viewing the portfolio but cannot sign transactions
+     */
+    async addWatchAddress(address: string, name?: string): Promise<Account> {
+        try {
+            // Normalize address
+            let normalizedAddress: string;
+            if (ethers.isAddress(address)) {
+                normalizedAddress = address.toLowerCase();
+            } else {
+                // Try to resolve ENS name
+                const provider = await this.getProvider();
+                try {
+                    const resolvedAddress = await provider.resolveName(address);
+                    if (!resolvedAddress) {
+                        throw new Error('ENS name could not be resolved');
+                    }
+                    normalizedAddress = resolvedAddress.toLowerCase();
+                } catch (ensError) {
+                    throw new Error(`Invalid address or ENS name: ${address}`);
+                }
+            }
+
+            // Check for duplicates
+            if (this.state.accounts.some(acc => acc.address.toLowerCase() === normalizedAddress)) {
+                throw new Error('Address already exists in wallet');
+            }
+
+            const account: Account = {
+                address: normalizedAddress,
+                name: name || `Contact ${this.state.accounts.filter(a => a.isWatchOnly).length + 1}`,
+                encrypted: false,
+                isWatchOnly: true,
+            };
+
+            this.state.accounts.push(account);
+            if (!this.state.selectedAccount) {
+                this.state.selectedAccount = account.address;
+            }
+
+            await this.saveState();
+            return account;
+        } catch (error: any) {
+            console.error('Error in addWatchAddress:', error);
+            throw new Error(error.message || 'Failed to add watch address');
+        }
     }
 
     private getDefaultNetworks(): NetworkConfig[] {

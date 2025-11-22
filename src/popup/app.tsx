@@ -8,6 +8,7 @@ import { renderAccountSelectorModal } from './components/AccountSelectorModal';
 import { renderAccountSidebar } from './components/AccountSidebar';
 import { renderTransactionList, Transaction } from './components/TransactionList';
 import { renderAddWalletModal, ADD_WALLET_OPTIONS } from './components/AddWalletModal';
+import { renderAddContactModal } from './components/AddContactModal';
 import { renderCurrentConnection, ConnectedDApp } from './components/CurrentConnection';
 import { renderCreateAccountForm } from './components/CreateAccountForm';
 import { renderImportAccountForm } from './components/ImportAccountForm';
@@ -47,6 +48,7 @@ interface AppState {
     ethPriceData: EthPriceData | null;
     ethPriceLoading: boolean;
     sidebarCollapsed: boolean;
+    showAddContactModal: boolean;
 }
 
 export class PopupApp {
@@ -77,6 +79,7 @@ export class PopupApp {
         ethPriceData: null,
         ethPriceLoading: false,
         sidebarCollapsed: false,
+        showAddContactModal: false,
     };
 
     private walletService: WalletService;
@@ -106,9 +109,11 @@ export class PopupApp {
 
             // Load data
             await Promise.all([
+                this.checkUnlocked(),
                 this.loadAccounts(),
                 this.loadNetworks(),
                 this.loadConnectedDApp(),
+                this.loadEthPrice(),
             ]);
         } catch (error: any) {
             console.error('Error during initialization:', error);
@@ -134,6 +139,17 @@ export class PopupApp {
                     await new Promise(resolve => setTimeout(resolve, 1000 * (attempt + 1)));
                 }
             }
+        }
+    }
+
+    async checkUnlocked() {
+        this.state.unlocked = await this.walletService.checkUnlocked();
+        // Check if password exists
+        const { hasPassword } = await import('../core/password.js');
+        this.state.hasPassword = await hasPassword();
+        // If no password is set and we have accounts, unlock automatically
+        if (!this.state.hasPassword && this.state.accounts.length > 0) {
+            this.state.unlocked = true;
         }
     }
 
@@ -230,6 +246,19 @@ export class PopupApp {
         }
     }
 
+    async loadEthPrice() {
+        try {
+            this.state.ethPriceLoading = true;
+            const data = await ethPriceService.getEthPrice();
+            this.state.ethPriceData = data;
+        } catch (error: any) {
+            console.error('Error loading ETH price:', error);
+            this.state.ethPriceData = null;
+        } finally {
+            this.state.ethPriceLoading = false;
+        }
+    }
+
     async unlock() {
         const success = await this.walletService.unlock(this.state.password);
         if (success) {
@@ -289,6 +318,188 @@ export class PopupApp {
         // Render Rabby-style dashboard
         const selectedAccount = this.state.selectedAccount;
         const displayName = selectedAccount ? getDisplayName(selectedAccount) : 'Account';
+        const isExpanded = window.location.pathname.includes('expanded.html');
+
+        if (isExpanded) {
+            // Expanded view with sidebar layout
+            app.innerHTML = `
+                <div class="expanded-container">
+                    <div class="expanded-sidebar ${this.state.sidebarCollapsed ? 'collapsed' : ''}">
+                        ${renderAccountSidebar(
+                this.state.accounts,
+                selectedAccount,
+                (account) => this.handleSelectAccount(account),
+                () => this.showAddWalletModal(),
+                (account) => this.handleDeleteAccount(account),
+                () => this.handleToggleSidebar(),
+                this.state.sidebarCollapsed
+            )}
+                    </div>
+                    <div class="expanded-main">
+                        <div class="dashboard">
+                            ${renderDashboardHeader(
+                selectedAccount,
+                this.state.balance,
+                displayName,
+                () => this.showAccountSelector(),
+                () => this.handleCopyAddress(),
+                () => this.showAddWalletModal(),
+                () => this.handleSettings(),
+                () => this.handleExpand(),
+                formatAddress,
+                true
+            )}
+                            ${renderDashboardPanel(DEFAULT_PANEL_ITEMS, true)}
+                            <div class="transaction-section">
+                                ${renderTransactionList(this.getTransactionsForAccount(selectedAccount), selectedAccount)}
+                            </div>
+                            <div class="current-connection-wrapper">
+                                ${renderCurrentConnection(
+                this.state.connectedDApp,
+                () => this.handleDisconnectDApp(),
+                () => this.handleChainChange(),
+                this.state.ethPriceData,
+                true,
+                this.state.ethPriceLoading
+            )}
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                ${renderAddWalletModal(
+                ADD_WALLET_OPTIONS,
+                (optionId) => this.handleAddWalletOption(optionId),
+                () => this.hideAddWalletModal(),
+                this.state.showAddWalletModal
+            )}
+                ${renderCreateAccountForm(
+                (name) => this.handleCreateAccountConfirm(name),
+                () => this.hideCreateAccountForm(),
+                this.state.showCreateAccountForm
+            )}
+                ${renderImportAccountForm(
+                (privateKey, name) => this.handleImportAccountConfirm(privateKey, name),
+                () => this.hideImportAccountForm(),
+                this.state.showImportAccountForm
+            )}
+                ${renderCreateMultisigForm(
+                (numChips, threshold, name) => this.handleCreateMultisigConfirm(numChips, threshold, name),
+                () => this.hideCreateMultisigForm(),
+                this.state.showCreateMultisigForm
+            )}
+                ${renderHaloChipNameForm(
+                (name) => this.handleHaloChipNameConfirm(name),
+                () => this.hideHaloChipNameForm(),
+                this.state.showHaloChipNameForm,
+                'Add HaLo Chip Account'
+            )}
+                ${renderSecurityConfirmModal(
+                (deleteKey) => this.handleSecurityConfirm(deleteKey),
+                () => this.hideSecurityConfirm(),
+                this.state.showSecurityConfirm
+            )}
+                ${renderDeleteAccountModal(
+                this.state.accountToDelete,
+                () => this.handleDeleteAccountConfirm(),
+                () => this.hideDeleteAccountModal(),
+                this.state.showDeleteAccountModal
+            )}
+                ${renderSettingsMenu(
+                this.state.showSettingsMenu,
+                () => this.hideSettingsMenu(),
+                () => this.handleLockWallet(),
+                this.state.hasPassword
+            )}
+            `;
+        } else {
+            // Popup view - normal layout
+            app.innerHTML = `
+                <div class="dashboard">
+                    ${renderDashboardHeader(
+                selectedAccount,
+                this.state.balance,
+                displayName,
+                () => this.showAccountSelector(),
+                () => this.handleCopyAddress(),
+                () => this.showAddWalletModal(),
+                () => this.handleSettings(),
+                () => this.handleExpand(),
+                formatAddress,
+                false
+            )}
+                    ${renderDashboardPanel(DEFAULT_PANEL_ITEMS)}
+                    <div style="padding: 0 16px 4px 16px;">
+                        ${renderEthPricePanel(this.state.ethPriceData, this.state.ethPriceLoading)}
+                    </div>
+                        <div class="current-connection-wrapper">
+                            ${renderCurrentConnection(
+                this.state.connectedDApp,
+                () => this.handleDisconnectDApp(),
+                () => this.handleChainChange(),
+                undefined,
+                false
+            )}
+                        </div>
+                </div>
+                ${renderAccountSelectorModal(
+                this.state.accounts,
+                this.state.selectedAccount,
+                (account) => this.handleSelectAccount(account),
+                () => this.hideAccountSelector(),
+                this.state.showAccountSelector,
+                (account) => this.handleDeleteAccount(account)
+            )}
+            ${renderAddWalletModal(
+                ADD_WALLET_OPTIONS,
+                (optionId) => this.handleAddWalletOption(optionId),
+                () => this.hideAddWalletModal(),
+                this.state.showAddWalletModal
+            )}
+            ${renderCreateAccountForm(
+                (name) => this.handleCreateAccountConfirm(name),
+                () => this.hideCreateAccountForm(),
+                this.state.showCreateAccountForm
+            )}
+            ${renderImportAccountForm(
+                (privateKey, name) => this.handleImportAccountConfirm(privateKey, name),
+                () => this.hideImportAccountForm(),
+                this.state.showImportAccountForm
+            )}
+            ${renderCreateMultisigForm(
+                (numChips, threshold, name) => this.handleCreateMultisigConfirm(numChips, threshold, name),
+                () => this.hideCreateMultisigForm(),
+                this.state.showCreateMultisigForm
+            )}
+            ${renderHaloChipNameForm(
+                (name) => this.handleHaloChipNameConfirm(name),
+                () => this.hideHaloChipNameForm(),
+                this.state.showHaloChipNameForm,
+                'Add HaLo Chip Account'
+            )}
+            ${renderSecurityConfirmModal(
+                (deleteKey) => this.handleSecurityConfirm(deleteKey),
+                () => this.hideSecurityConfirm(),
+                this.state.showSecurityConfirm
+            )}
+            ${renderDeleteAccountModal(
+                this.state.accountToDelete,
+                () => this.handleDeleteAccountConfirm(),
+                () => this.hideDeleteAccountModal(),
+                this.state.showDeleteAccountModal
+            )}
+            ${renderSettingsMenu(
+                this.state.showSettingsMenu,
+                () => this.hideSettingsMenu(),
+                () => this.handleLockWallet(),
+                this.state.hasPassword
+            )}
+            ${renderAddContactModal(
+                (address, name) => this.handleAddContactConfirm(address, name),
+                () => this.hideAddContactModal(),
+                this.state.showAddContactModal
+            )}
+        `;
+        }
 
         this.attachDashboardListeners();
     }
@@ -545,6 +756,126 @@ export class PopupApp {
             }
             this.handleCreateMultisigConfirm(numChips, threshold, name);
         });
+
+        // Halo chip name form
+        document.getElementById('halo-chip-name-overlay')?.addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                this.hideHaloChipNameForm();
+            }
+        });
+        document.getElementById('halo-chip-cancel')?.addEventListener('click', () => this.hideHaloChipNameForm());
+        document.getElementById('halo-chip-confirm')?.addEventListener('click', () => {
+            const nameInput = document.getElementById('halo-chip-name') as HTMLInputElement;
+            const name = nameInput?.value.trim() || undefined;
+            this.handleHaloChipNameConfirm(name);
+        });
+
+        // Security confirm modal
+        document.getElementById('security-confirm-overlay')?.addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                this.hideSecurityConfirm();
+            }
+        });
+        document.getElementById('security-confirm-cancel')?.addEventListener('click', () => this.hideSecurityConfirm());
+        document.getElementById('security-confirm-no')?.addEventListener('click', () => {
+            this.handleSecurityConfirm(false);
+        });
+        document.getElementById('security-confirm-yes')?.addEventListener('click', () => {
+            this.handleSecurityConfirm(true);
+        });
+
+        // Delete account modal
+        document.getElementById('delete-account-overlay')?.addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                this.hideDeleteAccountModal();
+            }
+        });
+        document.getElementById('delete-account-cancel')?.addEventListener('click', () => this.hideDeleteAccountModal());
+        document.getElementById('delete-account-confirm')?.addEventListener('click', () => this.handleDeleteAccountConfirm());
+
+        // Settings menu
+        document.getElementById('settings-menu-overlay')?.addEventListener('click', () => this.hideSettingsMenu());
+        document.getElementById('settings-menu-close')?.addEventListener('click', () => this.hideSettingsMenu());
+        document.getElementById('settings-lock-wallet')?.addEventListener('click', () => {
+            this.hideSettingsMenu();
+            this.handleLockWallet();
+        });
+        // Other settings items - for now just log, can be implemented later
+        document.getElementById('settings-signature-record')?.addEventListener('click', () => {
+            console.log('Signature Record clicked');
+            this.hideSettingsMenu();
+        });
+        document.getElementById('settings-manage-address')?.addEventListener('click', () => {
+            console.log('Manage Address clicked');
+            this.hideSettingsMenu();
+        });
+        document.getElementById('settings-ecosystem')?.addEventListener('click', () => {
+            console.log('Ecosystem clicked');
+            this.hideSettingsMenu();
+        });
+        document.getElementById('settings-mobile-sync')?.addEventListener('click', () => {
+            console.log('Mobile Sync clicked');
+            this.hideSettingsMenu();
+        });
+        document.getElementById('settings-search-dapps')?.addEventListener('click', () => {
+            console.log('Search Dapps clicked');
+            this.hideSettingsMenu();
+        });
+        document.getElementById('settings-connected-dapps')?.addEventListener('click', () => {
+            console.log('Connected Dapps clicked');
+            this.hideSettingsMenu();
+        });
+        document.getElementById('settings-custom-testnet')?.addEventListener('click', () => {
+            console.log('Custom Testnet clicked');
+            this.hideSettingsMenu();
+        });
+        document.getElementById('settings-custom-rpc')?.addEventListener('click', () => {
+            console.log('Custom RPC clicked');
+            this.hideSettingsMenu();
+        });
+        document.getElementById('settings-language')?.addEventListener('click', () => {
+            console.log('Language clicked');
+            this.hideSettingsMenu();
+        });
+        document.getElementById('settings-theme-mode')?.addEventListener('click', () => {
+            console.log('Theme Mode clicked');
+            this.hideSettingsMenu();
+        });
+        document.getElementById('settings-auto-lock')?.addEventListener('click', () => {
+            console.log('Auto Lock clicked');
+            this.hideSettingsMenu();
+        });
+        document.getElementById('settings-change-password')?.addEventListener('click', () => {
+            this.hideSettingsMenu();
+            this.handleChangePassword();
+        });
+        document.getElementById('settings-clear-pending')?.addEventListener('click', () => {
+            console.log('Clear Pending clicked');
+            this.hideSettingsMenu();
+        });
+        document.getElementById('settings-feedback')?.addEventListener('click', () => {
+            window.open('https://debank.com/hi/0a110032', '_blank');
+            this.hideSettingsMenu();
+        });
+        document.getElementById('settings-version')?.addEventListener('click', () => {
+            console.log('Version clicked');
+            this.hideSettingsMenu();
+        });
+        document.getElementById('settings-supported-chains')?.addEventListener('click', () => {
+            console.log('Supported Chains clicked');
+            this.hideSettingsMenu();
+        });
+
+        // Panel items
+        document.getElementById('panel-send')?.addEventListener('click', () => console.log('Send clicked'));
+        document.getElementById('panel-receive')?.addEventListener('click', () => console.log('Receive clicked'));
+        document.getElementById('panel-swap')?.addEventListener('click', () => console.log('Swap clicked'));
+        document.getElementById('panel-bridge')?.addEventListener('click', () => console.log('Bridge clicked'));
+        document.getElementById('panel-transactions')?.addEventListener('click', () => console.log('Transactions clicked'));
+        document.getElementById('panel-approvals')?.addEventListener('click', () => console.log('Approvals clicked'));
+        document.getElementById('panel-settings')?.addEventListener('click', () => this.handleSettings());
+        document.getElementById('panel-nft')?.addEventListener('click', () => console.log('NFT clicked'));
+        document.getElementById('panel-ecology')?.addEventListener('click', () => console.log('Ecology clicked'));
     }
 
     private async handleCreateAccountConfirm(name?: string) {
@@ -643,8 +974,40 @@ export class PopupApp {
         this.state.selectedAccount = account;
         this.hideAccountSelector();
         await this.loadAccounts();
+
+        // Update all connected dapp connections to use the new account
+        await this.syncWalletWithConnectedDapps(account.address);
+
         await this.loadConnectedDApp(); // Reload connected DApp in case account changed
         this.render();
+    }
+
+    private async syncWalletWithConnectedDapps(newAccountAddress: string) {
+        try {
+            // Get all connected dapps
+            const connections = await chrome.storage.local.get('dapp_connections');
+            const dappConnections = connections.dapp_connections || {};
+
+            // Update all connections to use the new account
+            const updatedConnections: any = {};
+            for (const [origin, connection] of Object.entries(dappConnections)) {
+                updatedConnections[origin] = {
+                    ...(connection as any),
+                    account: newAccountAddress,
+                };
+            }
+
+            // Save updated connections
+            await chrome.storage.local.set({ dapp_connections: updatedConnections });
+
+            // Notify background script to broadcast account change to all connected dapps
+            await chrome.runtime.sendMessage({
+                type: 'ACCOUNT_CHANGED',
+                account: newAccountAddress,
+            });
+        } catch (error: any) {
+            console.error('Error syncing wallet with connected dapps:', error);
+        }
     }
 
     private async handleCopyAddress() {
@@ -684,6 +1047,8 @@ export class PopupApp {
             this.showHaloChipNameForm();
         } else if (optionId === 'create-multisig') {
             this.showCreateMultisigForm();
+        } else if (optionId === 'add-contact') {
+            this.showAddContactModal();
         }
     }
 
@@ -725,6 +1090,132 @@ export class PopupApp {
     private hideHaloChipNameForm() {
         this.state.showHaloChipNameForm = false;
         this.render();
+    }
+
+    private showAddContactModal() {
+        this.state.showAddContactModal = true;
+        this.render();
+        this.attachContactModalListeners();
+    }
+
+    private hideAddContactModal() {
+        this.state.showAddContactModal = false;
+        this.render();
+    }
+
+    private async handleAddContactConfirm(address: string, name?: string) {
+        try {
+            if (!address || !address.trim()) {
+                this.showErrorMessage('Please enter an address or ENS name');
+                return;
+            }
+
+            this.hideAddContactModal();
+
+            const response = await chrome.runtime.sendMessage({
+                type: 'ADD_WATCH_ADDRESS',
+                address: address.trim(),
+                name: name?.trim(),
+            });
+
+            if (response.success) {
+                await this.loadAccounts();
+                this.render();
+                this.showSuccessMessage(`✅ Contact added! Address: ${formatAddress(response.account.address)}`);
+            } else {
+                this.showErrorMessage(response.error || 'Failed to add contact');
+            }
+        } catch (error: any) {
+            console.error('Error adding contact:', error);
+            this.showErrorMessage('Failed to add contact: ' + (error.message || 'Unknown error'));
+        }
+    }
+
+    private attachContactModalListeners() {
+        setTimeout(() => {
+            const overlay = document.getElementById('add-contact-overlay');
+            const closeBtn = document.getElementById('add-contact-close');
+            const confirmBtn = document.getElementById('add-contact-confirm-btn');
+            const addressInput = document.getElementById('contact-address-input') as HTMLTextAreaElement;
+            const ensResult = document.getElementById('contact-ens-result');
+            const errorDiv = document.getElementById('contact-error');
+
+            const handleClose = () => {
+                this.hideAddContactModal();
+            };
+
+            const handleConfirm = async () => {
+                const address = addressInput?.value?.trim() || '';
+                const nameInput = document.getElementById('contact-name-input') as HTMLInputElement;
+                const name = nameInput?.value?.trim() || undefined;
+
+                if (!address) {
+                    if (errorDiv) {
+                        errorDiv.textContent = 'Please enter an address or ENS name';
+                        errorDiv.style.display = 'block';
+                    }
+                    return;
+                }
+
+                await this.handleAddContactConfirm(address, name);
+            };
+
+            const handleAddressChange = async () => {
+                const address = addressInput?.value?.trim() || '';
+                if (!ensResult || !errorDiv) return;
+
+                errorDiv.style.display = 'none';
+                ensResult.style.display = 'none';
+
+                if (!address) return;
+
+                // Check if it's a valid address
+                if (ethers.isAddress(address)) {
+                    return;
+                }
+
+                // Try to resolve ENS
+                try {
+                    const provider = new ethers.JsonRpcProvider('https://mainnet.infura.io/v3/db2e296c0a0f475fb6c3a3281a0c39d6');
+                    const resolved = await provider.resolveName(address);
+                    if (resolved && ensResult) {
+                        ensResult.innerHTML = `
+                            <div style="display: flex; justify-content: space-between; align-items: center;">
+                                <span>${resolved}</span>
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor" style="cursor: pointer;">
+                                    <path d="M6 4L10 8L6 12" stroke-width="2" stroke-linecap="round"/>
+                                </svg>
+                            </div>
+                        `;
+                        ensResult.style.display = 'block';
+                        ensResult.onclick = () => {
+                            if (addressInput) {
+                                addressInput.value = resolved;
+                                ensResult!.style.display = 'none';
+                            }
+                        };
+                    }
+                } catch (e) {
+                    // Not a valid ENS or address, ignore
+                }
+            };
+
+            overlay?.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    handleClose();
+                }
+            });
+
+            closeBtn?.addEventListener('click', handleClose);
+            confirmBtn?.addEventListener('click', handleConfirm);
+            addressInput?.addEventListener('input', handleAddressChange);
+            addressInput?.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                    e.preventDefault();
+                    handleConfirm();
+                }
+            });
+        }, 100);
     }
 
     private async handleHaloChipNameConfirm(name?: string) {
@@ -1034,3 +1525,4 @@ export class PopupApp {
         }
     }
 }
+

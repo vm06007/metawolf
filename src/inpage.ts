@@ -59,6 +59,26 @@ class WolfyProvider implements EthereumProvider {
             // Only accept messages from same window
             if (event.source !== window) return;
 
+            // Handle account change notifications
+            if (event.data && event.data.type === 'WOLFY_ACCOUNT_CHANGED') {
+                const accounts = event.data.accounts || [];
+                const accountAddresses = Array.isArray(accounts)
+                    ? accounts.map((acc: any) => typeof acc === 'string' ? acc : (acc.address || acc))
+                    : [];
+
+                // Update provider state
+                const previousAccounts = this._state.accounts;
+                this.selectedAddress = accountAddresses[0] || null;
+                this._state.accounts = accountAddresses;
+
+                // Emit accountsChanged event if accounts actually changed
+                if (JSON.stringify(previousAccounts) !== JSON.stringify(accountAddresses)) {
+                    console.log('[Wolfy Inpage] Account changed, emitting accountsChanged event:', accountAddresses);
+                    this.emit('accountsChanged', accountAddresses);
+                }
+                return;
+            }
+
             // Handle responses - check for exact type or ends with _RESPONSE (but not multiple _RESPONSE)
             if (event.data && event.data.type &&
                 (event.data.type === 'WOLFY_REQUEST_RESPONSE' ||
@@ -87,6 +107,9 @@ class WolfyProvider implements EthereumProvider {
                 // If no listeners, message was already processed - silently ignore to prevent spam
             }
         });
+
+        // Debug: Log when provider is created
+        console.log('[Wolfy] Provider initialized in MAIN world');
     }
 
     async request(args: { method: string; params?: any[] }): Promise<any> {
@@ -542,6 +565,8 @@ class WolfyProvider implements EthereumProvider {
             return;
         }
 
+        console.log('[Wolfy] ✅ Script executing in MAIN world, window.ethereum currently:', typeof (window as any).ethereum);
+
         const provider = new WolfyProvider();
 
         // Check for existing provider (might be our minimal placeholder)
@@ -572,7 +597,10 @@ class WolfyProvider implements EthereumProvider {
                         configurable: true, // Make it configurable for future updates
                         enumerable: true
                     });
+                    console.log('[Wolfy] Set window.ethereum via defineProperty (replaced getter-only)');
                 } else {
+                    // Can't replace, try to wrap it
+                    console.warn('[Wolfy] window.ethereum is non-configurable getter-only, using wrapper');
                     (window as any).__wolfyProvider = provider;
                     // DApp will need to use window.__wolfyProvider or we intercept at a different level
                 }
@@ -587,11 +615,13 @@ class WolfyProvider implements EthereumProvider {
                     configurable: true, // Make it configurable
                     enumerable: true
                 });
+                console.log('[Wolfy] Set window.ethereum via defineProperty');
             } catch (e) {
                 // If defineProperty fails, try deleting first
                 try {
                     delete (window as any).ethereum;
                     (window as any).ethereum = provider;
+                    console.log('[Wolfy] Set window.ethereum directly (after delete)');
                 } catch (e2) {
                     console.error('[Wolfy] Failed to set window.ethereum:', e2);
                 }
@@ -607,13 +637,35 @@ class WolfyProvider implements EthereumProvider {
 
         // Also set as window.rabby for compatibility
         try {
-            Object.defineProperty(window, 'rabby', {
-                value: provider,
-                configurable: false,
-                writable: false
-            });
+            const rabbyDescriptor = Object.getOwnPropertyDescriptor(window, 'rabby');
+            if (rabbyDescriptor) {
+                // Property already exists - check if we can modify it
+                if (rabbyDescriptor.configurable) {
+                    // Can delete and redefine
+                    delete (window as any).rabby;
+                    Object.defineProperty(window, 'rabby', {
+                        value: provider,
+                        configurable: true,
+                        writable: true,
+                        enumerable: true
+                    });
+                    console.log('[Wolfy] Set window.rabby (replaced existing)');
+                } else {
+                    // Non-configurable - can't modify, skip silently
+                    console.log('[Wolfy] window.rabby is non-configurable, skipping');
+                }
+            } else {
+                // Property doesn't exist, safe to define
+                Object.defineProperty(window, 'rabby', {
+                    value: provider,
+                    configurable: true,
+                    writable: true,
+                    enumerable: true
+                });
+                console.log('[Wolfy] Set window.rabby');
+            }
         } catch (e) {
-            (window as any).rabby = provider;
+            console.warn('[Wolfy] Could not set window.rabby:', e);
         }
 
         // EIP-6963: Announce wallet to dApps
@@ -660,11 +712,39 @@ class WolfyProvider implements EthereumProvider {
         // Still try to set a minimal provider so wagmi doesn't fail
         try {
             if (typeof window !== 'undefined') {
-                (window as any).ethereum = {
+                const ethereumDescriptor = Object.getOwnPropertyDescriptor(window, 'ethereum');
+                const fallbackProvider = {
                     isRabby: true,
                     isMetaMask: true,
                     request: () => Promise.reject(new Error('Provider initialization failed')),
                 };
+                
+                if (ethereumDescriptor) {
+                    // Property already exists
+                    if (ethereumDescriptor.configurable) {
+                        // Can delete and redefine
+                        delete (window as any).ethereum;
+                        Object.defineProperty(window, 'ethereum', {
+                            value: fallbackProvider,
+                            configurable: true,
+                            writable: true,
+                            enumerable: true
+                        });
+                        console.log('[Wolfy] Set fallback window.ethereum (replaced existing)');
+                    } else {
+                        // Non-configurable getter-only - can't modify
+                        console.warn('[Wolfy] window.ethereum is non-configurable, cannot set fallback provider');
+                    }
+                } else {
+                    // Property doesn't exist, safe to define
+                    Object.defineProperty(window, 'ethereum', {
+                        value: fallbackProvider,
+                        configurable: true,
+                        writable: true,
+                        enumerable: true
+                    });
+                    console.log('[Wolfy] Set fallback window.ethereum');
+                }
             }
         } catch (e) {
             console.error('[Wolfy] Failed to set fallback provider:', e);

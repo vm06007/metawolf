@@ -75,6 +75,18 @@
                 pendingConnections.delete(id);
             });
             sendResponse({ success: true });
+        } else if (message.type === 'ACCOUNT_CHANGED') {
+            console.log('[Wolfy Content] ACCOUNT_CHANGED with accounts:', message.accounts);
+            // Notify inpage provider about account change
+            const accounts = message.accounts || [];
+            window.postMessage(
+                {
+                    type: 'WOLFY_ACCOUNT_CHANGED',
+                    accounts: accounts,
+                },
+                '*'
+            );
+            sendResponse({ success: true });
         }
         return true; // Keep channel open for async response
     });
@@ -87,9 +99,20 @@
             // Only accept messages from the same window
             if (event.source !== window) return;
 
-            // Debug log
+            // Debug log - only for non-RPC methods to reduce noise
             if (event.data && event.data.type === 'WOLFY_REQUEST') {
-                console.log('[Wolfy Content] Received request:', event.data.method);
+                const method = event.data.method;
+                // Only log important methods, skip frequent RPC calls
+                const shouldLog = !method.startsWith('eth_call') && 
+                                  !method.startsWith('eth_getBlock') && 
+                                  !method.startsWith('eth_getTransaction') &&
+                                  !method.startsWith('eth_getLogs') &&
+                                  !method.startsWith('eth_getBalance') &&
+                                  method !== 'eth_chainId' &&
+                                  method !== 'net_version';
+                if (shouldLog) {
+                    console.log('[Wolfy Content] Received request:', method);
+                }
             }
 
             if (event.data && event.data.type) {
@@ -258,7 +281,7 @@
                             chrome.runtime.sendMessage(
                                 { type: messageType, ...payload },
                                 (response) => {
-                                    // Debug
+                                    // Debug - connection responses are important, so we log them
                                     console.log('[Wolfy Content] Received from background:', response);
 
                                     // Forward response back to in-page script
@@ -426,14 +449,28 @@
                     }
 
                     if (messageType) {
-                        // Debug
-                        console.log('[Wolfy Content] Sending to background:', messageType, payload);
+                        // Debug - only log non-RPC requests to reduce noise
+                        if (messageType !== 'RPC_REQUEST' || 
+                            (payload.method && !payload.method.startsWith('eth_call') && 
+                             !payload.method.startsWith('eth_getBlock') && 
+                             !payload.method.startsWith('eth_getTransaction') &&
+                             !payload.method.startsWith('eth_getLogs') &&
+                             !payload.method.startsWith('eth_getBalance'))) {
+                            console.log('[Wolfy Content] Sending to background:', messageType, payload);
+                        }
 
                         chrome.runtime.sendMessage(
                             { type: messageType, ...payload },
                             (response) => {
-                                // Debug
-                                console.log('[Wolfy Content] Received from background:', response);
+                                // Debug - only log non-RPC responses to reduce noise
+                                if (messageType !== 'RPC_REQUEST' || 
+                                    (payload.method && !payload.method.startsWith('eth_call') && 
+                                     !payload.method.startsWith('eth_getBlock') && 
+                                     !payload.method.startsWith('eth_getTransaction') &&
+                                     !payload.method.startsWith('eth_getLogs') &&
+                                     !payload.method.startsWith('eth_getBalance'))) {
+                                    console.log('[Wolfy Content] Received from background:', response);
+                                }
 
                                 // Forward response back to in-page script
                                 if (messageType === 'CONNECT_DAPP' && response?.pending) {

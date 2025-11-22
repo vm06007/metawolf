@@ -1,5 +1,7 @@
 export function renderSettingsMenu(
     visible: boolean,
+    onClose: () => void,
+    onLockWallet: () => void,
     hasPassword: boolean = false
 ): string {
     if (!visible) return '';

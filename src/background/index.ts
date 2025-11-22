@@ -8,7 +8,7 @@ import { EIP7702 } from '../eips/eip7702.js';
 import { EIP5742 } from '../eips/eip5742.js';
 import { HaloChip } from '../halo/halo.js';
 import { handleSignMessage, handleSignTypedData } from './message-handler.js';
-import type { Transaction } from '../core/types.js';
+import type { Transaction, EIP7702Transaction, EIP5742Batch } from '../core/types.js';
 
 console.log('[Wolfy] Imports loaded');
 
@@ -295,10 +295,10 @@ function handleMessage(
                         // Check HaLo link status and get chip info for each account
                         const accountsWithHalo = await Promise.all(
                             accountsToReturn.map(async (account) => {
-                                const isLinked = await (HaloChip as any).isAccountLinked(account.address);
+                                const isLinked = await HaloChip.isAccountLinked(account.address);
                                 let chipAddress: string | undefined;
                                 if (isLinked) {
-                                    const linkInfo = await (HaloChip as any).getLinkInfo(account.address);
+                                    const linkInfo = await HaloChip.getLinkInfo(account.address);
                                     chipAddress = linkInfo?.chipAddress;
                                 }
                                 console.log(`[GET_ACCOUNTS] Account ${account.address}: haloLinked=${isLinked}, chipAddress=${chipAddress}`);
@@ -331,8 +331,8 @@ function handleMessage(
                             const isLinked = await HaloChip.isAccountLinked(account.address);
                             let chipAddress: string | undefined;
                             if (isLinked) {
-                                const linkInfo = await HaloChip.getKeyInfo(account.address as any);
-                                chipAddress = linkInfo?.data?.chipAddress;
+                                const linkInfo = await HaloChip.getLinkInfo(account.address);
+                                chipAddress = linkInfo?.chipAddress;
                             }
                             safeSendResponse({
                                 success: true,
@@ -471,9 +471,93 @@ function handleMessage(
                     }
                     break;
 
+                case 'ADD_WATCH_ADDRESS':
+                    try {
+                        if (!message.address || typeof message.address !== 'string') {
+                            safeSendResponse({
+                                success: false,
+                                error: 'Invalid address provided',
+                            });
+                            break;
+                        }
+                        const watchAccount = await wallet.addWatchAddress(message.address, message.name);
+                        safeSendResponse({ success: true, account: watchAccount });
+                    } catch (error: any) {
+                        console.error('[Wolfy] Error adding watch address:', error);
+                        safeSendResponse({
+                            success: false,
+                            error: error.message || 'Failed to add watch address',
+                        });
+                    }
+                    break;
+
                 case 'SET_SELECTED_ACCOUNT':
                     await wallet.setSelectedAccount(message.address);
                     safeSendResponse({ success: true });
+                    break;
+
+                case 'ACCOUNT_CHANGED':
+                    try {
+                        // Update all connected dapp connections to use the new account
+                        const connections = await chrome.storage.local.get('dapp_connections');
+                        const dappConnections = connections.dapp_connections || {};
+                        const newAccountAddress = message.account;
+                        
+                        // Update all connections
+                        const updatedConnections: any = {};
+                        const connectedOrigins: string[] = [];
+                        
+                        for (const [origin, connection] of Object.entries(dappConnections)) {
+                            updatedConnections[origin] = {
+                                ...(connection as any),
+                                account: newAccountAddress,
+                            };
+                            connectedOrigins.push(origin);
+                        }
+                        
+                        // Save updated connections
+                        await chrome.storage.local.set({ dapp_connections: updatedConnections });
+                        
+                        // Notify all connected dapps about the account change
+                        if (connectedOrigins.length > 0) {
+                            // Get all tabs and find ones that match connected origins
+                            const tabs = await chrome.tabs.query({});
+                            const accountAddresses = [newAccountAddress];
+                            
+                            for (const tab of tabs) {
+                                if (!tab.id || !tab.url) continue;
+                                
+                                try {
+                                    const url = new URL(tab.url);
+                                    const origin = url.origin;
+                                    
+                                    // If this tab's origin is connected, notify it
+                                    if (connectedOrigins.includes(origin)) {
+                                        try {
+                                            await chrome.tabs.sendMessage(tab.id, {
+                                                type: 'ACCOUNT_CHANGED',
+                                                accounts: accountAddresses,
+                                                origin: origin,
+                                            });
+                                            console.log(`[ACCOUNT_CHANGED] Notified tab ${tab.id} (${origin})`);
+                                        } catch (error: any) {
+                                            // Tab might not have content script loaded, ignore
+                                            if (!error.message?.includes('Could not establish connection')) {
+                                                console.warn(`[ACCOUNT_CHANGED] Error notifying tab ${tab.id}:`, error);
+                                            }
+                                        }
+                                    }
+                                } catch (e) {
+                                    // Invalid URL (chrome://, etc.), skip
+                                }
+                            }
+                        }
+                        
+                        safeSendResponse({ success: true });
+                    } catch (error: any) {
+                        console.error('[ACCOUNT_CHANGED] Error:', error);
+                        safeSendResponse({ success: false, error: error.message });
+                    }
                     break;
 
                 case 'SIGN_TRANSACTION':

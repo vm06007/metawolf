@@ -28,7 +28,7 @@ export class HaloTransactionUI {
             padding: 20px;
         `;
 
-        const value = transaction.value
+        const value = transaction.value 
             ? `${(parseInt(transaction.value, 16) / 1e18).toFixed(4)} ETH`
             : '0 ETH';
 
@@ -45,7 +45,7 @@ export class HaloTransactionUI {
                 <h2 style="margin-bottom: 20px; text-align: center;">
                     Authorize with HaLo Chip
                 </h2>
-
+                
                 <div style="
                     background: #2a2a2a;
                     border-radius: 8px;
@@ -62,14 +62,14 @@ export class HaloTransactionUI {
                             word-break: break-all;
                         ">${transaction.to || 'Contract Creation'}</div>
                     </div>
-
+                    
                     <div style="margin-bottom: 15px;">
                         <strong>Value:</strong>
                         <div style="color: #4f46e5; margin-top: 5px; font-size: 18px;">
                             ${value}
                         </div>
                     </div>
-
+                    
                     ${transaction.data && transaction.data !== '0x' ? `
                         <div>
                             <strong>Data:</strong>
@@ -135,11 +135,11 @@ export class HaloTransactionUI {
             </div>
             <style>
                 @keyframes pulse {
-                    0%, 100% {
+                    0%, 100% { 
                         transform: scale(1);
                         opacity: 1;
                     }
-                    50% {
+                    50% { 
                         transform: scale(1.05);
                         opacity: 0.8;
                     }
@@ -154,11 +154,11 @@ export class HaloTransactionUI {
         document.getElementById('approve-tx')?.addEventListener('click', async () => {
             if (isProcessing) return;
             isProcessing = true;
-
+            
             const button = document.getElementById('approve-tx');
             if (button) {
                 button.textContent = 'Signing...';
-                (button as HTMLButtonElement).disabled = true;
+                button.disabled = true;
             }
 
             try {
