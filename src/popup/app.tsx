@@ -1,8 +1,22 @@
 import { WalletService } from './services/wallet-service';
 import { HaloService } from './services/halo-service';
+import { formatAddress, getDisplayName } from './utils/account';
+
 import { renderLockScreen } from './components/LockScreen';
-import { ConnectedDApp } from './components/CurrentConnection';
-import { EthPriceData } from './components/EthPricePanel';
+
+import { renderAccountSidebar } from './components/AccountSidebar';
+import { renderTransactionList, Transaction } from './components/TransactionList';
+import { renderAddWalletModal, ADD_WALLET_OPTIONS } from './components/AddWalletModal';
+import { renderCurrentConnection, ConnectedDApp } from './components/CurrentConnection';
+import { renderCreateAccountForm } from './components/CreateAccountForm';
+import { renderImportAccountForm } from './components/ImportAccountForm';
+import { renderCreateMultisigForm } from './components/CreateMultisigForm';
+import { renderHaloChipNameForm } from './components/HaloChipNameForm';
+import { renderSecurityConfirmModal } from './components/SecurityConfirmModal';
+import { renderDeleteAccountModal } from './components/DeleteAccountModal';
+import { renderSettingsMenu } from './components/SettingsMenu';
+import { renderEthPricePanel, EthPriceData } from './components/EthPricePanel';
+import { ethPriceService } from './services/eth-price-service';
 import { ethers } from 'ethers';
 
 interface AppState {
@@ -74,11 +88,22 @@ export class PopupApp {
 
     async init() {
         try {
+            console.log('[Init] Initializing popup...');
+
             if (!chrome.runtime || !chrome.runtime.id) {
+                console.error('[Init] Extension runtime not available!');
+                // Extension runtime not available - this is a critical error
+                // We'll show it in the UI when render is called
                 return;
             }
+
+            // Wake up service worker
             await this.wakeServiceWorker();
+
+            // Wait for background script to initialize
             await new Promise(resolve => setTimeout(resolve, 200));
+
+            // Load data
             await Promise.all([
                 this.loadAccounts(),
                 this.loadNetworks(),
@@ -129,11 +154,14 @@ export class PopupApp {
 
     async loadConnectedDApp() {
         try {
+            // Get current tab to find connected DApp
             const tabs = await chrome.tabs.query({ active: true, currentWindow: true });
             if (tabs.length > 0 && tabs[0].url) {
                 try {
                     const url = new URL(tabs[0].url);
                     const origin = url.origin;
+
+                    // Check if this origin is connected
                     const connections = await chrome.storage.local.get('dapp_connections');
                     const dappConnections = connections.dapp_connections || {};
                     const connection = dappConnections[origin];
@@ -173,6 +201,7 @@ export class PopupApp {
                     }
                 }
             } else {
+                // No active tab - try to get most recent connection
                 const connections = await chrome.storage.local.get('dapp_connections');
                 const dappConnections = connections.dapp_connections || {};
                 const origins = Object.keys(dappConnections);
@@ -195,6 +224,7 @@ export class PopupApp {
                 }
             }
         } catch (error: any) {
+            console.error('Error loading connected DApp:', error);
             this.state.connectedDApp = null;
         }
     }
@@ -233,6 +263,7 @@ export class PopupApp {
             return;
         }
 
+        // Show lock screen only if password is set and wallet is locked
         if (this.state.hasPassword && !this.state.unlocked) {
             app.innerHTML = renderLockScreen(
                 this.state.accounts.length > 0,
@@ -243,6 +274,7 @@ export class PopupApp {
             return;
         }
 
+        // If no password is set and no accounts, show welcome screen
         if (!this.state.hasPassword && this.state.accounts.length === 0) {
             app.innerHTML = renderLockScreen(
                 false,
@@ -318,6 +350,7 @@ export class PopupApp {
         });
 
         passwordInput?.addEventListener('input', () => {
+            // Clear error when user starts typing
             if (this.state.errorMessage) {
                 this.state.errorMessage = undefined;
                 this.render();
@@ -325,12 +358,14 @@ export class PopupApp {
         });
 
         createFirstBtn?.addEventListener('click', () => {
-            this.state.unlocked = true;
+            // Show create account form - password will be set when account is created
+            this.state.unlocked = true; // Allow creating first account
             this.showAddWalletModal();
         });
 
         importFirstBtn?.addEventListener('click', () => {
-            this.state.unlocked = true;
+            // Show import account form - password will be set when account is imported
+            this.state.unlocked = true; // Allow importing first account
             this.showAddWalletModal();
         });
 
@@ -396,6 +431,50 @@ export class PopupApp {
                 }
             });
         });
+    }
+
+    private async handleCreateAccountConfirm(name?: string) {
+        try {
+            this.hideCreateAccountForm();
+
+            // If no password is set, prompt to set one
+            if (!this.state.hasPassword) {
+                const password = prompt('Set a password for your wallet (minimum 8 characters):');
+                if (!password || password.length < 8) {
+                    this.showErrorMessage('Password must be at least 8 characters long');
+                    return;
+                }
+
+                const { setPassword } = await import('../core/password.js');
+                await setPassword(password);
+                this.state.hasPassword = true;
+            }
+
+            await this.walletService.createAccount(name);
+            this.state.unlocked = true;
+            await this.loadAccounts();
+            this.render();
+            this.showSuccessMessage('Account created successfully!');
+        } catch (error: any) {
+            this.showErrorMessage('Failed to create account: ' + (error.message || 'Unknown error'));
+        }
+    }
+
+    private async handleImportAccountConfirm(privateKey: string, name?: string) {
+        try {
+            if (!privateKey || !privateKey.trim()) {
+                this.showErrorMessage('Private key is required');
+                return;
+            }
+            this.hideImportAccountForm();
+            await this.walletService.importAccount(privateKey, name);
+            this.state.unlocked = true;
+            await this.loadAccounts();
+            this.render();
+            this.showSuccessMessage('Account imported successfully!');
+        } catch (error: any) {
+            this.showErrorMessage('Failed to import account: ' + (error.message || 'Unknown error'));
+        }
     }
 
     private showSuccessMessage(message: string) {
@@ -475,8 +554,163 @@ export class PopupApp {
         this.render();
     }
 
+    private hideAddWalletModal() {
+        this.state.showAddWalletModal = false;
+        this.render();
+    }
+
+    private handleAddWalletOption(optionId: string) {
+        this.hideAddWalletModal();
+
+        if (optionId === 'create-account') {
+            this.showCreateAccountForm();
+        } else if (optionId === 'import-private-key') {
+            this.showImportAccountForm();
+        } else if (optionId === 'add-halo-chip') {
+            this.showHaloChipNameForm();
+        } else if (optionId === 'create-multisig') {
+            this.showCreateMultisigForm();
+        }
+    }
+
+    private showCreateAccountForm() {
+        this.state.showCreateAccountForm = true;
+        this.render();
+    }
+
+    private hideCreateAccountForm() {
+        this.state.showCreateAccountForm = false;
+        this.render();
+    }
+
+    private showImportAccountForm() {
+        this.state.showImportAccountForm = true;
+        this.render();
+    }
+
+    private hideImportAccountForm() {
+        this.state.showImportAccountForm = false;
+        this.render();
+    }
+
+    private showCreateMultisigForm() {
+        this.state.showCreateMultisigForm = true;
+        this.render();
+    }
+
+    private hideCreateMultisigForm() {
+        this.state.showCreateMultisigForm = false;
+        this.render();
+    }
+
+    private showHaloChipNameForm() {
+        this.state.showHaloChipNameForm = true;
+        this.render();
+    }
+
+    private hideHaloChipNameForm() {
+        this.state.showHaloChipNameForm = false;
+        this.render();
+    }
+
+    private async handleHaloChipNameConfirm(name?: string) {
+        try {
+            this.hideHaloChipNameForm();
+
+            const result = await this.haloService.addChipAccount(name);
+
+            await this.loadAccounts();
+            this.state.unlocked = true;
+            this.render();
+
+            this.showSuccessMessage('✅ HaLo Chip Account Added! Address: ' + formatAddress(result.chipAddress));
+        } catch (error: any) {
+            this.showErrorMessage('Failed to add chip account: ' + (error.message || 'Unknown error'));
+        }
+    }
+
+    private async handleCreateMultisigConfirm(numChips: number, threshold: number, name?: string) {
+        try {
+            this.hideCreateMultisigForm();
+
+            const response = await this.haloService.createMultisigAccount(numChips, threshold, name);
+
+            await this.loadAccounts();
+            this.state.unlocked = true;
+            this.render();
+
+            this.showSuccessMessage(`✅ Multisig Account Created! Address: ${formatAddress(response.account.address)}`);
+        } catch (error: any) {
+            this.showErrorMessage('Failed to create multisig account: ' + (error.message || 'Unknown error'));
+        }
+    }
+
+    private async handleLinkHalo() {
+        try {
+            if (!this.state.selectedAccount) {
+                this.showErrorMessage('Please select an account first');
+                return;
+            }
+
+            // Show security confirmation modal
+            this.state.showSecurityConfirm = true;
+            this.render();
+        } catch (error: any) {
+            this.showErrorMessage('Failed to link account: ' + (error.message || 'Unknown error'));
+        }
+    }
+
+    private showSecurityConfirm() {
+        this.state.showSecurityConfirm = true;
+        this.render();
+    }
+
+    private hideSecurityConfirm() {
+        this.state.showSecurityConfirm = false;
+        this.state.pendingHaloLink = undefined;
+        this.render();
+    }
+
+    private async handleSecurityConfirm(deleteKey: boolean) {
+        try {
+            this.hideSecurityConfirm();
+
+            if (!this.state.selectedAccount) {
+                this.showErrorMessage('Please select an account first');
+                return;
+            }
+
+            const response = await this.haloService.linkAccount(
+                this.state.selectedAccount.address,
+                deleteKey
+            );
+
+            await this.loadAccounts();
+            this.render();
+
+            const message = response.privateKeyDeleted
+                ? '✅ Account secured with HaLo chip! Private key deleted.'
+                : '✅ Account linked to HaLo chip!';
+
+            this.showSuccessMessage(message);
+        } catch (error: any) {
+            this.showErrorMessage('Failed to link account: ' + (error.message || 'Unknown error'));
+        }
+    }
+
+    private handleToggleSidebar() {
+        this.state.sidebarCollapsed = !this.state.sidebarCollapsed;
+        this.render();
+    }
+
     private handleSettings() {
+        // Show settings slide-up menu
         this.state.showSettingsMenu = true;
+        this.render();
+    }
+
+    private hideSettingsMenu() {
+        this.state.showSettingsMenu = false;
         this.render();
     }
 
@@ -566,6 +800,14 @@ export class PopupApp {
         }
     }
 
+    private getTransactionsForAccount(account?: any): Transaction[] {
+        // TODO: Load actual transactions from blockchain
+        // For now, return empty array or mock data
+        if (!account) return [];
+
+        // Mock transactions - replace with actual data fetching
+        return [];
+    }
 
     async handleDisconnectDApp(origin?: string) {
         try {
@@ -619,10 +861,12 @@ export class PopupApp {
                 return;
             }
 
+            // Get checkboxes and password
             const checkbox1 = document.getElementById('delete-confirm-1') as HTMLInputElement;
             const checkbox2 = document.getElementById('delete-confirm-2') as HTMLInputElement;
             const passwordInput = document.getElementById('delete-account-password') as HTMLInputElement;
             const errorDiv = document.getElementById('delete-account-password-error') as HTMLDivElement;
+            const confirmBtn = document.getElementById('delete-account-confirm') as HTMLButtonElement;
 
             if (!checkbox1?.checked || !checkbox2?.checked) {
                 if (errorDiv) {
@@ -641,6 +885,7 @@ export class PopupApp {
                 return;
             }
 
+            // Verify password
             const { verifyPassword } = await import('../core/password.js');
             const isValid = await verifyPassword(password);
             if (!isValid) {
@@ -656,11 +901,21 @@ export class PopupApp {
             }
 
             this.hideDeleteAccountModal();
+
+            // Delete the account
             await this.walletService.deleteAccount(this.state.accountToDelete.address);
+
+            // Reload accounts
             await this.loadAccounts();
+
+            // Reload connected DApp
             await this.loadConnectedDApp();
+
             this.render();
+
+            this.showSuccessMessage('Account deleted successfully');
         } catch (error: any) {
+            console.error('Error deleting account:', error);
             this.showErrorMessage('Failed to delete account: ' + (error.message || 'Unknown error'));
         }
     }
