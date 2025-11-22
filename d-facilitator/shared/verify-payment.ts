@@ -1,4 +1,10 @@
-import { type Runtime, getNetwork } from "@chainlink/cre-sdk";
+import { cre,
+  type Runtime, 
+  getNetwork,
+  encodeCallMsg,
+  bytesToHex,
+  LAST_FINALIZED_BLOCK_NUMBER,
+} from "@chainlink/cre-sdk";
 import {
   type PaymentRequirements,
   type PaymentPayload,
@@ -12,6 +18,10 @@ import {
   verifyTypedData, 
   type Address, 
   type Hex,
+  zeroAddress,
+  encodeFunctionData,
+  decodeFunctionResult,
+  parseAbi,
 } from "viem";
 
 import { getNetworkInfo } from "./network";
@@ -37,7 +47,7 @@ export type VerifyPaymentResult = {
 /// 4. Token contract name/version retrieval (from paymentRequirements.extra or USDC config)
 /// 5. Recipient validation (to === paymentRequirements.payTo)
 /// 6. Deadline validation (validBefore >= now + 6 seconds, validAfter <= now)
-/// 7. Balance checks - skipped (CRE limitation, TODO when CRE adds read support)
+/// 7. Balance checks (ERC20 token balance via CRE callContract) - native token support limited
 /// 8. Amount validation (value >= maxAmountRequired)
 export async function verifyPayment(
   runtime: Runtime<any>,
@@ -69,28 +79,45 @@ export async function verifyPayment(
     const payerAddress = exactEvmPayload.authorization.from as Address;
     const signature = exactEvmPayload.signature as Hex;
 
+    // Get network info once at the beginning (used for multiple checks)
+    const networkInfo = getNetworkInfo(paymentRequirements.network);
+    runtime.log(`Network mapping: "${paymentRequirements.network}" -> chainSelectorName="${networkInfo.chainSelectorName}", isTestnet=${networkInfo.isTestnet}`);
+    
+    // Get CRE network - getNetwork() looks up networks by chainSelectorName
+    // Note: The network must be available in CRE SDK and ideally configured in project.yaml
+    const creNetwork = getNetwork({
+      chainFamily: "evm",
+      chainSelectorName: networkInfo.chainSelectorName,
+      isTestnet: networkInfo.isTestnet,
+    });
+
+    if (!creNetwork) {
+      runtime.log(`ERROR: Failed to get CRE network`);
+      runtime.log(`  Input network: "${paymentRequirements.network}"`);
+      runtime.log(`  Mapped to chainSelectorName: "${networkInfo.chainSelectorName}"`);
+      runtime.log(`  isTestnet: ${networkInfo.isTestnet}`);
+      runtime.log(`  chainFamily: "evm"`);
+      runtime.log(`NOTE: The network must be configured in project.yaml with an RPC endpoint`);
+      runtime.log(`NOTE: Check that the chainSelectorName matches CRE SDK's expected format`);
+      return {
+        isValid: false,
+        invalidReason: "invalid_network",
+        payer: payerAddress,
+        errorMessage: `Network not found: ${networkInfo.chainSelectorName} (from "${paymentRequirements.network}"). Ensure it's configured in project.yaml.`,
+      };
+    }
+
+    runtime.log(`✓ CRE Network found`);
+    runtime.log(`  Name: ${creNetwork.name || 'N/A'}`);
+    runtime.log(`  Chain Selector: ${creNetwork.chainSelector.selector}`);
+    runtime.log(`  Chain Family: ${creNetwork.chainType || 'evm'}`);
+
     // 1. Check if smart wallet (signature length > 130)
     const signatureLength = signature.startsWith("0x") ? signature.length - 2 : signature.length;
     const isSmartWallet = signatureLength > 130;
     
     if (isSmartWallet) {
       runtime.log("Detected smart wallet signature, checking deployment...");
-      // Get network info for CRE
-      const networkInfo = getNetworkInfo(paymentRequirements.network);
-      const network = getNetwork({
-        chainFamily: "evm",
-        chainSelectorName: networkInfo.chainSelectorName,
-        isTestnet: networkInfo.isTestnet,
-      });
-
-      if (!network) {
-        return {
-          isValid: false,
-          invalidReason: "invalid_network",
-          payer: payerAddress,
-        };
-      }
-
       // TODO: CRE EVMClient doesn't support read operations yet
       // When CRE adds read support, use: evmClient.read(runtime, { address: payerAddress })
       // For now, skip smart wallet deployment check or require it in paymentRequirements.extra
@@ -103,22 +130,6 @@ export async function verifyPayment(
       return {
         isValid: false,
         invalidReason: "unsupported_scheme",
-        payer: payerAddress,
-      };
-    }
-
-    // 3. Get network info and create EVM client for contract reads
-    const networkInfo = getNetworkInfo(paymentRequirements.network);
-    const network = getNetwork({
-      chainFamily: "evm",
-      chainSelectorName: networkInfo.chainSelectorName,
-      isTestnet: networkInfo.isTestnet,
-    });
-
-    if (!network) {
-      return {
-        isValid: false,
-        invalidReason: "invalid_network",
         payer: payerAddress,
       };
     }
@@ -239,13 +250,90 @@ export async function verifyPayment(
       };
     }
 
-    // 9. Check balance
-    // TODO: CRE EVMClient doesn't support read operations yet
-    // When CRE adds read support, use: evmClient.read(runtime, { address, data })
-    // For now, we skip balance check or require it to be verified off-chain
-    // Note: This is a security limitation - balance should be checked when CRE adds read support
-    runtime.log("Balance check skipped (CRE read not yet supported)");
-    runtime.log("WARNING: Balance verification is not performed - this should be enabled when CRE adds read support");
+    // 9. Check balance (ERC20 or native token)
+    runtime.log("Checking payer balance...");
+    const tokenAddress = paymentRequirements.asset as Address;
+    const requiredAmount = BigInt(paymentRequirements.maxAmountRequired);
+    
+    let balance: bigint;
+    const isNative = tokenAddress === zeroAddress || 
+                     tokenAddress.toLowerCase() === "0x0000000000000000000000000000000000000000";
+    
+    if (isNative) {
+      // Native token balance check
+      runtime.log("Checking native token balance...");
+      // Note: Native token balance checking via CRE callContract is not directly supported
+      // For x402, payments typically use ERC20 tokens, not native tokens
+      // If native token support is needed, it would require CRE SDK updates
+      runtime.log("WARNING: Native token balance check not fully supported - x402 typically uses ERC20");
+      // Skip native balance check for now - can be enhanced when CRE adds native balance support
+      balance = 0n; // Placeholder - would need proper implementation
+    } else {
+      // ERC20 token balance check
+      runtime.log(`Checking ERC20 balance for token: ${tokenAddress}`);
+      
+      // Use the creNetwork already retrieved at the beginning
+      if (!creNetwork) {
+        runtime.log(`WARNING: CRE network not available for balance check - skipping`);
+        balance = 0n; // Skip balance check if network not found
+      } else {
+        try {
+          // Create EVM client using the already retrieved network
+          const evmClient = new cre.capabilities.EVMClient(creNetwork.chainSelector.selector);
+
+          // Define ERC20 balanceOf ABI
+          const erc20Abi = parseAbi([
+            "function balanceOf(address owner) view returns (uint256)"
+          ]);
+
+          // Encode the function call
+          const callData = encodeFunctionData({
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            args: [payerAddress],
+          });
+
+          // Call the contract
+          const contractCall = evmClient
+            .callContract(runtime, {
+              call: encodeCallMsg({
+                from: zeroAddress,
+                to: tokenAddress,
+                data: callData,
+              }),
+              blockNumber: LAST_FINALIZED_BLOCK_NUMBER,
+            })
+            .result();
+
+          // Decode the result
+          const decodedResult = decodeFunctionResult({
+            abi: erc20Abi,
+            functionName: "balanceOf",
+            data: bytesToHex(contractCall.data),
+          });
+
+          balance = decodedResult as bigint;
+          runtime.log(`Payer ERC20 balance: ${balance.toString()}`);
+        } catch (error) {
+          runtime.log(`Balance check error: ${error instanceof Error ? error.message : String(error)}`);
+          // Don't fail verification if balance check fails (could be network issue)
+          runtime.log("WARNING: Balance check failed - continuing verification");
+          balance = 0n; // Skip balance check on error
+        }
+      }
+    }
+
+    // Verify balance is sufficient (balance >= requiredAmount)
+    if (balance < requiredAmount) {
+      return {
+        isValid: false,
+        invalidReason: "insufficient_funds",
+        payer: payerAddress,
+        errorMessage: `Insufficient balance: ${balance.toString()} < ${requiredAmount.toString()}`,
+      };
+    }
+    
+    runtime.log(`✓ Balance check passed: ${balance.toString()} >= ${requiredAmount.toString()}`);
 
     // 10. Verify amount >= maxAmountRequired
     if (BigInt(exactEvmPayload.authorization.value) < BigInt(paymentRequirements.maxAmountRequired)) {

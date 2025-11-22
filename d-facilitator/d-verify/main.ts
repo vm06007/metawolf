@@ -7,7 +7,6 @@ import {
   type X402Config,
 } from "x402/types";
 import { verifyPayment } from "../shared/verify-payment";
-import { getNetworkInfo } from "../shared/network";
 
 
 type Config = {
