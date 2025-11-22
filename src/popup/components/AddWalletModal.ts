@@ -173,8 +173,9 @@ function getOptionIcon(iconType: string): string {
         `,
         key: `
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path d="M21 2L19 4M7 2L9 4M4 7L2 5M22 7L20 5M19 12L12 19L5 12V7L12 0L19 7V12Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <circle cx="12" cy="12" r="3" stroke-width="2"/>
+                <path d="M17 8L19 10M21 2L20 3L19 2L20 1L21 2Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="8" cy="16" r="3" stroke-width="2"/>
+                <path d="M11 16L21 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
         `,
         chip: `
@@ -200,10 +201,11 @@ function getOptionIcon(iconType: string): string {
         `,
         firefly: `
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
-                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M2 17L12 22L22 17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <path d="M2 12L12 17L22 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-                <circle cx="12" cy="12" r="2" stroke-width="2"/>
+                <rect x="5" y="7" width="14" height="10" rx="1.5" stroke-width="2"/>
+                <path d="M9 7V17M15 7V17" stroke-width="1.5" stroke-linecap="round"/>
+                <circle cx="12" cy="12" r="2" stroke-width="2" fill="currentColor" fill-opacity="0.15"/>
+                <path d="M12 3L9 4.5L12 6L15 4.5L12 3Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M12 18L9 19.5L12 21L15 19.5L12 18Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
             </svg>
         `,
     };
