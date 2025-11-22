@@ -5649,6 +5649,11 @@ var LATEST_BLOCK_NUMBER = {
   absVal: Buffer.from([2]).toString("base64"),
   sign: "-1"
 };
+var decodeJson = (input) => {
+  const decoder = new TextDecoder("utf-8");
+  const textBody = decoder.decode(input);
+  return JSON.parse(textBody);
+};
 function sendReport(runtime, report, fn) {
   const rawReport = report.x_generatedCodeOnly_unwrap();
   const request = fn(rawReport);
@@ -13991,14 +13996,22 @@ class Runner {
     });
   }
 }
-var onCronTrigger = (runtime2) => {
-  runtime2.log("Hello world! Workflow triggered.");
-  return "Hello world!";
+var onHttpTrigger = (runtime2, payload) => {
+  const requestData = decodeJson(payload.input);
+  runtime2.log(`Received HTTP request: ${JSON.stringify(requestData)}`);
+  return `Request processed: ${requestData.message}`;
 };
 var initWorkflow = (config) => {
-  const cron = new cre.capabilities.CronCapability;
+  const httpTrigger = new cre.capabilities.HTTPCapability;
   return [
-    cre.handler(cron.trigger({ schedule: config.schedule }), onCronTrigger)
+    cre.handler(httpTrigger.trigger({
+      authorizedKeys: [
+        {
+          type: "KEY_TYPE_ECDSA_EVM",
+          publicKey: config.authorizedEVMAddress
+        }
+      ]
+    }), onHttpTrigger)
   ];
 };
 async function main() {
