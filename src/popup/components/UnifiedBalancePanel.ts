@@ -2,10 +2,13 @@ import { CHAIN_METADATA } from '@avail-project/nexus-core';
 import type { UserAsset } from '@avail-project/nexus-core';
 import type { UnifiedBalanceData } from '../services/unified-balance-service';
 import { getChainWhiteLogo } from '../utils/chain-icons';
+import type { HistoricalBalancePoint } from '../services/transactions-service';
 
 export interface UnifiedBalancePanelProps {
     data: UnifiedBalanceData | null;
     loading: boolean;
+    historicalData?: HistoricalBalancePoint[] | null;
+    historicalLoading?: boolean;
 }
 
 const getChainLogo = (chainId: number): string => {
@@ -21,7 +24,7 @@ const getChainName = (chainId: number): string => {
 };
 
 export function renderUnifiedBalancePanel(props: UnifiedBalancePanelProps): string {
-    const { data, loading } = props;
+    const { data, loading, historicalData, historicalLoading = false } = props;
 
     if (loading) {
         return `
@@ -86,8 +89,15 @@ export function renderUnifiedBalancePanel(props: UnifiedBalancePanelProps): stri
     const chainLogos = Array.from(chainIds).slice(0, 8); // Show first 8 chains
     const remainingChains = chainIds.size - chainLogos.length;
 
-    // Calculate 24h change (placeholder - you'd need historical data)
-    const change24h = 1.51; // This would come from historical data
+    // Calculate 24h change from historical data
+    let change24h: number | null = null;
+    if (historicalData && historicalData.length >= 2) {
+        const firstBalance = historicalData[0].balance;
+        const lastBalance = historicalData[historicalData.length - 1].balance;
+        if (firstBalance > 0) {
+            change24h = ((lastBalance - firstBalance) / firstBalance) * 100;
+        }
+    }
 
     return `
         <div class="unified-balance-panel">
@@ -134,21 +144,16 @@ export function renderUnifiedBalancePanel(props: UnifiedBalancePanelProps): stri
             </div>
 
             <div class="unified-balance-chart" id="unified-balance-chart">
-                <!-- Chart will be rendered here -->
-                <div class="chart-placeholder">
-                    <svg width="100%" height="60" viewBox="0 0 300 60" preserveAspectRatio="none">
-                        <defs>
-                            <linearGradient id="chartGradient" x1="0%" y1="0%" x2="0%" y2="100%">
-                                <stop offset="0%" style="stop-color: var(--r-green-default); stop-opacity: 0.3"/>
-                                <stop offset="100%" style="stop-color: var(--r-green-default); stop-opacity: 0"/>
-                            </linearGradient>
-                        </defs>
-                        <path d="M0,50 Q75,45 150,30 T300,10" 
-                              fill="url(#chartGradient)" 
-                              stroke="var(--r-green-default)" 
-                              stroke-width="2"/>
-                    </svg>
+                ${historicalLoading ? `
+                    <div class="chart-loading" style="width: 100%; height: 60px; display: flex; align-items: center; justify-content: center;">
+                        <div style="width: 20px; height: 20px; border: 2px solid var(--r-neutral-line); border-top-color: var(--r-blue-default); border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    </div>
+                ` : `
+                    <div id="unified-balance-chart-container" style="width: 100%; height: 60px; position: relative;">
+                        <!-- Chart will be rendered here by JavaScript -->
+                        <div id="unified-balance-chart-tooltip" style="display: none; position: absolute; background: rgba(0, 0, 0, 0.9); color: white; padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; pointer-events: none; z-index: 1000; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); transform: translateX(-50%);"></div>
                 </div>
+                `}
             </div>
 
             <div class="asset-breakdown" id="asset-breakdown" style="display: none;">

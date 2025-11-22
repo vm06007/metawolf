@@ -751,7 +751,10 @@ function handleMessage(
                             acc => acc.address.toLowerCase() === pendingBatchedCalls.address.toLowerCase()
                         );
                         if (!account) {
-                            safeSendResponse({ success: false, error: 'Account not found' });
+                            safeSendResponse({
+                                success: false,
+                                error: 'Account not found'
+                            });
                             break;
                         }
 
@@ -772,13 +775,15 @@ function handleMessage(
                         // Verify provider chainId matches
                         const providerChainId = (await provider.getNetwork()).chainId;
                         if (Number(providerChainId) !== chainId) {
-                            console.warn(`[APPROVE_BATCHED_CALLS] Provider chainId (${providerChainId}) doesn't match requested chainId (${chainId}), using provider chainId`);
                             chainId = Number(providerChainId);
                         }
 
                         // Check if account is a smart account (EIP-7702 delegated)
                         const { EIP7702 } = await import('../eips/eip7702.js');
-                        const delegationStatus = await EIP7702.checkDelegation(account.address, provider);
+                        const delegationStatus = await EIP7702.checkDelegation(
+                            account.address,
+                            provider
+                        );
 
                         // Verify delegation to a smart account contract
                         const isSmartAccount = delegationStatus.isDelegated && delegationStatus.delegateAddress;
@@ -789,15 +794,9 @@ function handleMessage(
 
                         // Use the dynamic delegate address from the delegation check
                         const delegateAddress = delegationStatus.delegateAddress;
-                        console.log('[APPROVE_BATCHED_CALLS] Account delegated to:', delegateAddress);
 
                         const calls = pendingBatchedCalls.calls || [];
                         let txHash: string;
-
-                        // Smart account - encode all calls into a single execute transaction
-                        console.log('[APPROVE_BATCHED_CALLS] Account is delegated to smart account contract');
-                        console.log('[APPROVE_BATCHED_CALLS] Delegate address:', delegationStatus.delegateAddress);
-                        console.log('[APPROVE_BATCHED_CALLS] Number of calls to batch:', calls.length);
 
                         // CRITICAL INSIGHT FROM CONTRACT SOURCE:
                         // The contract's execute() function calls: _executionCalldata.decodeBatch()
@@ -807,8 +806,6 @@ function handleMessage(
 
                         // Execution struct: (address target, uint256 value, bytes callData)
                         // So executionCalldata = [(address, uint256, bytes), (address, uint256, bytes), ...]
-
-                        console.log('[APPROVE_BATCHED_CALLS] Encoding executionCalldata as Execution[] array (without nonce)');
 
                         // Encode executionCalldata as array of Execution structs
                         const executionCalldata = ethers.AbiCoder.defaultAbiCoder().encode(
@@ -822,13 +819,6 @@ function handleMessage(
                         );
 
                         const execDataLengthBytes = (executionCalldata.length - 2) / 2;
-                        console.log('[APPROVE_BATCHED_CALLS] ExecutionCalldata length:', executionCalldata.length, 'chars');
-                        console.log('[APPROVE_BATCHED_CALLS] ExecutionCalldata length (bytes):', execDataLengthBytes);
-                        console.log('[APPROVE_BATCHED_CALLS] ExecutionCalldata length (hex):', execDataLengthBytes.toString(16));
-                        console.log('[APPROVE_BATCHED_CALLS] Expected length (hex): 500 (1280 bytes)');
-                        console.log('[APPROVE_BATCHED_CALLS] Match:', execDataLengthBytes === 1280 ? '✓' : '✗');
-                        console.log('[APPROVE_BATCHED_CALLS] ExecutionCalldata (first 400 chars):', executionCalldata.slice(0, 400));
-                        console.log('[APPROVE_BATCHED_CALLS] Number of calls:', calls.length);
 
                         // ModeCode for batched execution
                         // CALLTYPE_BATCH (0x01) for batch execution
@@ -841,14 +831,8 @@ function handleMessage(
 
                         const executeData = executeInterface.encodeFunctionData('execute', [modeCode, executionCalldata]);
                         const selector = executeData.slice(0, 10);
-                        console.log('[APPROVE_BATCHED_CALLS] Encoded execute call');
-                        console.log('[APPROVE_BATCHED_CALLS] Function selector:', selector);
-                        console.log('[APPROVE_BATCHED_CALLS] Expected selector: 0xe9ae5c53');
-                        console.log('[APPROVE_BATCHED_CALLS] ModeCode:', modeCode);
-                        console.log('[APPROVE_BATCHED_CALLS] Number of calls:', calls.length);
 
                         if (selector !== '0xe9ae5c53') {
-                            console.error('[APPROVE_BATCHED_CALLS] ❌ Function selector mismatch!');
                             throw new Error(`Function selector mismatch: got ${selector}, expected 0xe9ae5c53`);
                         }
 
@@ -882,11 +866,20 @@ function handleMessage(
                             } catch (gasError: any) {
                                 console.warn('[APPROVE_BATCHED_CALLS] Gas estimation failed, using defaults:', gasError.message);
                                 const feeData = await provider.getFeeData();
+                                let maxFeePerGas = feeData.maxFeePerGas || feeData.gasPrice;
+                                let maxPriorityFeePerGas = feeData.maxPriorityFeePerGas;
+
+                                // CRITICAL: Ensure maxPriorityFeePerGas <= maxFeePerGas
+                                // This is especially important on L2s like Arbitrum where fees are very low
+                                if (maxPriorityFeePerGas && maxFeePerGas && maxPriorityFeePerGas > maxFeePerGas) {
+                                    maxPriorityFeePerGas = maxFeePerGas;
+                                }
+
                                 transaction = {
                                     ...transaction,
                                     gasLimit: 500000n, // Higher gas for batched calls
-                                    maxFeePerGas: feeData.maxFeePerGas || feeData.gasPrice,
-                                    maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
+                                    maxFeePerGas: maxFeePerGas,
+                                    maxPriorityFeePerGas: maxPriorityFeePerGas,
                                 };
                             }
 
@@ -898,8 +891,6 @@ function handleMessage(
                         if (!txHash || !txHash.startsWith('0x') || txHash.length !== 66) {
                             throw new Error(`Invalid transaction hash: ${txHash}`);
                         }
-
-                        console.log('[APPROVE_BATCHED_CALLS] Transaction sent successfully:', txHash);
 
                         // Store transaction hash for status tracking
                         // Store with BOTH the request ID and the transaction hash as keys
@@ -1023,7 +1014,9 @@ function handleMessage(
                             try {
                                 const { rpcService } = await import('../core/rpc-service.js');
                                 const chainId = message.chainId || wallet.getSelectedNetwork();
+                                console.log('[GET_CALLS_STATUS] Using chainId:', chainId);
                                 const rpcUrl = rpcService.getRPCUrl(chainId);
+                                console.log('[GET_CALLS_STATUS] RPC URL:', rpcUrl);
                                 const provider = new ethers.JsonRpcProvider(rpcUrl);
 
                                 const receipt = await provider.getTransactionReceipt(statusEntry.hash);
@@ -1165,6 +1158,18 @@ function handleMessage(
                             },
                             // Sepolia Testnet
                             '11155111': {
+                                atomicBatch: {
+                                    supported: true
+                                }
+                            },
+                            // Arbitrum One
+                            '42161': {
+                                atomicBatch: {
+                                    supported: true
+                                }
+                            },
+                            // Zircuit Mainnet
+                            '48900': {
                                 atomicBatch: {
                                     supported: true
                                 }
@@ -1963,33 +1968,22 @@ function handleMessage(
                         let authorizationNonce = currentNonce + 1; // EOA broadcasts: must use current + 1
                         let transactionNonce = currentNonce; // Transaction uses current nonce (before increment)
 
-                        console.log('[UPGRADE_TO_SMART_ACCOUNT] Nonce calculation (EOA self-execution):', {
-                            currentNonce,
-                            authorizationNonce,
-                            transactionNonce,
-                            accountAddress,
-                            messageAddress: address,
-                            chainId: targetChainId,
-                            note: 'EOA broadcasts transaction, so authorization nonce = current + 1 (EVM increments before validation)'
-                        });
-
                         // Get fee data
                         const feeData = await provider.getFeeData();
-                        const maxFeePerGas = feeData.maxFeePerGas || ethers.parseUnits('20', 'gwei');
-                        const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || ethers.parseUnits('2', 'gwei');
+                        let maxFeePerGas = feeData.maxFeePerGas || ethers.parseUnits('20', 'gwei');
+                        let maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || ethers.parseUnits('2', 'gwei');
+
+                        // CRITICAL: Ensure maxPriorityFeePerGas <= maxFeePerGas
+                        // This is especially important on L2s like Arbitrum where fees are very low
+                        if (maxPriorityFeePerGas > maxFeePerGas) {
+                            maxPriorityFeePerGas = maxFeePerGas;
+                        }
+
                         const gasLimit = 100000n;
 
                         // CRITICAL: Verify the account address matches the message address
                         const accountAddressLower = accountAddress.toLowerCase();
                         const messageAddress = getAddress(address).toLowerCase();
-
-                        console.log('[UPGRADE_TO_SMART_ACCOUNT] Address consistency check:', {
-                            accountAddress: accountAddressLower,
-                            messageAddress,
-                            match: accountAddressLower === messageAddress,
-                            accountAddressOriginal: account.address,
-                            messageAddressOriginal: address
-                        });
 
                         if (accountAddressLower !== messageAddress) {
                             console.error('[UPGRADE_TO_SMART_ACCOUNT] ERROR: Account address does not match message address!');
@@ -2023,16 +2017,6 @@ function handleMessage(
                         const addressFromKey = getAddress(accountFromKey.address).toLowerCase();
                         const expectedAddress = accountAddressLower;
 
-                        console.log('[UPGRADE_TO_SMART_ACCOUNT] Private key verification:', {
-                            accountAddress: account.address,
-                            accountAddressNormalized: accountAddressLower,
-                            privateKeyRecoveredAddress: addressFromKey,
-                            match: addressFromKey === expectedAddress,
-                            privateKeyLength: privateKey.length,
-                            privateKeyPrefix: privateKey.slice(0, 10) + '...',
-                            note: 'If addresses do not match, the account was imported incorrectly or storage is corrupted'
-                        });
-
                         if (addressFromKey !== expectedAddress) {
                             // This is a critical error - the account data is corrupted
                             // The private key stored for this account belongs to a different address
@@ -2059,12 +2043,6 @@ function handleMessage(
                                 // Save updated account state
                                 await wallet.saveState();
 
-                                console.log('[UPGRADE_TO_SMART_ACCOUNT] Auto-fixed account address:', {
-                                    oldAddress,
-                                    newAddress: addressFromKey,
-                                    note: 'Account address updated to match private key'
-                                });
-
                                 // Update the accountAddress variable to use the fixed address
                                 const fixedAccountAddress = getAddress(addressFromKey);
                                 const fixedAccountAddressLower = fixedAccountAddress.toLowerCase();
@@ -2077,19 +2055,10 @@ function handleMessage(
                                     throw new Error('Auto-fix failed: Address still does not match after fix');
                                 }
 
-                                console.log('[UPGRADE_TO_SMART_ACCOUNT] Account data fixed successfully. Continuing with delegation...');
-
                                 // Update nonce calculation to use the fixed address
                                 const fixedCurrentNonce = await provider.getTransactionCount(fixedAccountAddress, 'pending');
                                 const fixedAuthorizationNonce = fixedCurrentNonce + 1;
                                 const fixedTransactionNonce = fixedCurrentNonce;
-
-                                console.log('[UPGRADE_TO_SMART_ACCOUNT] Using fixed address for nonce calculation:', {
-                                    fixedAccountAddress,
-                                    fixedCurrentNonce,
-                                    fixedAuthorizationNonce,
-                                    fixedTransactionNonce
-                                });
 
                                 // Continue with the fixed address
                                 // Update the authorization nonce
@@ -2126,19 +2095,11 @@ function handleMessage(
                         // Create wallet with provider
                         const ethersWallet = new ethers.Wallet(privateKey, provider);
 
-                        console.log('[UPGRADE_TO_SMART_ACCOUNT] Creating authorization...');
-
                         // Create authorization - Ethers.js handles signing internally
                         const authorization = await ethersWallet.authorize({
                             address: SMART_ACCOUNT_CONTRACT,
                             chainId: targetChainId,
                             nonce: authorizationNonce
-                        });
-
-                        console.log('[UPGRADE_TO_SMART_ACCOUNT] Authorization created:', {
-                            chainId: authorization.chainId,
-                            address: authorization.address,
-                            nonce: authorization.nonce
                         });
 
                         // Create type-4 transaction with authorization list
@@ -2156,12 +2117,8 @@ function handleMessage(
                             authorizationList: [authorization]  // Use authorization directly
                         };
 
-                        console.log('[UPGRADE_TO_SMART_ACCOUNT] Broadcasting transaction...');
-
                         // Let Ethers.js handle everything - signing and broadcasting
                         const txResponse = await ethersWallet.sendTransaction(transaction);
-
-                        console.log('[UPGRADE_TO_SMART_ACCOUNT] Transaction broadcast:', txResponse.hash);
 
                         // Respond immediately so UI can show toast and close modal
                         safeSendResponse({ success: true, transactionHash: txResponse.hash });
@@ -2229,8 +2186,15 @@ function handleMessage(
 
                         // Get fee data
                         const feeData = await provider.getFeeData();
-                        const maxFeePerGas = feeData.maxFeePerGas || ethers.parseUnits('20', 'gwei');
-                        const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || ethers.parseUnits('2', 'gwei');
+                        let maxFeePerGas = feeData.maxFeePerGas || ethers.parseUnits('20', 'gwei');
+                        let maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || ethers.parseUnits('2', 'gwei');
+
+                        // CRITICAL: Ensure maxPriorityFeePerGas <= maxFeePerGas
+                        // This is especially important on L2s like Arbitrum where fees are very low
+                        if (maxPriorityFeePerGas > maxFeePerGas) {
+                            maxPriorityFeePerGas = maxFeePerGas;
+                        }
+
                         const gasLimit = 100000n;
 
                         // Get private key
@@ -2319,7 +2283,12 @@ function handleMessage(
 
                         // Convert transaction params to proper format
                         const txParams = message.transaction;
-                        const provider = await wallet.getProvider();
+
+                        // This ensures transactions are broadcast to the correct chain
+                        const { rpcService } = await import('../core/rpc-service.js');
+                        const chainId = txParams.chainId || 1; // Default to mainnet if not specified
+                        const rpcUrl = rpcService.getRPCUrl(chainId);
+                        const provider = new ethers.JsonRpcProvider(rpcUrl);
 
                         // Build transaction object in the format expected by wallet.signTransaction
                         const transaction: any = {

@@ -59,12 +59,32 @@ export class WalletService {
     }
 
     private getDefaultNetworks(): any[] {
-        return [{
-            chainId: 1,
-            name: 'Ethereum Mainnet',
-            rpcUrl: 'https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73',
-            currency: { name: 'Ether', symbol: 'ETH', decimals: 18 }
-        }];
+        return [
+            {
+                chainId: 1,
+                name: 'Ethereum Mainnet',
+                rpcUrl: 'https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73',
+                currency: { name: 'Ether', symbol: 'ETH', decimals: 18 }
+            },
+            {
+                chainId: 11155111,
+                name: 'Sepolia',
+                rpcUrl: 'https://sepolia.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73',
+                currency: { name: 'Sepolia Ether', symbol: 'SEP', decimals: 18 }
+            },
+            {
+                chainId: 42161,
+                name: 'Arbitrum One',
+                rpcUrl: 'https://arb1.arbitrum.io/rpc',
+                currency: { name: 'Ether', symbol: 'ETH', decimals: 18 }
+            },
+            {
+                chainId: 48900,
+                name: 'Zircuit Mainnet',
+                rpcUrl: 'https://zircuit-mainnet.drpc.org',
+                currency: { name: 'Ether', symbol: 'ETH', decimals: 18 }
+            }
+        ];
     }
 
     async unlock(password: string): Promise<boolean> {

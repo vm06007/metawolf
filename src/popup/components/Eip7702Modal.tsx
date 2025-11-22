@@ -14,6 +14,7 @@ interface RenderEip7702ModalParams {
     isFirstRender: boolean;
     transactionHash?: string | null;
     chainId?: number;
+    networks?: Array<{ chainId: number; name: string; }>;
 }
 
 export function renderEip7702Modal(params: RenderEip7702ModalParams): string {
@@ -25,6 +26,7 @@ export function renderEip7702Modal(params: RenderEip7702ModalParams): string {
         isFirstRender,
         transactionHash,
         chainId,
+        networks = [],
     } = params;
 
     if (!visible) {
@@ -49,6 +51,7 @@ export function renderEip7702Modal(params: RenderEip7702ModalParams): string {
             5: 'goerli.etherscan.io',
             10: 'optimistic.etherscan.io',
             42161: 'arbiscan.io',
+            48900: 'explorer.zircuit.com',
             8453: 'basescan.org',
             137: 'polygonscan.com',
             56: 'bscscan.com',
@@ -188,6 +191,34 @@ export function renderEip7702Modal(params: RenderEip7702ModalParams): string {
                                     <div style="margin-bottom: 8px;">
                                         This is a watch-only account. You can view the current delegation status but cannot submit upgrade or reset transactions from here.
                                     </div>
+                                    ${networks.length > 0 ? `
+                                        <div style="margin-top: 12px; margin-bottom: 12px;">
+                                            <label style="
+                                                display: block;
+                                                font-size: 12px;
+                                                color: var(--r-neutral-foot);
+                                                margin-bottom: 6px;
+                                            ">Network</label>
+                                            <select id="eip7702-network-selector" style="
+                                                width: 100%;
+                                                padding: 10px 12px;
+                                                background: var(--r-neutral-bg2);
+                                                border: 1px solid var(--r-neutral-line);
+                                                border-radius: 8px;
+                                                font-size: 14px;
+                                                color: var(--r-neutral-title1);
+                                                cursor: pointer;
+                                                outline: none;
+                                                transition: all 0.2s;
+                                            ">
+                                                ${networks.map(network => `
+                                                    <option value="${network.chainId}" ${network.chainId === chainId ? 'selected' : ''}>
+                                                        ${network.name}
+                                                    </option>
+                                                `).join('')}
+                                            </select>
+                                        </div>
+                                    ` : ''}
                                     ${isLoading ? `
                                         <div style="
                                             display: flex;
@@ -269,13 +300,41 @@ export function renderEip7702Modal(params: RenderEip7702ModalParams): string {
                                 </div>
                             ` : `
                                 <p style="
-                                    margin: 0;
+                                    margin: 0 0 12px 0;
                                     font-size: 13px;
                                     color: var(--r-neutral-body);
                                     line-height: 1.5;
                                 ">
                                     Manage your smart account delegation directly from the main dashboard.
                                 </p>
+                                ${networks.length > 0 ? `
+                                    <div style="margin-top: 12px;">
+                                        <label style="
+                                            display: block;
+                                            font-size: 12px;
+                                            color: var(--r-neutral-foot);
+                                            margin-bottom: 6px;
+                                        ">Network</label>
+                                        <select id="eip7702-network-selector" style="
+                                            width: 100%;
+                                            padding: 10px 12px;
+                                            background: var(--r-neutral-bg2);
+                                            border: 1px solid var(--r-neutral-line);
+                                            border-radius: 8px;
+                                            font-size: 14px;
+                                            color: var(--r-neutral-title1);
+                                            cursor: pointer;
+                                            outline: none;
+                                            transition: all 0.2s;
+                                        ">
+                                            ${networks.map(network => `
+                                                <option value="${network.chainId}" ${network.chainId === chainId ? 'selected' : ''}>
+                                                    ${network.name}
+                                                </option>
+                                            `).join('')}
+                                        </select>
+                                    </div>
+                                ` : ''}
                             `}
                         </div>
                     ` : `

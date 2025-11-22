@@ -47,11 +47,51 @@ export function renderSendScreen(props: SendScreenProps): string {
     const defaultTokenBalance = defaultToken ? parseFloat(defaultToken.balance) : 0;
 
     // Get available chains from CHAIN_METADATA
-    const availableChains = Object.entries(CHAIN_METADATA).map(([chainId, metadata]) => ({
+    const chainsFromMetadata = Object.entries(CHAIN_METADATA).map(([chainId, metadata]) => ({
         id: parseInt(chainId),
         name: metadata.name,
         logo: metadata.logo,
     }));
+    
+    // Add Zircuit if not already in CHAIN_METADATA (use colored logo, not white)
+    const zircuitChainId = 48900;
+    const zircuitLogo = 'https://static.debank.com/image/chain/logo_url/zircuit/0571a12255432950da5112437058fa5b.png';
+    const hasZircuit = chainsFromMetadata.some(c => c.id === zircuitChainId);
+    
+    let availableChains = hasZircuit 
+        ? chainsFromMetadata.map(chain => 
+            chain.id === zircuitChainId 
+                ? { ...chain, logo: zircuitLogo } // Use colored logo
+                : chain
+          )
+        : [
+            ...chainsFromMetadata,
+            {
+                id: zircuitChainId,
+                name: 'Zircuit Mainnet',
+                logo: zircuitLogo,
+            }
+        ];
+    
+    // Sort chains: Ethereum (1) first, then second chain, then Zircuit (48900) 3rd, then rest
+    const ethereum = availableChains.find(c => c.id === 1);
+    const zircuit = availableChains.find(c => c.id === zircuitChainId);
+    const others = availableChains.filter(c => c.id !== 1 && c.id !== zircuitChainId).sort((a, b) => a.id - b.id);
+    
+    if (ethereum && zircuit) {
+        availableChains = [
+            ethereum, // 1st: Ethereum
+            ...others.slice(0, 1), // 2nd: First other chain
+            zircuit, // 3rd: Zircuit
+            ...others.slice(1) // Rest: Remaining chains
+        ];
+    } else if (ethereum) {
+        // If no Zircuit, just put Ethereum first
+        availableChains = [ethereum, ...others];
+    } else {
+        // No Ethereum, just sort by id
+        availableChains.sort((a, b) => a.id - b.id);
+    }
 
     // Get default chain (Ethereum mainnet - chainId 1)
     const defaultChain = availableChains.find(c => c.id === 1) || availableChains[0];
@@ -147,7 +187,7 @@ export function renderSendScreen(props: SendScreenProps): string {
                         type="text" 
                         class="send-recipient-input" 
                         id="send-recipient-input"
-                        placeholder="0x..."
+                        placeholder="0x... or ENS name"
                     />
                     <div class="send-recipient-error" id="send-recipient-error" style="display: none;"></div>
                 </div>

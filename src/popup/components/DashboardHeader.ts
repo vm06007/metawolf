@@ -1,5 +1,6 @@
 import { CHAIN_METADATA } from '@avail-project/nexus-core';
 import { getChainWhiteLogo } from '../utils/chain-icons';
+import type { HistoricalBalancePoint } from '../services/transactions-service';
 
 export function renderDashboardHeader(
     selectedAccount: any,
@@ -13,7 +14,9 @@ export function renderDashboardHeader(
     formatAddress: (addr: string) => string,
     isExpanded: boolean = false,
     unifiedBalanceData: any = null,
-    unifiedBalanceLoading: boolean = false
+    unifiedBalanceLoading: boolean = false,
+    historicalData?: HistoricalBalancePoint[] | null,
+    historicalLoading?: boolean
 ): string {
     if (!selectedAccount) return '';
 
@@ -69,12 +72,18 @@ export function renderDashboardHeader(
                     </button>
                 </div>
             </div>
-            ${renderUnifiedBalanceInHeader(unifiedBalanceData, unifiedBalanceLoading, balance)}
+            ${renderUnifiedBalanceInHeader(unifiedBalanceData, unifiedBalanceLoading, balance, historicalData, historicalLoading)}
         </div>
     `;
 }
 
-function renderUnifiedBalanceInHeader(data: any, loading: boolean, fallbackBalance: string): string {
+function renderUnifiedBalanceInHeader(
+    data: any, 
+    loading: boolean, 
+    fallbackBalance: string,
+    historicalData?: HistoricalBalancePoint[] | null,
+    historicalLoading?: boolean
+): string {
     if (loading) {
         // Show loading skeleton instead of 0.00
         return `
@@ -111,8 +120,15 @@ function renderUnifiedBalanceInHeader(data: any, loading: boolean, fallbackBalan
     const chainLogos = Array.from(chainIds).slice(0, 8);
     const remainingChains = chainIds.size - chainLogos.length;
 
-    // Calculate 24h change (placeholder)
-    const change24h = 1.51;
+    // Calculate 24h change from historical data
+    let change24h: number | null = null;
+    if (historicalData && historicalData.length >= 2) {
+        const firstBalance = historicalData[0].balance;
+        const lastBalance = historicalData[historicalData.length - 1].balance;
+        if (firstBalance > 0) {
+            change24h = ((lastBalance - firstBalance) / firstBalance) * 100;
+        }
+    }
 
     const getChainLogo = (chainId: number): string => {
         // Use white logo from clone folder for better visibility on blue background
@@ -162,18 +178,16 @@ function renderUnifiedBalanceInHeader(data: any, loading: boolean, fallbackBalan
             </div>
 
             <div class="unified-balance-chart-header">
-                <svg width="100%" height="60" viewBox="0 0 300 60" preserveAspectRatio="none">
-                    <defs>
-                        <linearGradient id="chartGradientHeader" x1="0%" y1="0%" x2="0%" y2="100%">
-                            <stop offset="0%" style="stop-color: #27C193; stop-opacity: 0.3"/>
-                            <stop offset="100%" style="stop-color: #27C193; stop-opacity: 0"/>
-                        </linearGradient>
-                    </defs>
-                    <path d="M0,50 Q75,45 150,30 T300,10" 
-                          fill="url(#chartGradientHeader)" 
-                          stroke="#27C193" 
-                          stroke-width="2"/>
-                </svg>
+                ${historicalLoading ? `
+                    <div class="chart-loading" style="width: 100%; height: 60px; display: flex; align-items: center; justify-content: center;">
+                        <div style="width: 20px; height: 20px; border: 2px solid rgba(255,255,255,0.2); border-top-color: #27C193; border-radius: 50%; animation: spin 1s linear infinite;"></div>
+                    </div>
+                ` : `
+                    <div id="unified-balance-chart-header-container" style="width: 100%; height: 60px; position: relative;">
+                        <!-- Chart will be rendered here by JavaScript -->
+                        <div id="unified-balance-chart-header-tooltip" style="display: none; position: absolute; background: rgba(0, 0, 0, 0.9); color: white; padding: 6px 10px; border-radius: 6px; font-size: 12px; font-weight: 500; pointer-events: none; z-index: 1000; white-space: nowrap; box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3); transform: translateX(-50%);"></div>
+                    </div>
+                `}
             </div>
         </div>
     `;

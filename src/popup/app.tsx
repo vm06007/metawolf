@@ -35,7 +35,9 @@ import { ethPriceService } from './services/eth-price-service';
 import { unifiedBalanceService, UnifiedBalanceData } from './services/unified-balance-service';
 import { transferService } from './services/transfer-service';
 import { createEIP1193Provider } from './services/eip1193-provider';
-import { fetchTransactionsFromOctav, OctavTransaction } from './services/transactions-service';
+import { fetchTransactionsFromOctav, OctavTransaction, fetchHistoricalBalanceFromOctav } from './services/transactions-service';
+import { renderRechartsChart } from './utils/recharts-renderer';
+import { formatChartTime, formatChartBalance } from './utils/balance-chart';
 import { HaloUI } from './halo-ui';
 import { isAddress, getAddress } from '@ethersproject/address';
 import { loadEthers } from './ethers-loader';
@@ -89,6 +91,8 @@ interface AppState {
     privateKeyModalFirstRender: boolean;
     unifiedBalanceData: UnifiedBalanceData | null;
     unifiedBalanceLoading: boolean;
+    historicalBalanceData: any[] | null;
+    historicalBalanceLoading: boolean;
     showReceiveScreen: boolean;
     receiveScreenHideBalance: boolean;
     showSendScreen: boolean;
@@ -97,6 +101,7 @@ interface AppState {
         isDelegated: boolean;
         delegateAddress: string | null;
         codeHash: string;
+        chainId?: number; // Store which network the delegation is on
     } | null;
     delegationLoading: boolean;
     delegationTargetAddress: string | null;
@@ -164,6 +169,8 @@ export class PopupApp {
         privateKeyModalFirstRender: true,
         unifiedBalanceData: null,
         unifiedBalanceLoading: false,
+        historicalBalanceData: null,
+        historicalBalanceLoading: false,
         showReceiveScreen: false,
         receiveScreenHideBalance: false,
         showSendScreen: false,
@@ -382,6 +389,16 @@ export class PopupApp {
                 assetCount: data.assets.length,
                 hasError: !!data.error
             });
+
+            // Load historical balance data for view-only accounts
+            if (this.state.selectedAccount?.isWatchOnly && this.state.selectedAccount?.address) {
+                console.log('[PopupApp] Loading historical balances for view-only account');
+                await this.loadHistoricalBalances();
+            } else {
+                console.log('[PopupApp] Not a view-only account, skipping historical data');
+                this.state.historicalBalanceData = null;
+                this.state.historicalBalanceLoading = false;
+            }
         } catch (error: any) {
             console.error('[PopupApp] Error loading unified balances:', error);
             this.state.unifiedBalanceData = {
@@ -390,9 +407,281 @@ export class PopupApp {
                 loading: false,
                 error: error.message || 'Failed to load unified balances',
             };
+            this.state.historicalBalanceData = null;
+            this.state.historicalBalanceLoading = false;
         } finally {
             this.state.unifiedBalanceLoading = false;
             this.render(); // Update UI with results
+            // Render charts after DOM is updated - use longer timeout to ensure DOM is ready
+            setTimeout(() => {
+                console.log('[PopupApp] Rendering charts after loadUnifiedBalances');
+                this.renderCharts();
+            }, 100);
+        }
+    }
+
+    async loadHistoricalBalances() {
+        if (!this.state.selectedAccount?.address) {
+            return;
+        }
+
+        try {
+            this.state.historicalBalanceLoading = true;
+            this.render(); // Show loading state
+
+            const historicalData = await fetchHistoricalBalanceFromOctav({
+                address: this.state.selectedAccount.address,
+                hours: 24,
+                points: 24,
+            });
+
+            // Even if we get empty data, set it so placeholder can render
+            this.state.historicalBalanceData = historicalData && historicalData.length > 0 ? historicalData : null;
+            console.log('[PopupApp] Historical balances loaded:', {
+                points: historicalData?.length || 0,
+                firstBalance: historicalData?.[0]?.balance,
+                lastBalance: historicalData?.[historicalData.length - 1]?.balance,
+            });
+        } catch (error: any) {
+            console.error('[PopupApp] Error loading historical balances:', error);
+            // Set to null so placeholder chart will render
+            this.state.historicalBalanceData = null;
+        } finally {
+            this.state.historicalBalanceLoading = false;
+            this.render(); // Update UI
+            // Render charts after DOM is updated
+            setTimeout(() => {
+                console.log('[PopupApp] Rendering charts after loadHistoricalBalances');
+                this.renderCharts();
+            }, 100);
+        }
+    }
+
+    renderCharts() {
+        console.log('[PopupApp] renderCharts called', {
+            hasHistoricalData: !!this.state.historicalBalanceData,
+            dataLength: this.state.historicalBalanceData?.length || 0,
+            isLoading: this.state.historicalBalanceLoading,
+        });
+
+        // If we have historical data, render the real chart
+        if (this.state.historicalBalanceData && this.state.historicalBalanceData.length > 0) {
+            const chartColor = this.state.historicalBalanceData.length >= 2
+                ? (this.state.historicalBalanceData[this.state.historicalBalanceData.length - 1].balance >=
+                    this.state.historicalBalanceData[0].balance ? '#27C193' : '#F24822')
+                : '#27C193';
+
+            // Store reference to current balance and first balance for hover updates
+            const currentBalance = this.state.unifiedBalanceData?.totalBalanceUSD || 0;
+            const firstBalance = this.state.historicalBalanceData[0]?.balance || currentBalance;
+
+            // Render chart in UnifiedBalancePanel
+            const chartContainer = document.getElementById('unified-balance-chart-container');
+            if (chartContainer) {
+                console.log('[PopupApp] Rendering Recharts chart in UnifiedBalancePanel');
+                renderRechartsChart('unified-balance-chart-container', {
+                    data: this.state.historicalBalanceData,
+                    width: chartContainer.clientWidth || 300,
+                    height: 60,
+                    color: chartColor,
+                    gradientId: 'chartGradient',
+                    onHover: (data) => {
+                        const tooltip = document.getElementById('unified-balance-chart-tooltip');
+                        if (tooltip) {
+                            if (data.visible) {
+                                tooltip.textContent = `${formatChartTime(data.timestamp)} - ${formatChartBalance(data.balance)}`;
+                                tooltip.style.display = 'block';
+                            } else {
+                                tooltip.style.display = 'none';
+                            }
+                        }
+
+                        // Update balance display in both UnifiedBalancePanel and DashboardHeader
+                        this.updateBalanceDisplay(data, currentBalance, firstBalance);
+                    },
+                });
+            } else {
+                console.warn('[PopupApp] Chart container not found: unified-balance-chart-container');
+            }
+
+            // Render chart in DashboardHeader
+            const headerChartContainer = document.getElementById('unified-balance-chart-header-container');
+            if (headerChartContainer) {
+                console.log('[PopupApp] Rendering Recharts chart in DashboardHeader');
+                renderRechartsChart('unified-balance-chart-header-container', {
+                    data: this.state.historicalBalanceData,
+                    width: headerChartContainer.clientWidth || 300,
+                    height: 60,
+                    color: chartColor,
+                    gradientId: 'chartGradientHeader',
+                    onHover: (data) => {
+                        const tooltip = document.getElementById('unified-balance-chart-header-tooltip');
+                        if (tooltip) {
+                            if (data.visible) {
+                                tooltip.textContent = `${formatChartTime(data.timestamp)} - ${formatChartBalance(data.balance)}`;
+                                tooltip.style.display = 'block';
+                            } else {
+                                tooltip.style.display = 'none';
+                            }
+                        }
+
+                        // Update balance display in both DashboardHeader and UnifiedBalancePanel
+                        this.updateBalanceDisplay(data, currentBalance, firstBalance);
+                    },
+                });
+            } else {
+                console.warn('[PopupApp] Chart container not found: unified-balance-chart-header-container');
+            }
+        } else {
+            // Render placeholder chart if no data
+            console.log('[PopupApp] No historical data, rendering placeholder');
+            this.renderPlaceholderChart();
+        }
+    }
+
+    updateBalanceDisplay(
+        hoverData: { timestamp: number; balance: number; visible: boolean },
+        currentBalance: number,
+        firstBalance: number
+    ) {
+        const formatUSD = (value: number): string => {
+            if (value < 0.01) return '<$0.01';
+            return `$${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+        };
+
+        const getOrCreateChangeElement = (balanceEl: HTMLElement | null, isHeader: boolean): HTMLElement | null => {
+            if (!balanceEl) return null;
+
+            // Look for existing change element
+            let changeEl = balanceEl.nextElementSibling as HTMLElement;
+            if (changeEl && changeEl.classList.contains('balance-change')) {
+                return changeEl;
+            }
+
+            // If not found, look in parent's children
+            const parent = balanceEl.parentElement;
+            if (parent) {
+                changeEl = Array.from(parent.children).find(
+                    el => el.classList.contains('balance-change')
+                ) as HTMLElement;
+                if (changeEl) return changeEl;
+            }
+
+            // Create change element if it doesn't exist
+            changeEl = document.createElement('div');
+            changeEl.className = 'balance-change';
+            changeEl.style.marginLeft = isHeader ? '12px' : '0';
+            balanceEl.parentElement?.appendChild(changeEl);
+            return changeEl;
+        };
+
+        if (hoverData.visible && hoverData.balance > 0) {
+            // Show hovered balance
+            const hoveredBalance = hoverData.balance;
+            const changeFromFirst = firstBalance > 0
+                ? ((hoveredBalance - firstBalance) / firstBalance) * 100
+                : 0;
+
+            // Update balance amount in DashboardHeader
+            const headerBalanceEl = document.getElementById('balance-amount');
+            if (headerBalanceEl) {
+                headerBalanceEl.textContent = formatUSD(hoveredBalance);
+
+                // Update change percentage in DashboardHeader
+                const headerChangeEl = getOrCreateChangeElement(headerBalanceEl, true);
+                if (headerChangeEl) {
+                    headerChangeEl.textContent = `${changeFromFirst >= 0 ? '+' : ''}${changeFromFirst.toFixed(2)}%`;
+                    headerChangeEl.style.color = changeFromFirst >= 0 ? '#27C193' : '#F24822';
+                    headerChangeEl.style.display = 'block';
+                }
+            }
+
+            // Update balance amount in UnifiedBalancePanel
+            const panelBalanceEl = document.getElementById('unified-balance-amount');
+            if (panelBalanceEl) {
+                panelBalanceEl.textContent = formatUSD(hoveredBalance);
+
+                // Update change percentage in UnifiedBalancePanel
+                const panelChangeEl = getOrCreateChangeElement(panelBalanceEl, false);
+                if (panelChangeEl) {
+                    panelChangeEl.textContent = `${changeFromFirst >= 0 ? '+' : ''}${changeFromFirst.toFixed(2)}%`;
+                    panelChangeEl.style.color = changeFromFirst >= 0 ? 'var(--r-green-default)' : 'var(--r-red-default)';
+                    panelChangeEl.style.display = 'block';
+                }
+            }
+        } else {
+            // Reset to current balance
+            const change24h = firstBalance > 0
+                ? ((currentBalance - firstBalance) / firstBalance) * 100
+                : 0;
+
+            // Reset balance in DashboardHeader
+            const headerBalanceEl = document.getElementById('balance-amount');
+            if (headerBalanceEl) {
+                headerBalanceEl.textContent = formatUSD(currentBalance);
+
+                // Reset change percentage in DashboardHeader
+                const headerChangeEl = getOrCreateChangeElement(headerBalanceEl, true);
+                if (headerChangeEl) {
+                    headerChangeEl.textContent = `${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%`;
+                    headerChangeEl.style.color = change24h >= 0 ? '#27C193' : '#F24822';
+                    headerChangeEl.style.display = 'block';
+                }
+            }
+
+            // Reset balance in UnifiedBalancePanel
+            const panelBalanceEl = document.getElementById('unified-balance-amount');
+            if (panelBalanceEl) {
+                panelBalanceEl.textContent = formatUSD(currentBalance);
+
+                // Reset change percentage in UnifiedBalancePanel
+                const panelChangeEl = getOrCreateChangeElement(panelBalanceEl, false);
+                if (panelChangeEl) {
+                    panelChangeEl.textContent = `${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%`;
+                    panelChangeEl.style.color = change24h >= 0 ? 'var(--r-green-default)' : 'var(--r-red-default)';
+                    panelChangeEl.style.display = 'block';
+                }
+            }
+        }
+    }
+
+    renderPlaceholderChart() {
+        // Render placeholder in UnifiedBalancePanel
+        const chartContainer = document.getElementById('unified-balance-chart-container');
+        if (chartContainer) {
+            chartContainer.innerHTML = `
+                <svg width="100%" height="60" viewBox="0 0 300 60" preserveAspectRatio="none">
+                    <defs>
+                        <linearGradient id="chartGradientPlaceholder" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color: var(--r-green-default); stop-opacity: 0.3"/>
+                            <stop offset="100%" style="stop-color: var(--r-green-default); stop-opacity: 0"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="M0,50 Q75,45 150,30 T300,10" 
+                          fill="url(#chartGradientPlaceholder)" 
+                          stroke="var(--r-green-default)" 
+                          stroke-width="2"/>
+                </svg>
+            `;
+        }
+
+        // Render placeholder in DashboardHeader
+        const headerChartContainer = document.getElementById('unified-balance-chart-header-container');
+        if (headerChartContainer) {
+            headerChartContainer.innerHTML = `
+                <svg width="100%" height="60" viewBox="0 0 300 60" preserveAspectRatio="none">
+                    <defs>
+                        <linearGradient id="chartGradientHeaderPlaceholder" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color: #27C193; stop-opacity: 0.3"/>
+                            <stop offset="100%" style="stop-color: #27C193; stop-opacity: 0"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="M0,50 Q75,45 150,30 T300,10" 
+                          fill="url(#chartGradientHeaderPlaceholder)" 
+                          stroke="#27C193" 
+                          stroke-width="2"/>
+                </svg>
+            `;
         }
     }
 
@@ -552,6 +841,14 @@ export class PopupApp {
         // Show send screen if requested
         if (this.state.showSendScreen && this.state.selectedAccount) {
             const selectedAccount = this.state.selectedAccount;
+
+            // Prevent send screen for watch-only accounts
+            if (selectedAccount.isWatchOnly) {
+                this.state.showSendScreen = false;
+                this.render();
+                return;
+            }
+
             const displayName = getDisplayName(selectedAccount);
             const assets = this.state.unifiedBalanceData?.assets || [];
             app.innerHTML = renderSendScreen({
@@ -660,13 +957,17 @@ export class PopupApp {
                 formatAddress,
                 true,
                 this.state.unifiedBalanceData,
-                this.state.unifiedBalanceLoading
+                this.state.unifiedBalanceLoading,
+                this.state.historicalBalanceData,
+                this.state.historicalBalanceLoading
             )}
                             ${renderUnifiedBalancePanel({
                 data: this.state.unifiedBalanceData,
                 loading: this.state.unifiedBalanceLoading,
+                historicalData: this.state.historicalBalanceData,
+                historicalLoading: this.state.historicalBalanceLoading,
             })}
-                            ${renderDashboardPanel(DEFAULT_PANEL_ITEMS, true)}
+                            ${renderDashboardPanel(DEFAULT_PANEL_ITEMS, true, this.state.selectedAccount?.isWatchOnly || false)}
                             <div class="transaction-section">
                                 ${renderTransactionList(this.getTransactionsForAccount(selectedAccount), selectedAccount)}
                             </div>
@@ -767,7 +1068,7 @@ export class PopupApp {
             ) : ''}
             ${renderDelegationModal(
                 this.state.delegationModalIsUpgrade,
-                this.state.delegationModalIsUpgrade 
+                this.state.delegationModalIsUpgrade
                     ? (this.state.delegationContractAddress || '0x63c0c19a282a1b52b07dd5a65b58948a07dae32b')
                     : '0x0000000000000000000000000000000000000000',
                 () => this.handleApproveDelegation(),
@@ -798,13 +1099,17 @@ export class PopupApp {
                 formatAddress,
                 false,
                 this.state.unifiedBalanceData,
-                this.state.unifiedBalanceLoading
+                this.state.unifiedBalanceLoading,
+                this.state.historicalBalanceData,
+                this.state.historicalBalanceLoading
             )}
                     ${renderUnifiedBalancePanel({
                 data: this.state.unifiedBalanceData,
                 loading: this.state.unifiedBalanceLoading,
+                historicalData: this.state.historicalBalanceData,
+                historicalLoading: this.state.historicalBalanceLoading,
             })}
-                    ${renderDashboardPanel(DEFAULT_PANEL_ITEMS)}
+                    ${renderDashboardPanel(DEFAULT_PANEL_ITEMS, false, this.state.selectedAccount?.isWatchOnly || false)}
                     <div style="padding: 0 16px 4px 16px;">
                         ${renderEthPricePanel(this.state.ethPriceData, this.state.ethPriceLoading)}
                     </div>
@@ -927,6 +1232,11 @@ export class PopupApp {
         }
 
         this.attachDashboardListeners();
+        // Render charts after DOM is ready
+        setTimeout(() => {
+            console.log('[PopupApp] Rendering charts after dashboard render');
+            this.renderCharts();
+        }, 100);
 
         // If account detail modal is visible, attach its listeners
         if (this.state.showAccountDetailModal) {
@@ -1387,6 +1697,10 @@ export class PopupApp {
 
         // Panel items
         document.getElementById('panel-send')?.addEventListener('click', () => {
+            // Prevent opening send screen for watch-only accounts
+            if (this.state.selectedAccount?.isWatchOnly) {
+                return;
+            }
             this.state.showSendScreen = true;
             this.render();
         });
@@ -1436,6 +1750,25 @@ export class PopupApp {
         });
     }
 
+    private isEnsName(input: string): boolean {
+        // Check if input looks like an ENS name (ends with .eth or other common ENS TLDs)
+        const ensPattern = /^[a-z0-9-]+\.(eth|xyz|app|luxe|kred|art|club|design|fashion|game|group|law|media|music|news|online|photo|pics|pink|racing|realestate|restaurant|shop|site|space|tech|travel|vip|website|win|wtf)$/i;
+        return ensPattern.test(input.trim());
+    }
+
+    private async resolveEnsName(ensName: string): Promise<string | null> {
+        try {
+            const ethersModule = await loadEthers();
+            const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
+            const provider = new ethers.JsonRpcProvider('https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73');
+            const resolved = await provider.resolveName(ensName);
+            return resolved;
+        } catch (e) {
+            console.warn('[SendScreen] Failed to resolve ENS name:', e);
+            return null;
+        }
+    }
+
     private attachSendScreenListeners() {
         console.log('[SendScreen] Attaching listeners...');
 
@@ -1446,6 +1779,7 @@ export class PopupApp {
         const sendScreenState: any = {
             selectedToken: defaultToken,
             selectedChainId: defaultChainId,
+            resolvedRecipientAddress: null, // Store resolved address for ENS names
         };
 
         // Back button
@@ -1649,28 +1983,85 @@ export class PopupApp {
             });
         }
 
-        // Recipient input validation
+        // Recipient input validation with ENS support
         const recipientInput = document.getElementById('send-recipient-input') as HTMLInputElement;
         const recipientError = document.getElementById('send-recipient-error');
+
+        let ensResolveTimeout: ReturnType<typeof setTimeout> | null = null;
 
         if (recipientInput) {
             recipientInput.disabled = false;
             recipientInput.readOnly = false;
             recipientInput.addEventListener('input', () => {
-                const address = recipientInput.value.trim();
-                if (address && recipientError) {
-                    if (isAddress(address)) {
+                const input = recipientInput.value.trim();
+
+                // Clear previous timeout
+                if (ensResolveTimeout) {
+                    clearTimeout(ensResolveTimeout);
+                    ensResolveTimeout = null;
+                }
+
+                // Reset resolved address
+                sendScreenState.resolvedRecipientAddress = null;
+
+                if (!input) {
+                    if (recipientError) {
                         recipientError.style.display = 'none';
-                    } else {
-                        recipientError.textContent = 'Invalid address';
+                    }
+                    this.updateSendButtonState(sendScreenState);
+                    return;
+                }
+
+                // Check if it's a valid address
+                if (isAddress(input)) {
+                    if (recipientError) {
+                        recipientError.style.display = 'none';
+                    }
+                    sendScreenState.resolvedRecipientAddress = getAddress(input);
+                    this.updateSendButtonState(sendScreenState);
+                    return;
+                }
+
+                // Check if it looks like an ENS name
+                if (this.isEnsName(input)) {
+                    if (recipientError) {
+                        recipientError.textContent = 'Resolving ENS name...';
+                        recipientError.style.display = 'block';
+                        recipientError.style.color = 'var(--r-blue-default, #7084ff)';
+                    }
+
+                    // Debounce ENS resolution
+                    ensResolveTimeout = setTimeout(async () => {
+                        const resolved = await this.resolveEnsName(input);
+                        if (resolved) {
+                            sendScreenState.resolvedRecipientAddress = getAddress(resolved);
+                            if (recipientError) {
+                                recipientError.textContent = `Resolved: ${resolved}`;
+                                recipientError.style.color = 'var(--r-green-default, #27ae60)';
+                                recipientError.style.display = 'block';
+                            }
+                        } else {
+                            sendScreenState.resolvedRecipientAddress = null;
+                            if (recipientError) {
+                                recipientError.textContent = 'ENS name not found';
+                                recipientError.style.color = 'var(--r-red-default, #f24822)';
+                                recipientError.style.display = 'block';
+                            }
+                        }
+                        this.updateSendButtonState(sendScreenState);
+                    }, 500); // 500ms debounce
+                } else {
+                    // Not a valid address or ENS name
+                    sendScreenState.resolvedRecipientAddress = null;
+                    if (recipientError) {
+                        recipientError.textContent = 'Invalid address or ENS name';
+                        recipientError.style.color = 'var(--r-red-default, #f24822)';
                         recipientError.style.display = 'block';
                     }
-                } else if (recipientError) {
-                    recipientError.style.display = 'none';
+                    this.updateSendButtonState(sendScreenState);
                 }
-                this.updateSendButtonState(sendScreenState);
             });
-            console.log('[SendScreen] Recipient input attached');
+            console.log('[SendScreen] Recipient input attached with ENS support');
         } else {
             console.warn('[SendScreen] Recipient input not found');
         }
@@ -1705,7 +2096,11 @@ export class PopupApp {
         const hasToken = !!sendState.selectedToken;
         const hasChain = !!sendState.selectedChainId;
         const hasAmount = amountInput?.value && parseFloat(amountInput.value) > 0;
-        const hasRecipient = recipientInput?.value && isAddress(recipientInput.value.trim());
+        // Check if we have a valid address (either direct input or resolved from ENS)
+        const hasRecipient = recipientInput?.value && (
+            isAddress(recipientInput.value.trim()) ||
+            !!sendState.resolvedRecipientAddress
+        );
 
         if (submitBtn) {
             (submitBtn as HTMLButtonElement).disabled = !(hasToken && hasChain && hasAmount && hasRecipient);
@@ -1726,15 +2121,42 @@ export class PopupApp {
         }
 
         const amount = amountInput.value.trim();
-        const recipient = recipientInput.value.trim() as `0x${string}`;
+        let recipient = recipientInput.value.trim();
 
-        if (!isAddress(recipient)) {
-            if (errorMessage) {
-                errorMessage.textContent = 'Invalid recipient address';
-                errorMessage.style.display = 'block';
-            }
-            return;
+        // Use resolved address if available (from ENS), otherwise use input directly
+        if (state.resolvedRecipientAddress) {
+            recipient = state.resolvedRecipientAddress;
         }
+
+        // Final validation - must be a valid address
+        if (!isAddress(recipient)) {
+            // Try to resolve ENS one more time if it looks like an ENS name
+            if (this.isEnsName(recipient)) {
+                if (errorMessage) {
+                    errorMessage.textContent = 'Resolving ENS name...';
+                    errorMessage.style.display = 'block';
+                }
+                const resolved = await this.resolveEnsName(recipient);
+                if (resolved) {
+                    recipient = getAddress(resolved);
+                } else {
+                    if (errorMessage) {
+                        errorMessage.textContent = 'ENS name not found or invalid recipient address';
+                        errorMessage.style.display = 'block';
+                    }
+                    return;
+                }
+            } else {
+                if (errorMessage) {
+                    errorMessage.textContent = 'Invalid recipient address';
+                    errorMessage.style.display = 'block';
+                }
+                return;
+            }
+        }
+
+        // Normalize address
+        recipient = getAddress(recipient) as `0x${string}`;
 
         if (parseFloat(amount) <= 0) {
             if (errorMessage) {
@@ -2346,7 +2768,9 @@ export class PopupApp {
             5: 'https://goerli.etherscan.io/tx', // Goerli
             137: 'https://polygonscan.com/tx', // Polygon
             42161: 'https://arbiscan.io/tx', // Arbitrum
+            48900: 'https://explorer.zircuit.com/tx', // Zircuit
             10: 'https://optimistic.etherscan.io/tx', // Optimism
+            8453: 'https://basescan.org/tx', // Base
             56: 'https://bscscan.com/tx', // BSC
             43114: 'https://snowtrace.io/tx', // Avalanche
         };
@@ -2410,10 +2834,10 @@ export class PopupApp {
             loading: true,
         };
         this.state.unifiedBalanceLoading = true;
-        
+
         // Clear unified balance cache for the previous account
         unifiedBalanceService.clearCache();
-        
+
         this.render(); // Render immediately with cleared data
 
         // Reinitialize unified balance for the new account
@@ -2919,6 +3343,7 @@ export class PopupApp {
     }
 
     hideNetworkSelector() {
+        if (!this.state.showNetworkSelector) return; // Prevent unnecessary re-renders
         this.state.showNetworkSelector = false;
         this.render();
     }
@@ -2928,15 +3353,30 @@ export class PopupApp {
             const { WalletService } = await import('./services/wallet-service.js');
             const walletService = new WalletService();
             await walletService.switchNetwork(chainId);
-            
+
             // Update local state
             this.state.selectedNetwork = chainId;
-            
+
+            // IMPORTANT: Reset delegation status when switching networks
+            // Delegation is network-specific, so we need to re-check on the new network
+            this.state.delegationStatus = null;
+            this.state.delegationStatusAddress = null;
+
+            this.hideNetworkSelector();
+
             // Reload data for new network
             await this.loadAccounts();
-            await this.loadBalance();
-            
-            this.hideNetworkSelector();
+            await this.loadUnifiedBalances();
+
+            // Re-check delegation status on the new network if modal is open
+            if (this.state.showEip7702Modal && this.state.eip7702ModalAccountAddress) {
+                console.log('[handleSelectNetwork] Re-checking delegation on new network:', chainId);
+                this.checkDelegationStatus(this.state.eip7702ModalAccountAddress);
+            } else if (this.state.showAccountDetailModal && this.state.accountToEdit) {
+                console.log('[handleSelectNetwork] Re-checking delegation on new network:', chainId);
+                this.checkDelegationStatus(this.state.accountToEdit.address);
+            }
+
             this.showSuccessMessage('Network switched successfully');
         } catch (error: any) {
             console.error('Error switching network:', error);
@@ -2966,7 +3406,7 @@ export class PopupApp {
         }
 
         // Network option clicks - use event delegation on the modal container
-        const modal = document.querySelector('.network-selector-modal');
+        const modal = document.querySelector('.network-selector-modal') as HTMLElement | null;
         if (modal) {
             modal.onclick = (e) => {
                 const target = e.target as HTMLElement;
@@ -3020,17 +3460,17 @@ export class PopupApp {
         // Check if modal already exists and if it's the same account (to avoid re-animation)
         const modalExists = document.getElementById('account-detail-overlay') !== null;
         const isSameAccount = this.state.accountToEdit?.address?.toLowerCase() === account.address?.toLowerCase();
-        
+
         this.state.accountToEdit = account;
         this.state.delegationTargetAddress = account.address;
         this.state.showAccountDetailModal = true;
         // Only animate on first render or when switching to a different account
         this.state.accountDetailModalFirstRender = !modalExists || !isSameAccount;
         this.hideAccountSelector();
-        
+
         // Render the modal (or update if already exists)
         this.render();
-        
+
         // Mark that we've rendered once
         if (this.state.accountDetailModalFirstRender) {
             setTimeout(() => {
@@ -3039,7 +3479,7 @@ export class PopupApp {
         } else {
             this.state.accountDetailModalFirstRender = false;
         }
-        
+
         // Attach listeners after render completes
         setTimeout(() => {
             this.attachAccountDetailListeners();
@@ -3381,29 +3821,33 @@ export class PopupApp {
             }
             // Only update the delegation section, don't re-render entire modal
             this.updateDelegationSection();
-            
+
             console.log('[checkDelegationStatus] Sending CHECK_DELEGATION message:', {
                 address,
                 chainId: this.state.selectedNetwork
             });
-            
+
             const response = await chrome.runtime.sendMessage({
                 type: 'CHECK_DELEGATION',
                 address: address,
                 chainId: this.state.selectedNetwork
             });
-            
+
             console.log('[checkDelegationStatus] Received response:', response);
-            
+
             if (requestId !== this.delegationRequestId) {
                 return;
             }
 
             if (response && response.success) {
-                this.state.delegationStatus = response.delegationStatus;
+                // Store the chainId with the delegation status so we know which network it's delegated on
+                this.state.delegationStatus = {
+                    ...response.delegationStatus,
+                    chainId: this.state.selectedNetwork
+                };
                 this.state.delegationStatusAddress = normalizedAddress;
                 this.scheduleDelegationLoadingCompletion(1000);
-                console.log('[checkDelegationStatus] Delegation status updated:', response.delegationStatus);
+                console.log('[checkDelegationStatus] Delegation status updated:', this.state.delegationStatus);
             } else {
                 const errorMsg = response?.error || 'Unknown error checking delegation';
                 console.error('[checkDelegationStatus] Failed to check delegation:', errorMsg);
@@ -3454,7 +3898,7 @@ export class PopupApp {
         }
 
         // Try both possible IDs for compatibility
-        const smartAccountSection = document.getElementById('smart-account-section') || 
+        const smartAccountSection = document.getElementById('smart-account-section') ||
             document.getElementById('smart-account-upgrade-section');
         if (smartAccountSection) {
             const accountAddress = this.state.accountToEdit.address?.toLowerCase();
@@ -3485,7 +3929,7 @@ export class PopupApp {
         const existingModal = document.getElementById('delegation-modal-overlay');
         const modalHTML = renderDelegationModal(
             this.state.delegationModalIsUpgrade,
-            this.state.delegationModalIsUpgrade 
+            this.state.delegationModalIsUpgrade
                 ? (this.state.delegationContractAddress || '0x63c0c19a282a1b52b07dd5a65b58948a07dae32b')
                 : '0x0000000000000000000000000000000000000000',
             () => this.handleApproveDelegation(),
@@ -3586,6 +4030,7 @@ export class PopupApp {
             isFirstRender: this.state.eip7702ModalFirstRender,
             transactionHash: this.state.delegationTransactionHash,
             chainId: this.state.selectedNetwork,
+            networks: this.state.networks,
         });
 
         if (existingModal) {
@@ -3603,6 +4048,7 @@ export class PopupApp {
     private attachEip7702ModalListeners() {
         const overlay = document.getElementById('eip7702-modal-overlay');
         const closeBtn = document.getElementById('eip7702-modal-close');
+        const networkSelector = document.getElementById('eip7702-network-selector') as HTMLSelectElement;
 
         overlay?.addEventListener('click', (event) => {
             if (event.target === overlay) {
@@ -3612,6 +4058,23 @@ export class PopupApp {
 
         closeBtn?.addEventListener('click', () => {
             this.hideEip7702Modal();
+        });
+
+        networkSelector?.addEventListener('change', async (event) => {
+            const selectedChainId = parseInt((event.target as HTMLSelectElement).value, 10);
+            if (selectedChainId !== this.state.selectedNetwork) {
+                console.log('[attachEip7702ModalListeners] Network changed in modal:', selectedChainId);
+                // Update the selected network
+                this.state.selectedNetwork = selectedChainId;
+                // Switch network in the wallet
+                await this.walletService.switchNetwork(selectedChainId);
+                // Re-check delegation status for the new network
+                if (this.state.eip7702ModalAccountAddress) {
+                    this.checkDelegationStatus(this.state.eip7702ModalAccountAddress);
+                }
+                // Update the modal to reflect the new network
+                this.updateEip7702Modal();
+            }
         });
     }
 
@@ -3684,7 +4147,7 @@ export class PopupApp {
     private setButtonLoadingState(buttonId: string, isLoading: boolean, loadingText: string, originalText: string) {
         const button = document.getElementById(buttonId) as HTMLButtonElement;
         if (!button) return;
-        
+
         if (isLoading) {
             button.disabled = true;
             button.innerHTML = `
@@ -3706,16 +4169,16 @@ export class PopupApp {
         if (!targetAddress) {
             return;
         }
-        
+
         // Reset button state
         this.state.delegationButtonToConfirm = false;
-        
+
         // Get buttons to disable
         const approveBtn = document.getElementById('delegation-approve-btn');
         const confirmBtn = document.getElementById('delegation-confirm-btn');
         const actionText = this.state.delegationModalIsUpgrade ? 'Upgrade' : 'Reset Delegation';
         const loadingText = this.state.delegationModalIsUpgrade ? 'Upgrading...' : 'Revoking...';
-        
+
         // Disable buttons and show loading state
         if (approveBtn) {
             this.setButtonLoadingState('delegation-approve-btn', true, loadingText, actionText);
@@ -3723,16 +4186,16 @@ export class PopupApp {
         if (confirmBtn) {
             this.setButtonLoadingState('delegation-confirm-btn', true, 'Confirming...', 'Confirm');
         }
-        
+
         try {
             const messageType = this.state.delegationModalIsUpgrade ? 'UPGRADE_TO_SMART_ACCOUNT' : 'CLEAR_DELEGATION';
-            
+
             // Get the contract address from input if upgrade
             let contractAddress = '0x0000000000000000000000000000000000000000';
             if (this.state.delegationModalIsUpgrade) {
                 const delegatorInput = document.getElementById('delegator-address-input') as HTMLInputElement;
                 contractAddress = delegatorInput?.value || this.state.delegationContractAddress || '0x63c0c19a282a1b52b07dd5a65b58948a07dae32b';
-                
+
                 // Validate address format
                 if (!contractAddress.startsWith('0x') || contractAddress.length !== 42) {
                     this.showErrorMessage('Invalid contract address format');
@@ -3746,14 +4209,14 @@ export class PopupApp {
                     return;
                 }
             }
-            
+
             const response = await chrome.runtime.sendMessage({
                 type: messageType,
                 address: targetAddress,
                 chainId: this.state.selectedNetwork,
                 contractAddress: contractAddress
             });
-            
+
             if (response.success && response.transactionHash) {
                 this.state.delegationTransactionHash = response.transactionHash;
                 this.hideDelegationModal();
@@ -3796,7 +4259,7 @@ export class PopupApp {
             const delegatorSelect = document.getElementById('delegator-select') as HTMLSelectElement;
             const delegatorInput = document.getElementById('delegator-address-input') as HTMLInputElement;
             const etherscanLink = document.getElementById('delegator-etherscan-link') as HTMLAnchorElement;
-            
+
             // Initialize readonly state based on current selection
             if (delegatorSelect && delegatorInput && this.state.delegationModalIsUpgrade) {
                 const selectedValue = delegatorSelect.value;
@@ -3810,7 +4273,7 @@ export class PopupApp {
                     delegatorInput.style.cursor = 'text';
                 }
             }
-            
+
             overlay?.addEventListener('click', (e) => {
                 if (e.target === overlay) {
                     // Reset button state when clicking outside
@@ -3818,11 +4281,11 @@ export class PopupApp {
                     this.hideDelegationModal();
                 }
             });
-            
+
             closeBtn?.addEventListener('click', () => {
                 this.hideDelegationModal();
             });
-            
+
             approveBtn?.addEventListener('click', () => {
                 if (this.state.delegationModalIsUpgrade && !this.state.delegationButtonToConfirm) {
                     // First click: show confirm state
@@ -3833,24 +4296,24 @@ export class PopupApp {
                     this.handleApproveDelegation();
                 }
             });
-            
+
             // Handle confirm button (when in toConfirm state)
             const confirmBtn = document.getElementById('delegation-confirm-btn');
             confirmBtn?.addEventListener('click', () => {
                 this.handleApproveDelegation();
             });
-            
+
             // Handle cancel confirm button (X button)
             const cancelConfirmBtn = document.getElementById('delegation-cancel-confirm-btn');
             cancelConfirmBtn?.addEventListener('click', () => {
                 this.state.delegationButtonToConfirm = false;
                 this.updateDelegationModal();
             });
-            
+
             rejectBtn?.addEventListener('click', () => {
                 this.hideDelegationModal();
             });
-            
+
             // Handle delegator selection dropdown
             if (delegatorSelect && this.state.delegationModalIsUpgrade) {
                 delegatorSelect.addEventListener('change', (e) => {
@@ -3888,7 +4351,7 @@ export class PopupApp {
                     }
                 });
             }
-            
+
             // Handle custom address input (only when not readonly)
             if (delegatorInput && this.state.delegationModalIsUpgrade) {
                 delegatorInput.addEventListener('input', (e) => {

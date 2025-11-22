@@ -135,6 +135,10 @@ export class EIP7702 {
         codeHash: string;
     }> {
         try {
+            // Verify which network we're actually querying
+            const network = await provider.getNetwork();
+            const actualChainId = Number(network.chainId);
+
             const code = await provider.getCode(address);
             const codeHex = code || '0x';
             const codeHash = keccak256(codeHex as `0x${string}`);
@@ -157,6 +161,7 @@ export class EIP7702 {
                 codeHash: codeHash
             };
         } catch (error: any) {
+            console.error('[EIP7702.checkDelegation] Error:', error);
             throw new Error(`Failed to check delegation: ${error.message}`);
         }
     }
@@ -244,26 +249,11 @@ export class EIP7702 {
 
             const authNonce = useNonce !== null ? useNonce : Number(authorization.version);
 
-            console.log('[EIP7702] Creating authorization with Ethers.js:', {
-                chainId: authorization.chainId,
-                address: authorization.contractAddress,
-                nonce: authNonce
-            });
-
             const auth = await wallet.authorize({
                 address: authorization.contractAddress,
                 chainId: authorization.chainId,
                 nonce: authNonce
             }) as any;
-
-            console.log('[EIP7702] Authorization signed:', {
-                chainId: auth.chainId,
-                address: auth.address,
-                nonce: auth.nonce,
-                yParity: auth.yParity,
-                r: auth.r,
-                s: auth.s
-            });
 
             return {
                 chainId: Number(auth.chainId),

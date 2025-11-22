@@ -16,14 +16,31 @@ export function renderSmartAccountUpgrade(
     const delegateAddress = delegationStatus?.delegateAddress;
     const SMART_ACCOUNT_CONTRACT = '0x63c0c19a282a1b52b07dd5a65b58948a07dae32b';
     
-    // Get explorer URL
+    // Get explorer URL for transaction
     const getExplorerUrl = (hash: string, chainId: number = 1) => {
-        if (chainId === 1) {
-            return `https://etherscan.io/tx/${hash}`;
-        } else if (chainId === 11155111) {
-            return `https://sepolia.etherscan.io/tx/${hash}`;
-        }
-        return `https://etherscan.io/tx/${hash}`;
+        const chainMap: Record<number, string> = {
+            1: 'etherscan.io',
+            11155111: 'sepolia.etherscan.io',
+            5: 'goerli.etherscan.io',
+            10: 'optimistic.etherscan.io',
+            42161: 'arbiscan.io',
+            48900: 'explorer.zircuit.com',
+            8453: 'basescan.org',
+            137: 'polygonscan.com',
+            56: 'bscscan.com',
+        };
+        const domain = chainMap[chainId] || 'etherscan.io';
+        return `https://${domain}/tx/${hash}`;
+    };
+
+    const getNetworkName = (chainId: number = 1) => {
+        const networkNames: Record<number, string> = {
+            1: 'Ethereum Mainnet',
+            11155111: 'Sepolia Testnet',
+            42161: 'Arbitrum One',
+            48900: 'Zircuit Mainnet',
+        };
+        return networkNames[chainId] || `Chain ${chainId}`;
     };
 
     const getAddressExplorerUrl = (address: string, chainId: number = 1) => {
@@ -34,6 +51,7 @@ export function renderSmartAccountUpgrade(
             5: 'goerli.etherscan.io',
             10: 'optimistic.etherscan.io',
             42161: 'arbiscan.io',
+            48900: 'explorer.zircuit.com',
             8453: 'basescan.org',
             137: 'polygonscan.com',
             56: 'bscscan.com',
@@ -59,7 +77,7 @@ export function renderSmartAccountUpgrade(
                 justify-content: space-between;
                 margin-bottom: 16px;
             ">
-                <div>
+                <div style="flex: 1;">
                     <h3 style="
                         font-size: 16px;
                         font-weight: 500;

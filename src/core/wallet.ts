@@ -19,6 +19,18 @@ export class Wallet {
             const stored = await chrome.storage.local.get('walletState');
             if (stored.walletState) {
                 this.state = stored.walletState;
+
+                // Merge networks: add any new networks from defaults that aren't in stored state
+                const defaultNetworks = this.getDefaultNetworks();
+                const existingChainIds = new Set(this.state.networks.map(n => n.chainId));
+                const newNetworks = defaultNetworks.filter(n => !existingChainIds.has(n.chainId));
+
+                if (newNetworks.length > 0) {
+                    console.log('[Wallet] Adding new networks:', newNetworks.map(n => n.name));
+                    this.state.networks = [...this.state.networks, ...newNetworks];
+                    await this.saveState(); // Persist the updated networks
+                }
+
                 await this.updateProvider();
             }
         } catch (error) {
@@ -139,7 +151,7 @@ export class Wallet {
      * NOTE: This creates the account structure but does NOT deploy the contract
      * The contract must be deployed separately using deployMultisig()
      */
-    async createMultisigAccount(chips: ChipInfo[], threshold: number, name?: string): Promise<Account> {
+    async createMultisigAccount(chips: any, threshold: number, name?: string): Promise<Account> {
         try {
             if (chips.length < 2) {
                 throw new Error('Multisig requires at least 2 chips');
@@ -154,12 +166,12 @@ export class Wallet {
             // Use a placeholder factory address (in production, use real factory)
             const FACTORY_ADDRESS = '0x0000000000000000000000000000000000000000'; // TODO: Deploy factory
             const salt = ethers.keccak256(
-                ethers.toUtf8Bytes(chips.map(c => c.address.toLowerCase()).sort().join('') + threshold.toString())
+                ethers.toUtf8Bytes(chips.map((c: any) => c.address.toLowerCase()).sort().join('') + threshold.toString())
             );
 
             const smartAccountAddress = computeMultisigAddress(
                 FACTORY_ADDRESS,
-                chips.map(c => c.address),
+                chips.map((c: any) => c.address),
                 threshold,
                 salt
             );
@@ -591,7 +603,7 @@ export class Wallet {
         const provider = await this.getProvider();
 
         // Populate missing fields
-        const populatedTx = await provider.populateTransaction(transaction);
+        const populatedTx = await (provider as any).populateTransaction(transaction);
         const signedTx = await wallet.signTransaction(populatedTx);
 
         return signedTx;
@@ -650,7 +662,7 @@ export class Wallet {
         return [
             {
                 chainId: 1,
-                name: 'Ethereum Mainnet',
+                name: 'Ethereum',
                 rpcUrl: 'https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73',
                 blockExplorer: 'https://etherscan.io',
                 currency: {
@@ -670,6 +682,29 @@ export class Wallet {
                     decimals: 18,
                 },
             },
+            {
+                chainId: 42161,
+                name: 'Arbitrum One',
+                rpcUrl: 'https://arb1.arbitrum.io/rpc',
+                blockExplorer: 'https://arbiscan.io',
+                currency: {
+                    name: 'Ether',
+                    symbol: 'ETH',
+                    decimals: 18,
+                },
+            },
+            {
+                chainId: 48900,
+                name: 'Zircuit Mainnet',
+                rpcUrl: 'https://zircuit-mainnet.drpc.org',
+                blockExplorer: 'https://explorer.zircuit.com',
+                currency: {
+                    name: 'Ether',
+                    symbol: 'ETH',
+                    decimals: 18,
+                },
+            },
         ];
     }
 }
+

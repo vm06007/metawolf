@@ -18,7 +18,7 @@ export const DEFAULT_PANEL_ITEMS: PanelItem[] = [
     { icon: 'eip7702', label: 'EIP-7702', id: 'panel-eip7702' },
 ];
 
-export function renderDashboardPanel(items: PanelItem[] = DEFAULT_PANEL_ITEMS, isHorizontal: boolean = false): string {
+export function renderDashboardPanel(items: PanelItem[] = DEFAULT_PANEL_ITEMS, isHorizontal: boolean = false, isWatchOnly: boolean = false): string {
     const itemsHtml = items.map(item => {
         const badgeHtml = item.badge !== undefined && item.badge > 0
             ? `<div class="panel-item-badge ${item.badgeAlert ? 'alert' : ''}">${item.badge}</div>`
@@ -27,8 +27,14 @@ export function renderDashboardPanel(items: PanelItem[] = DEFAULT_PANEL_ITEMS, i
         const iconSvg = getIconSvg(item.icon);
         const viewBox = '0 0 24 24';
 
+        // Disable send button for watch-only accounts
+        const isDisabled = isWatchOnly && item.id === 'panel-send';
+        const disabledClass = isDisabled ? 'disabled' : '';
+        const disabledAttr = isDisabled ? 'disabled' : '';
+        const titleAttr = isDisabled ? 'title="Send is disabled for view-only accounts"' : '';
+
         return `
-            <button class="panel-item ${isHorizontal ? 'horizontal' : ''}" id="${item.id}">
+            <button class="panel-item ${isHorizontal ? 'horizontal' : ''} ${disabledClass}" id="${item.id}" ${disabledAttr} ${titleAttr}>
                 ${badgeHtml}
                 <svg class="panel-item-icon icon-${item.icon}" viewBox="${viewBox}" fill="none" stroke="currentColor">
                     ${iconSvg}

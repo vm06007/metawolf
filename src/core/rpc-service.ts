@@ -23,6 +23,14 @@ const DEFAULT_RPC_ENDPOINTS: Record<number, string[]> = {
         'https://sepolia.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73',
         'https://rpc.sepolia.org',
     ],
+    42161: [ // Arbitrum One
+        'https://arb1.arbitrum.io/rpc',
+        'https://arbitrum.llamarpc.com',
+        'https://rpc.ankr.com/arbitrum',
+    ],
+    48900: [ // Zircuit Mainnet
+        'https://zircuit-mainnet.drpc.org',
+    ],
 };
 
 class RPCService {
