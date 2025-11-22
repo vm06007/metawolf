@@ -5,6 +5,7 @@ import {Test, console} from "forge-std/Test.sol";
 import {SettlementReceiver} from "../src/SettlementReceiver.sol";
 import {IReceiverTemplate} from "../src/keystone/IReceiverTemplate.sol";
 import {ExecutionProxy} from "../src/ExecutionProxy.sol";
+import {ForwarderHelper} from "./utils/ForwarderHelper.sol";
 
 // Mock target contract for testing
 contract MockTarget {
@@ -23,10 +24,17 @@ contract SettlementReceiverTest is Test {
     // Test addresses
     address public constant EXPECTED_AUTHOR = address(0x1234567890123456789012345678901234567890);
     bytes10 public constant EXPECTED_WORKFLOW_NAME = "d-settle";
-    address public constant KEYSTONE_FORWARDER = address(0x15fC6ae953E024d975e77382eEeC56A9101f9F88); // Sepolia
+    // Use simulation forwarder for Sepolia testnet (for local testing)
+    // This matches ForwarderHelper.SEPOLIA_SIMULATION_FORWARDER
+    address public constant KEYSTONE_FORWARDER = address(0x15fC6ae953E024d975e77382eEeC56A9101f9F88);
     bytes32 public constant EXPECTED_WORKFLOW_ID = keccak256("test-workflow-id");
+    
+    ForwarderHelper public forwarderHelper;
 
     function setUp() public {
+        // Deploy forwarder helper for testing
+        forwarderHelper = new ForwarderHelper();
+        
         receiver = new SettlementReceiver(
             EXPECTED_AUTHOR,
             EXPECTED_WORKFLOW_NAME,
