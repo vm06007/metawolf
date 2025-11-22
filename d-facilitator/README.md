@@ -59,18 +59,52 @@ d-facilitator/
    cd d-settlement && bun install
    ```
 
-3. **Configure environment variables**
+3. **Configure secrets**
 
-   Create a `.env` file in the project root or in each workflow directory:
+   The `d-settlement` workflow requires the `EVM_PRIVATE_KEY` for signing transactions.
+
+   **For Local Simulation (using .env file):**
+
+   Create a `.env` file in the project root:
 
    ```bash
+   # Option 1: Use EVM_PRIVATE_KEY_ALL (matches secrets.yaml mapping)
+   EVM_PRIVATE_KEY_ALL=your_private_key_here
+
+   # Option 2: Use CRE_ETH_PRIVATE_KEY or EVM_PRIVATE_KEY (code fallback)
    CRE_ETH_PRIVATE_KEY=your_private_key_here
+   # or
+   EVM_PRIVATE_KEY=your_private_key_here
    ```
 
-   For simulation/testing, you can use a dummy key:
+   The `d-settlement/workflow.yaml` is configured with `secrets-path: ""` for staging, which allows using `.env` files.
+
+   **For Production (using CRE secrets):**
+
+   Set secrets using the CRE CLI:
+
+   ```bash
+   # Set EVM_PRIVATE_KEY secret
+   cre secret set EVM_PRIVATE_KEY_ALL --value "your_private_key_here"
    ```
-   CRE_ETH_PRIVATE_KEY=0000000000000000000000000000000000000000000000000000000000000001
+
+   Then update `d-settlement/workflow.yaml` production-settings to use secrets:
+   ```yaml
+   production-settings:
+     workflow-artifacts:
+       secrets-path: "../secrets.yaml"  # Use CRE secrets for production
    ```
+
+   The secret name `EVM_PRIVATE_KEY_ALL` is defined in `secrets.yaml` and maps to the secret ID `EVM_PRIVATE_KEY` used in the code.
+
+   **For simulation/testing:**
+
+   Use a dummy key in your `.env` file:
+   ```
+   EVM_PRIVATE_KEY_ALL=0000000000000000000000000000000000000000000000000000000000000001
+   ```
+
+   **Note:** The `d-verify` workflow does not require secrets as it only performs verification (read-only operations).
 
 4. **Update configuration files**
 
@@ -159,6 +193,36 @@ import { verifyPayment } from "../shared/verify-payment";
 import { getNetworkInfo } from "../shared/network";
 import { prepareSettlementExecutionData } from "../shared/settlement";
 ```
+
+## Verification Checks
+
+The payment verification implementation in `shared/verify-payment.ts` performs the following checks, matching the x402 protocol reference implementation:
+
+### Implemented Checks ✅
+
+1. **Protocol version verification** - Validates scheme and x402Version compatibility
+2. **USDC address validation** - Verifies token address matches expected USDC address for the chain (prevents malicious token contracts)
+3. **Token contract name/version retrieval** - Gets token name and version from paymentRequirements.extra or USDC config
+4. **Permit signature validation** - Verifies EIP-712 signature is recoverable for the owner address
+5. **Recipient validation** - Ensures payment recipient matches paymentRequirements.payTo
+6. **Deadline validation** - Checks validBefore >= now + 6 seconds and validAfter <= now
+7. **Nonce validation** - Verifies authorization nonce has not been used (prevents replay attacks)
+8. **Balance checks** - Verifies payer has sufficient ERC20 token balance (>= maxAmountRequired)
+9. **Amount validation** - Ensures payment value >= maxAmountRequired
+
+### Limitations & TODOs
+
+- **Smart wallet deployment check** - Detected but skipped due to CRE limitations (requires read operations not yet supported)
+- **Native token support** - Not supported (x402 typically uses ERC20 tokens)
+- **Minimum amount threshold** - Not implemented (x402 TODO mentions checking if amount is above threshold to cover gas costs)
+- **Resource payment tracking** - Not implemented (x402 TODO mentions verifying resource is not already paid for - marked as "next version")
+
+### Security Notes
+
+- All EVM read operations use CRE's `callContract` capability
+- Token address validation prevents using malicious or incorrect token contracts
+- Nonce validation prevents replay attacks
+- Balance checks ensure sufficient funds before payment
 
 ## Dependencies
 
