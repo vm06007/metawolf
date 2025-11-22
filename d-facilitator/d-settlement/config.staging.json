@@ -1,3 +1,6 @@
 {
-  "authorizedEVMAddress":"0xb08E004bd2b5aFf1F5F950d141f449B1c05800eb"
+  "authorizedEVMAddress":"0xb08E004bd2b5aFf1F5F950d141f449B1c05800eb",
+  "chainSelectorName": "ethereum-testnet-sepolia",
+  "settlementReceiverAddress": "0xYourSettlementReceiverContractAddress",
+  "gasLimit": "500000"
 }
