@@ -22,6 +22,23 @@ export interface AppState {
     showCreateAccountForm: boolean;
     showImportAccountForm: boolean;
     showCreateMultisigForm: boolean;
+    showParallelMultisigScan: boolean;
+    parallelScanState?: {
+        chip1: {
+            status: 'pending' | 'scanning' | 'connected' | 'done' | 'error';
+            qrCode?: string;
+            execURL?: string;
+            chipInfo?: any;
+            gate?: any;
+        };
+        chip2: {
+            status: 'pending' | 'scanning' | 'connected' | 'done' | 'error';
+            qrCode?: string;
+            execURL?: string;
+            chipInfo?: any;
+            gate?: any;
+        };
+    };
     showHaloChipNameForm: boolean;
     showFireflyNameForm: boolean;
     showSecurityConfirm: boolean;
@@ -104,6 +121,8 @@ export function createInitialState(): AppState {
         showCreateAccountForm: false,
         showImportAccountForm: false,
         showCreateMultisigForm: false,
+        showParallelMultisigScan: false,
+        parallelScanState: undefined,
         showHaloChipNameForm: false,
         showFireflyNameForm: false,
         showSecurityConfirm: false,

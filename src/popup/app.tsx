@@ -20,6 +20,7 @@ import { renderCurrentConnection, ConnectedDApp } from './components/CurrentConn
 import { renderCreateAccountForm } from './components/CreateAccountForm';
 import { renderImportAccountForm } from './components/ImportAccountForm';
 import { renderCreateMultisigForm } from './components/CreateMultisigForm';
+import { renderParallelMultisigScan } from './components/ParallelMultisigScan';
 import { renderHaloChipNameForm } from './components/HaloChipNameForm';
 import { renderFireflyNameForm } from './components/FireflyNameForm';
 import { renderSecurityConfirmModal } from './components/SecurityConfirmModal';
@@ -724,6 +725,20 @@ export class PopupApp {
                 () => this.hideCreateMultisigForm(),
                 this.state.showCreateMultisigForm
             )}
+                ${this.state.parallelScanState ? renderParallelMultisigScan(
+                this.state.parallelScanState,
+                (chipInfo) => {
+                    // Chip 1 scanned callback (handled in scanChipParallel)
+                },
+                (chipInfo) => {
+                    // Chip 2 scanned callback (handled in scanChipParallel)
+                },
+                () => {
+                    // Cancel - cleanup gates and hide
+                    this.cancelParallelMultisigScan();
+                },
+                this.state.showParallelMultisigScan
+            ) : ''}
                 ${renderHaloChipNameForm(
                 (name) => this.handleHaloChipNameConfirm(name),
                 () => this.hideHaloChipNameForm(),
@@ -891,6 +906,20 @@ export class PopupApp {
                 () => this.hideCreateMultisigForm(),
                 this.state.showCreateMultisigForm
             )}
+            ${this.state.parallelScanState ? renderParallelMultisigScan(
+                this.state.parallelScanState,
+                (chipInfo) => {
+                    // Chip 1 scanned callback (handled in scanChipParallel)
+                },
+                (chipInfo) => {
+                    // Chip 2 scanned callback (handled in scanChipParallel)
+                },
+                () => {
+                    // Cancel - cleanup gates and hide
+                    this.cancelParallelMultisigScan();
+                },
+                this.state.showParallelMultisigScan
+            ) : ''}
                 ${renderHaloChipNameForm(
                 (name) => this.handleHaloChipNameConfirm(name),
                 () => this.hideHaloChipNameForm(),
@@ -951,6 +980,11 @@ export class PopupApp {
         }
 
         this.attachDashboardListeners();
+
+        // Attach parallel scan listeners if visible
+        if (this.state.showParallelMultisigScan) {
+            this.attachParallelScanListeners();
+        }
         // Render charts after DOM is ready
         setTimeout(() => {
             console.log('[PopupApp] Rendering charts after dashboard render');
@@ -2749,51 +2783,350 @@ export class PopupApp {
         try {
             this.hideCreateMultisigForm();
 
-            // Step 1: Scan chips and create account structure
-            const response = await this.haloService.createMultisigAccount(numChips, threshold, name);
+            // Check if we're in expanded view and doing 2/2 multisig
+            const isExpanded = window.location.pathname.includes('expanded.html');
+            const isTwoTwoMultisig = numChips === 2 && threshold === 2;
 
-            await this.loadAccounts();
-            this.state.unlocked = true;
-            this.render();
+            if (isExpanded && isTwoTwoMultisig) {
+                // Use parallel scanning in expanded view
+                await this.handleParallelMultisigScan(numChips, threshold, name);
+            } else {
+                // Use sequential scanning (original flow)
+                const response = await this.haloService.createMultisigAccount(numChips, threshold, name);
 
-            // Step 2: Deploy multisig contract using first chip
-            // Get current chain ID
-            const selectedAccount = await this.walletService.getSelectedAccount();
-            const chainId = selectedAccount?.chainId || this.state.selectedAccount?.chainId || 1;
-
-            try {
-                // Show deployment progress
-                this.showSuccessMessage('Deploying multisig contract... Please scan first Halo chip.');
-
-                // Deploy multisig contract (will prompt for chip scan)
-                // Factory address will be retrieved from config
-                const deployment = await multisigService.deployMultisig(
-                    response.account,
-                    null, // Will use factory address from config
-                    chainId
-                );
-
-                // Update account to mark as deployed
                 await this.loadAccounts();
+                this.state.unlocked = true;
                 this.render();
 
-                // Show success with transaction hash
-                this.showSuccessMessage(
-                    `✅ Multisig Deployed! Address: ${formatAddress(deployment.address)}`,
-                    deployment.txHash,
-                    chainId
-                );
-            } catch (deployError: any) {
-                // Account was created but deployment failed
-                console.error('Multisig deployment failed:', deployError);
-                this.showErrorMessage(
-                    `Multisig account created but deployment failed: ${deployError.message}. ` +
-                    `You can deploy it later from the account details.`
-                );
+                // Step 2: Deploy multisig contract using first chip
+                // Get current chain ID
+                const selectedAccount = await this.walletService.getSelectedAccount();
+                const chainId = selectedAccount?.chainId || this.state.selectedAccount?.chainId || 1;
+
+                try {
+                    // Show deployment progress
+                    this.showSuccessMessage('Deploying multisig contract... Please scan first Halo chip.');
+
+                    // Deploy multisig contract (will prompt for chip scan)
+                    // Factory address will be retrieved from config
+                    const deployment = await multisigService.deployMultisig(
+                        response.account,
+                        null, // Will use factory address from config
+                        chainId
+                    );
+
+                    // Update account to mark as deployed
+                    await this.loadAccounts();
+                    this.render();
+
+                    // Show success with transaction hash
+                    this.showSuccessMessage(
+                        `✅ Multisig Deployed! Address: ${formatAddress(deployment.address)}`,
+                        deployment.txHash,
+                        chainId
+                    );
+                } catch (deployError: any) {
+                    // Account was created but deployment failed
+                    console.error('Multisig deployment failed:', deployError);
+                    this.showErrorMessage(
+                        `Multisig account created but deployment failed: ${deployError.message}. ` +
+                        `You can deploy it later from the account details.`
+                    );
+                }
             }
         } catch (error: any) {
             this.showErrorMessage('Failed to create multisig account: ' + (error.message || 'Unknown error'));
         }
+    }
+
+    private async handleParallelMultisigScan(numChips: number, threshold: number, name?: string) {
+        // Initialize parallel scan state
+        this.state.parallelScanState = {
+            chip1: { status: 'pending' },
+            chip2: { status: 'pending' },
+        };
+        this.state.showParallelMultisigScan = true;
+        this.render();
+
+        try {
+            // Start both gateways in parallel
+            const { LibHaLoAdapter } = await import('../halo/libhalo-adapter.js');
+
+            // Start chip 1 scanning
+            const chip1Promise = this.scanChipParallel(1, LibHaLoAdapter);
+
+            // Start chip 2 scanning
+            const chip2Promise = this.scanChipParallel(2, LibHaLoAdapter);
+
+            // Wait for both chips to be scanned
+            const [chip1Info, chip2Info] = await Promise.all([chip1Promise, chip2Promise]);
+
+            // Both chips scanned, create multisig account
+            const chips = [chip1Info, chip2Info];
+            const response = await chrome.runtime.sendMessage({
+                type: 'CREATE_MULTISIG_ACCOUNT',
+                chips: chips,
+                threshold: threshold,
+                name: name || undefined,
+            });
+
+            if (!response || !response.success) {
+                throw new Error(response?.error || 'Failed to create multisig account');
+            }
+
+            await this.loadAccounts();
+            this.state.unlocked = true;
+
+            // Deploy multisig using gas station
+            const selectedAccount = await this.walletService.getSelectedAccount();
+            const chainId = selectedAccount?.chainId || this.state.selectedAccount?.chainId || 1;
+
+            // Update UI to show deploying
+            this.state.parallelScanState!.chip1.status = 'done';
+            this.state.parallelScanState!.chip2.status = 'done';
+            this.render();
+
+            // Deploy using gas station
+            const deployment = await this.deployMultisigWithGasStation(response.account, chainId);
+
+            // Hide parallel scan UI
+            this.state.showParallelMultisigScan = false;
+            this.state.parallelScanState = undefined;
+            this.render();
+
+            // Show success
+            this.showSuccessMessage(
+                `✅ Multisig Deployed! Address: ${formatAddress(deployment.address)}`,
+                deployment.txHash,
+                chainId
+            );
+        } catch (error: any) {
+            console.error('Parallel multisig scan error:', error);
+            this.showErrorMessage('Failed to create multisig: ' + (error.message || 'Unknown error'));
+            this.state.showParallelMultisigScan = false;
+            this.state.parallelScanState = undefined;
+            this.render();
+        }
+    }
+
+    private async scanChipParallel(chipNumber: 1 | 2, LibHaLoAdapter: any): Promise<any> {
+        const chipKey = chipNumber === 1 ? 'chip1' : 'chip2';
+
+        try {
+            // Update status to scanning
+            if (this.state.parallelScanState) {
+                this.state.parallelScanState[chipKey].status = 'scanning';
+                this.render();
+            }
+
+            // Create gateway
+            const gate = await LibHaLoAdapter.createGateway();
+            if (!gate) {
+                throw new Error(`Failed to initialize HaLo Gateway for chip ${chipNumber}`);
+            }
+
+            // Store gate for cleanup
+            if (this.state.parallelScanState) {
+                this.state.parallelScanState[chipKey].gate = gate;
+            }
+
+            // Start pairing to get QR code
+            const pairInfo = await gate.startPairing();
+
+            // Update UI with QR code
+            if (this.state.parallelScanState) {
+                this.state.parallelScanState[chipKey].qrCode = pairInfo.qrCode;
+                this.state.parallelScanState[chipKey].execURL = pairInfo.execURL;
+                this.render();
+            }
+
+            // Wait for phone to connect
+            await gate.waitConnected();
+
+            // Update status to connected
+            if (this.state.parallelScanState) {
+                this.state.parallelScanState[chipKey].status = 'connected';
+                this.render();
+            }
+
+            // Get key info from chip
+            const result = await gate.execHaloCmd({
+                name: 'get_key_info',
+                keyNo: 1,
+            });
+
+            await gate.close();
+
+            // Derive address from public key
+            const publicKey = result.publicKey;
+            const { loadEthers } = await import('./ethers-loader');
+            const ethersModule = await loadEthers();
+            const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
+            const chipAddress = result.address || ethers.computeAddress('0x' + publicKey);
+
+            const chipInfo = {
+                address: chipAddress.toLowerCase(),
+                publicKey: publicKey,
+                slot: 1,
+                name: `Chip ${chipNumber}`,
+                linkedAt: Date.now(),
+            };
+
+            // Update status to done
+            if (this.state.parallelScanState) {
+                this.state.parallelScanState[chipKey].status = 'done';
+                this.state.parallelScanState[chipKey].chipInfo = chipInfo;
+                this.render();
+            }
+
+            return chipInfo;
+        } catch (error: any) {
+            // Update status to error
+            if (this.state.parallelScanState) {
+                this.state.parallelScanState[chipKey].status = 'error';
+                this.render();
+            }
+            throw error;
+        }
+    }
+
+    private async deployMultisigWithGasStation(account: any, chainId: number): Promise<{ address: string; txHash: string }> {
+        const { getGasStationSigner, isGasStationConfigured } = await import('../core/gas-station.js');
+
+        if (!(await isGasStationConfigured())) {
+            throw new Error('Gas station not configured. Please configure the gas station private key.');
+        }
+
+        const { getMultisigFactoryAddress } = await import('../core/multisig-config.js');
+        const factoryAddress = getMultisigFactoryAddress(chainId);
+
+        // Get network RPC URL
+        const networks = await chrome.runtime.sendMessage({ type: 'GET_NETWORKS' });
+        const networksArray = networks && networks.success ? networks.networks : [];
+        const network = networksArray.find((n: any) => n.chainId === chainId);
+        if (!network || !network.rpcUrl) {
+            throw new Error(`Network not found for chainId ${chainId}`);
+        }
+
+        const { loadEthers } = await import('./ethers-loader');
+        const ethersModule = await loadEthers();
+        const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
+        const provider = new ethers.JsonRpcProvider(network.rpcUrl);
+
+        // Get gas station signer
+        const gasStationSigner = await getGasStationSigner(provider);
+
+        // Normalize and sort owner addresses
+        const chips = account.multisig.chips;
+        const threshold = account.multisig.threshold;
+        const owners = chips.map((c: any) => ethers.getAddress(c.address)).sort();
+
+        // Create salt for deterministic address
+        const salt = ethers.keccak256(
+            ethers.toUtf8Bytes(owners.join('') + threshold.toString() + account.address.toLowerCase())
+        );
+
+        // Deploy via factory using gas station
+        const FACTORY_ABI = [
+            'function createMultisig(address[] calldata owners, uint256 threshold, bytes32 salt) external returns (address)',
+            'event MultisigCreated(address indexed multisig, address[] owners, uint256 threshold)',
+        ];
+
+        const factory = new ethers.Contract(factoryAddress, FACTORY_ABI, gasStationSigner);
+        const data = factory.interface.encodeFunctionData('createMultisig', [owners, threshold, salt]);
+
+        // Get gas price and estimate gas
+        const feeData = await provider.getFeeData();
+        const gasEstimate = await provider.estimateGas({
+            to: factoryAddress,
+            data: data,
+            from: await gasStationSigner.getAddress(),
+        });
+
+        const transaction = {
+            to: factoryAddress,
+            data: data,
+            value: '0x0',
+            gasLimit: (gasEstimate * BigInt(120)) / BigInt(100),
+            maxFeePerGas: feeData.maxFeePerGas?.toString(),
+            maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
+            chainId: chainId,
+            nonce: await provider.getTransactionCount(await gasStationSigner.getAddress(), 'pending'),
+        };
+
+        // Send transaction
+        const txResponse = await gasStationSigner.sendTransaction(transaction);
+        const receipt = await provider.waitForTransaction(txResponse.hash, 1);
+
+        if (!receipt || receipt.status !== 1) {
+            throw new Error('Deployment transaction failed');
+        }
+
+        // Extract deployed address from event
+        const factoryInterface = new ethers.Interface(FACTORY_ABI);
+        const event = receipt.logs.find((log: any) => {
+            try {
+                const parsed = factoryInterface.parseLog(log);
+                return parsed?.name === 'MultisigCreated';
+            } catch {
+                return false;
+            }
+        });
+
+        if (!event) {
+            throw new Error('Failed to find MultisigCreated event');
+        }
+
+        const parsedEvent = factoryInterface.parseLog(event);
+        const deployedAddress = parsedEvent?.args[0];
+
+        // Update account to mark as deployed
+        await chrome.runtime.sendMessage({
+            type: 'UPDATE_MULTISIG_DEPLOYED',
+            address: account.address,
+            deployedAddress: deployedAddress,
+            chainId: chainId,
+        });
+
+        return {
+            address: deployedAddress,
+            txHash: receipt.hash,
+        };
+    }
+
+    private cancelParallelMultisigScan() {
+        // Cleanup gates
+        if (this.state.parallelScanState) {
+            if (this.state.parallelScanState.chip1.gate) {
+                try {
+                    this.state.parallelScanState.chip1.gate.close();
+                } catch (e) {
+                    console.error('Error closing chip1 gate:', e);
+                }
+            }
+            if (this.state.parallelScanState.chip2.gate) {
+                try {
+                    this.state.parallelScanState.chip2.gate.close();
+                } catch (e) {
+                    console.error('Error closing chip2 gate:', e);
+                }
+            }
+        }
+
+        this.state.showParallelMultisigScan = false;
+        this.state.parallelScanState = undefined;
+        this.render();
+    }
+
+    private attachParallelScanListeners() {
+        setTimeout(() => {
+            const cancelBtn = document.getElementById('parallel-scan-cancel');
+            if (cancelBtn) {
+                cancelBtn.addEventListener('click', () => {
+                    this.cancelParallelMultisigScan();
+                });
+            }
+        }, 50);
     }
 
     private async handleLinkHalo() {
