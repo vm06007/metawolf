@@ -3,36 +3,367 @@
  * Provides wallet provider API to dApps
  */
 
-(function () {
-    // Inject in-page script
-    const script = document.createElement('script');
-    script.src = chrome.runtime.getURL('inpage.js');
-    script.onload = function () {
-        (this as HTMLScriptElement).remove();
-    };
-    (document.head || document.documentElement).appendChild(script);
+// Content script runs in isolated world
+// The provider script (inpage.js) is injected via chrome.scripting.registerContentScripts
+// with world: 'MAIN' in the background script
+// This content script also manually injects it as a fallback
 
-    // Listen for messages from in-page script
+(function () {
+    // Inject inpage.js using src (not inline) to avoid CSP violations
+    // The script is registered via chrome.scripting.registerContentScripts in background
+    // This is just a fallback
+    const injectInpageScript = () => {
+        // Check if already injected
+        if ((window as any).__wolfyInjected) {
+            return;
+        }
+
+        // Use src instead of inline to avoid CSP violations
+        const script = document.createElement('script');
+        script.src = chrome.runtime.getURL('inpage.js');
+        script.onload = () => {
+            script.remove();
+            console.log('[Wolfy Content] ✅ Injected inpage.js via src');
+        };
+        script.onerror = () => {
+            console.error('[Wolfy Content] ❌ Failed to load inpage.js');
+        };
+        (document.head || document.documentElement).insertBefore(script, (document.head || document.documentElement).firstChild);
+        (window as any).__wolfyInjected = true;
+    };
+
+    // Inject immediately at document_start
+    if (document.readyState === 'loading') {
+        injectInpageScript();
+    } else {
+        // Already loaded, inject immediately
+        injectInpageScript();
+    }
+
+    // Store pending connection requests to respond to them when approved
+    const pendingConnections: Map<number, {
+        resolve: (accounts: string[]) => void;
+        reject: (error: string) => void;
+        origin: string;
+    }> = new Map();
+
+    // Listen for messages from background/notification
+    chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+        console.log('[Wolfy Content] Received runtime message:', message.type);
+        if (message.type === 'CONNECT_APPROVED') {
+            const accounts = message.accounts || [];
+            console.log('[Wolfy Content] CONNECT_APPROVED with accounts:', accounts, 'origin:', message.origin);
+            // Resolve all pending connection requests for this origin
+            let resolved = false;
+            pendingConnections.forEach(({ resolve, origin }, id) => {
+                if (origin === message.origin || !message.origin) {
+                    console.log('[Wolfy Content] Resolving pending connection id:', id);
+                    resolve(accounts);
+                    pendingConnections.delete(id);
+                    resolved = true;
+                }
+            });
+            if (!resolved) {
+                console.warn('[Wolfy Content] CONNECT_APPROVED but no pending connections found');
+            }
+            sendResponse({ success: true });
+        } else if (message.type === 'CONNECT_REJECTED') {
+            console.log('[Wolfy Content] CONNECT_REJECTED');
+            // Reject all pending connection requests
+            pendingConnections.forEach(({ reject }, id) => {
+                reject('User rejected connection');
+                pendingConnections.delete(id);
+            });
+            sendResponse({ success: true });
+        }
+        return true; // Keep channel open for async response
+    });
+
+    // Listen for messages from in-page script (MAIN world)
+    // Content script runs in isolated world, inpage.js runs in MAIN world
     window.addEventListener(
         'message',
         async (event) => {
             // Only accept messages from the same window
             if (event.source !== window) return;
 
+            // Debug log
+            if (event.data && event.data.type === 'WOLFY_REQUEST') {
+                console.log('[Wolfy Content] Received request:', event.data.method);
+            }
+
             if (event.data && event.data.type) {
+                // Detect EIP-6963 providers
+                if (event.data?.type === 'EIP6963_REQUEST_PROVIDERS') {
+                    // Detect other wallets
+                    const detectedProviders: any[] = [];
+
+                    // Check for MetaMask
+                    if ((window as any).ethereum && (window as any).ethereum.isMetaMask) {
+                        detectedProviders.push({
+                            uuid: 'metamask',
+                            name: 'MetaMask',
+                            icon: 'https://metamask.io/images/metamask-icon.svg',
+                            rdns: 'io.metamask',
+                        });
+                    }
+
+                    // Check for Rabby
+                    if ((window as any).ethereum && (window as any).ethereum.isRabby) {
+                        detectedProviders.push({
+                            uuid: 'rabby',
+                            name: 'Rabby',
+                            icon: 'https://rabby.io/images/logo.png',
+                            rdns: 'io.rabby',
+                        });
+                    }
+
+                    // Check for Coinbase Wallet
+                    if ((window as any).ethereum && (window as any).ethereum.isCoinbaseWallet) {
+                        detectedProviders.push({
+                            uuid: 'coinbase',
+                            name: 'Coinbase Wallet',
+                            icon: 'https://coinbase.com/favicon.ico',
+                            rdns: 'com.coinbase.wallet',
+                        });
+                    }
+
+                    // Check for Brave Wallet
+                    if ((window as any).ethereum && (window as any).ethereum.isBraveWallet) {
+                        detectedProviders.push({
+                            uuid: 'brave',
+                            name: 'Brave Wallet',
+                            icon: 'https://brave.com/favicon.ico',
+                            rdns: 'com.brave.wallet',
+                        });
+                    }
+
+                    // Send detected providers back
+                    window.postMessage(
+                        {
+                            type: 'EIP6963_PROVIDERS',
+                            providers: detectedProviders,
+                        },
+                        '*'
+                    );
+                }
+
                 if (event.data.type === 'WOLFY_REQUEST') {
                     // Handle RPC request
                     const method = event.data.method;
                     const params = event.data.params || [];
 
-                    // Map to internal message types
+                    // Handle eth_accounts and eth_requestAccounts
+                    if (method === 'eth_accounts' || method === 'eth_requestAccounts') {
+                        const origin = window.location.origin;
+
+                        // Check if DApp is already connected (only for eth_accounts, not eth_requestAccounts)
+                        chrome.storage.local.get(['dapp_connections'], (result) => {
+                            const dappConnections = result.dapp_connections || {};
+                            const isConnected = dappConnections[origin];
+
+                            if (isConnected && method === 'eth_accounts') {
+                                // Already connected - just get accounts without showing popup
+                                console.log('[Wolfy Content] DApp already connected, getting accounts without popup');
+                                chrome.runtime.sendMessage(
+                                    { type: 'GET_ACCOUNTS', origin: origin },
+                                    (accountsResponse) => {
+                                        if (accountsResponse && accountsResponse.success) {
+                                            const accounts = accountsResponse.accounts || [];
+                                            const accountAddresses = accounts.map((acc: any) => acc.address || acc);
+                                            window.postMessage(
+                                                {
+                                                    type: 'WOLFY_REQUEST_RESPONSE',
+                                                    id: event.data.id,
+                                                    response: {
+                                                        success: true,
+                                                        accounts: accountAddresses,
+                                                    },
+                                                },
+                                                '*'
+                                            );
+                                        } else {
+                                            window.postMessage(
+                                                {
+                                                    type: 'WOLFY_REQUEST_RESPONSE',
+                                                    id: event.data.id,
+                                                    response: {
+                                                        success: false,
+                                                        error: 'Failed to get accounts',
+                                                    },
+                                                },
+                                                '*'
+                                            );
+                                        }
+                                    }
+                                );
+                                return; // Don't proceed with connection flow
+                            }
+
+                            // Not connected or eth_requestAccounts - show connection popup
+                            // Detect other wallets when connection is requested
+                            let detectedProviders: any[] = [];
+
+                            // Check for MetaMask
+                            if ((window as any).ethereum && (window as any).ethereum.isMetaMask && !(window as any).ethereum.isWolfy) {
+                                detectedProviders.push({
+                                    uuid: 'metamask',
+                                    name: 'MetaMask',
+                                    icon: 'https://metamask.io/images/metamask-icon.svg',
+                                    rdns: 'io.metamask',
+                                });
+                            }
+
+                            // Check for Rabby
+                            if ((window as any).ethereum && (window as any).ethereum.isRabby) {
+                                detectedProviders.push({
+                                    uuid: 'rabby',
+                                    name: 'Rabby',
+                                    icon: 'https://rabby.io/images/logo.png',
+                                    rdns: 'io.rabby',
+                                });
+                            }
+
+                            // Check for Coinbase Wallet
+                            if ((window as any).ethereum && (window as any).ethereum.isCoinbaseWallet) {
+                                detectedProviders.push({
+                                    uuid: 'coinbase',
+                                    name: 'Coinbase Wallet',
+                                    icon: 'https://coinbase.com/favicon.ico',
+                                    rdns: 'com.coinbase.wallet',
+                                });
+                            }
+
+                            // Check for Brave Wallet
+                            if ((window as any).ethereum && (window as any).ethereum.isBraveWallet) {
+                                detectedProviders.push({
+                                    uuid: 'brave',
+                                    name: 'Brave Wallet',
+                                    icon: 'https://brave.com/favicon.ico',
+                                    rdns: 'com.brave.wallet',
+                                });
+                            }
+
+                            const messageType = 'CONNECT_DAPP';
+                            const payload = {
+                                origin: origin,
+                                name: document.title || window.location.hostname,
+                                icon: (document.querySelector('link[rel="icon"]') as HTMLLinkElement)?.href ||
+                                    (document.querySelector('link[rel="shortcut icon"]') as HTMLLinkElement)?.href ||
+                                    `${origin}/favicon.ico`,
+                                providers: detectedProviders,
+                            };
+
+                            // Send to background script
+                            chrome.runtime.sendMessage(
+                                { type: messageType, ...payload },
+                                (response) => {
+                                    // Debug
+                                    console.log('[Wolfy Content] Received from background:', response);
+
+                                    // Forward response back to in-page script
+                                    if (messageType === 'CONNECT_DAPP' && response?.pending) {
+                                        // Connection pending - wait for approval
+                                        let responseSent = false; // Prevent duplicate responses
+
+                                        const sendResponseToInpage = (success: boolean, accounts?: string[], error?: string) => {
+                                            if (responseSent) return; // Already sent
+                                            responseSent = true;
+
+                                            // Clean up
+                                            pendingConnections.delete(event.data.id);
+
+                                            window.postMessage(
+                                                {
+                                                    type: 'WOLFY_REQUEST_RESPONSE',
+                                                    id: event.data.id,
+                                                    response: {
+                                                        success: success,
+                                                        accounts: accounts || [],
+                                                        error: error,
+                                                    },
+                                                },
+                                                '*'
+                                            );
+                                        };
+
+                                        // Store the promise resolvers
+                                        pendingConnections.set(event.data.id, {
+                                            resolve: (accounts) => {
+                                                sendResponseToInpage(true, accounts);
+                                            },
+                                            reject: (error) => {
+                                                sendResponseToInpage(false, undefined, error);
+                                            },
+                                            origin: payload.origin,
+                                        });
+
+                                        // Also poll as fallback (in case message listener doesn't work)
+                                        const checkApproval = setInterval(() => {
+                                            if (responseSent) {
+                                                clearInterval(checkApproval);
+                                                return;
+                                            }
+
+                                            chrome.storage.local.get(['pendingConnection', 'dapp_connections'], (result) => {
+                                                const pendingConnection = result.pendingConnection;
+                                                const dappConnections = result.dapp_connections || {};
+
+                                                // Check if connection was resolved
+                                                if (!pendingConnection || dappConnections[payload.origin]) {
+                                                    clearInterval(checkApproval);
+
+                                                    if (dappConnections[payload.origin]) {
+                                                        // Approved - get accounts
+                                                        chrome.runtime.sendMessage(
+                                                            { type: 'GET_ACCOUNTS', origin: payload.origin },
+                                                            (accountsResponse) => {
+                                                                if (accountsResponse && accountsResponse.success) {
+                                                                    const accounts = accountsResponse.accounts || [];
+                                                                    const accountAddresses = accounts.map((acc: any) => acc.address || acc);
+                                                                    sendResponseToInpage(true, accountAddresses);
+                                                                } else {
+                                                                    sendResponseToInpage(false, undefined, 'Failed to get accounts');
+                                                                }
+                                                            }
+                                                        );
+                                                    } else {
+                                                        // Rejected or cancelled
+                                                        sendResponseToInpage(false, undefined, 'User rejected connection');
+                                                    }
+                                                }
+                                            });
+                                        }, 100);
+
+                                        // Timeout after 5 minutes
+                                        setTimeout(() => {
+                                            clearInterval(checkApproval);
+                                            if (!responseSent) {
+                                                sendResponseToInpage(false, undefined, 'Connection timeout');
+                                            }
+                                        }, 300000);
+                                    } else {
+                                        // Normal response
+                                        window.postMessage(
+                                            {
+                                                type: 'WOLFY_REQUEST_RESPONSE',
+                                                id: event.data.id,
+                                                response: response,
+                                            },
+                                            '*'
+                                        );
+                                    }
+                                }
+                            );
+                        });
+                        return; // Handled above
+                    }
+
+                    // Map to internal message types for other methods
                     let messageType = '';
                     let payload: any = {};
 
-                    if (method === 'eth_accounts' || method === 'eth_requestAccounts') {
-                        messageType = 'GET_ACCOUNTS';
-                        payload = {};
-                    } else if (method === 'eth_sendTransaction') {
+                    if (method === 'eth_sendTransaction') {
                         messageType = 'SIGN_TRANSACTION';
                         payload = {
                             transaction: {
@@ -76,11 +407,154 @@
                             address: params[0],
                             typedData: params[1],
                         };
+                    } else if (method.startsWith('eth_') || method.startsWith('net_') || method.startsWith('web3_')) {
+                        // Generic RPC method - forward to background
+                        // Try to get chainId from the request or use default (1 for mainnet)
+                        let chainId = 1;
+                        if (method === 'eth_chainId') {
+                            // Will be handled by inpage script
+                        } else {
+                            // For other methods, we might need chainId from provider
+                            // For now, default to mainnet
+                        }
+                        messageType = 'RPC_REQUEST';
+                        payload = {
+                            method: method,
+                            params: params,
+                            chainId: chainId,
+                        };
                     }
 
                     if (messageType) {
+                        // Debug
+                        console.log('[Wolfy Content] Sending to background:', messageType, payload);
+
                         chrome.runtime.sendMessage(
                             { type: messageType, ...payload },
+                            (response) => {
+                                // Debug
+                                console.log('[Wolfy Content] Received from background:', response);
+
+                                // Forward response back to in-page script
+                                if (messageType === 'CONNECT_DAPP' && response?.pending) {
+                                    // Connection pending - wait for approval
+                                    let responseSent = false; // Prevent duplicate responses
+
+                                    const sendResponseToInpage = (success: boolean, accounts?: string[], error?: string) => {
+                                        if (responseSent) return; // Already sent
+                                        responseSent = true;
+
+                                        // Clean up
+                                        pendingConnections.delete(event.data.id);
+
+                                        window.postMessage(
+                                            {
+                                                type: 'WOLFY_REQUEST_RESPONSE', // Fixed type - don't append multiple times
+                                                id: event.data.id,
+                                                response: {
+                                                    success: success,
+                                                    accounts: accounts || [],
+                                                    error: error,
+                                                },
+                                            },
+                                            '*'
+                                        );
+                                    };
+
+                                    // Store the promise resolvers
+                                    pendingConnections.set(event.data.id, {
+                                        resolve: (accounts) => {
+                                            sendResponseToInpage(true, accounts);
+                                        },
+                                        reject: (error) => {
+                                            sendResponseToInpage(false, undefined, error);
+                                        },
+                                        origin: payload.origin,
+                                    });
+
+                                    // Also poll as fallback (in case message listener doesn't work)
+                                    const checkApproval = setInterval(() => {
+                                        if (responseSent) {
+                                            clearInterval(checkApproval);
+                                            return;
+                                        }
+
+                                        chrome.storage.local.get(['pendingConnection', 'dapp_connections'], (result) => {
+                                            const pendingConnection = result.pendingConnection;
+                                            const dappConnections = result.dapp_connections || {};
+
+                                            // Check if connection was resolved
+                                            if (!pendingConnection || dappConnections[payload.origin]) {
+                                                clearInterval(checkApproval);
+
+                                                if (dappConnections[payload.origin]) {
+                                                    // Approved - get accounts
+                                                    chrome.runtime.sendMessage(
+                                                        { type: 'GET_ACCOUNTS', origin: payload.origin },
+                                                        (accountsResponse) => {
+                                                            if (accountsResponse && accountsResponse.success) {
+                                                                const accounts = accountsResponse.accounts || [];
+                                                                const accountAddresses = accounts.map((acc: any) => acc.address || acc);
+                                                                sendResponseToInpage(true, accountAddresses);
+                                                            } else {
+                                                                sendResponseToInpage(false, undefined, 'Failed to get accounts');
+                                                            }
+                                                        }
+                                                    );
+                                                } else {
+                                                    // Rejected or cancelled
+                                                    sendResponseToInpage(false, undefined, 'User rejected connection');
+                                                }
+                                            }
+                                        });
+                                    }, 100);
+
+                                    // Timeout after 5 minutes
+                                    setTimeout(() => {
+                                        clearInterval(checkApproval);
+                                        if (!responseSent) {
+                                            sendResponseToInpage(false, undefined, 'Connection timeout');
+                                        }
+                                    }, 300000);
+                                } else {
+                                    // Normal response - use fixed type to avoid loops
+                                    const responseType = event.data.type === 'WOLFY_REQUEST'
+                                        ? 'WOLFY_REQUEST_RESPONSE'
+                                        : (event.data.type.endsWith('_RESPONSE')
+                                            ? event.data.type
+                                            : event.data.type + '_RESPONSE');
+
+                                    window.postMessage(
+                                        {
+                                            type: responseType,
+                                            id: event.data.id,
+                                            response: response,
+                                        },
+                                        '*'
+                                    );
+                                }
+                            }
+                        );
+                    } else {
+                        // Unknown method
+                        window.postMessage(
+                            {
+                                type: 'WOLFY_REQUEST_RESPONSE',
+                                id: event.data.id,
+                                response: {
+                                    success: false,
+                                    error: `Unknown method: ${method}`,
+                                },
+                            },
+                            '*'
+                        );
+                    }
+                } else if (event.data.type.startsWith('WOLFY_') && event.data.type !== 'WOLFY_REQUEST_RESPONSE') {
+                    // Forward other WOLFY_ messages to background script (but NOT responses)
+                    // Only forward actual requests, not responses to avoid infinite loops
+                    if (!event.data.type.endsWith('_RESPONSE')) {
+                        chrome.runtime.sendMessage(
+                            event.data,
                             (response) => {
                                 // Forward response back to in-page script
                                 window.postMessage(
@@ -93,36 +567,8 @@
                                 );
                             }
                         );
-                    } else {
-                        // Unknown method
-                        window.postMessage(
-                            {
-                                type: event.data.type + '_RESPONSE',
-                                id: event.data.id,
-                                response: {
-                                    success: false,
-                                    error: `Unknown method: ${method}`,
-                                },
-                            },
-                            '*'
-                        );
                     }
-                } else if (event.data.type.startsWith('WOLFY_')) {
-                    // Forward other messages to background script
-                    chrome.runtime.sendMessage(
-                        event.data,
-                        (response) => {
-                            // Forward response back to in-page script
-                            window.postMessage(
-                                {
-                                    type: event.data.type + '_RESPONSE',
-                                    id: event.data.id,
-                                    response: response,
-                                },
-                                '*'
-                            );
-                        }
-                    );
+                    // Silently ignore response messages to prevent loops
                 }
             }
         },

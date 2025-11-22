@@ -37,10 +37,13 @@ export class Wallet {
     }
 
     async unlock(password: string): Promise<boolean> {
-        // Simple unlock logic - in production, use proper encryption
-        this.state.unlocked = true;
-        await this.saveState();
-        return true;
+        const { verifyPassword } = await import('./password.js');
+        const isValid = await verifyPassword(password);
+        if (isValid) {
+            this.state.unlocked = true;
+            await this.saveState();
+        }
+        return isValid;
     }
 
     async lock(): Promise<void> {
@@ -52,6 +55,110 @@ export class Wallet {
         return this.state.unlocked;
     }
 
+    /**
+     * Create account from HaLo chip (chip-centric approach)
+     * Reads chip address and uses it as the account address
+     */
+    async createAccountFromChip(chipAddress: string, chipPublicKey: string, slot: number, name?: string): Promise<Account> {
+        try {
+            const account: Account = {
+                address: chipAddress.toLowerCase(),
+                name: name || `HaLo Chip ${this.state.accounts.length + 1}`,
+                encrypted: false,
+                isChipAccount: true,
+                chipInfo: {
+                    address: chipAddress.toLowerCase(),
+                    publicKey: chipPublicKey,
+                    slot: slot,
+                    linkedAt: Date.now(),
+                },
+                haloLinked: true,
+            };
+
+            // Check for duplicates
+            if (this.state.accounts.some(acc => acc.address.toLowerCase() === account.address.toLowerCase())) {
+                throw new Error('Chip account already exists');
+            }
+
+            this.state.accounts.push(account);
+            if (!this.state.selectedAccount) {
+                this.state.selectedAccount = account.address;
+            }
+
+            // NO private key stored - chip is the only way to sign
+            await this.saveState();
+
+            return account;
+        } catch (error: any) {
+            console.error('Error in createAccountFromChip:', error);
+            throw new Error(error.message || 'Failed to create account from chip');
+        }
+    }
+
+    /**
+     * Create multisig account with multiple HaLo chips
+     * NOTE: This creates the account structure but does NOT deploy the contract
+     * The contract must be deployed separately using deployMultisig()
+     */
+    async createMultisigAccount(chips: ChipInfo[], threshold: number, name?: string): Promise<Account> {
+        try {
+            if (chips.length < 2) {
+                throw new Error('Multisig requires at least 2 chips');
+            }
+            if (threshold < 1 || threshold > chips.length) {
+                throw new Error(`Threshold must be between 1 and ${chips.length}`);
+            }
+
+            // Compute deterministic address (will be deployed later)
+            const { computeMultisigAddress } = await import('./multisig-deployer.js');
+
+            // Use a placeholder factory address (in production, use real factory)
+            const FACTORY_ADDRESS = '0x0000000000000000000000000000000000000000'; // TODO: Deploy factory
+            const salt = ethers.keccak256(
+                ethers.toUtf8Bytes(chips.map(c => c.address.toLowerCase()).sort().join('') + threshold.toString())
+            );
+
+            const smartAccountAddress = computeMultisigAddress(
+                FACTORY_ADDRESS,
+                chips.map(c => c.address),
+                threshold,
+                salt
+            );
+
+            const account: Account = {
+                address: smartAccountAddress,
+                name: name || `Multisig (${threshold}/${chips.length})`,
+                encrypted: false,
+                isChipAccount: false,
+                multisig: {
+                    threshold: threshold,
+                    chips: chips,
+                    smartAccountAddress: smartAccountAddress,
+                    deployed: false, // Will be set to true when contract is deployed
+                },
+                haloLinked: true,
+            };
+
+            // Check for duplicates
+            if (this.state.accounts.some(acc => acc.address.toLowerCase() === account.address.toLowerCase())) {
+                throw new Error('Multisig account already exists');
+            }
+
+            this.state.accounts.push(account);
+            if (!this.state.selectedAccount) {
+                this.state.selectedAccount = account.address;
+            }
+
+            // NO private key stored - only chips can sign
+            await this.saveState();
+
+            return account;
+        } catch (error: any) {
+            console.error('Error in createMultisigAccount:', error);
+            throw new Error(error.message || 'Failed to create multisig account');
+        }
+    }
+
     async createAccount(name?: string): Promise<Account> {
         try {
             const wallet = ethers.Wallet.createRandom();
@@ -59,6 +166,7 @@ export class Wallet {
                 address: wallet.address,
                 name: name || `Account ${this.state.accounts.length + 1}`,
                 encrypted: false,
+                isChipAccount: false,
             };
 
             // Check for duplicates
@@ -150,7 +258,10 @@ export class Wallet {
             (n) => n.chainId === this.state.selectedNetwork
         );
         if (network) {
-            this.provider = new ethers.JsonRpcProvider(network.rpcUrl);
+            // Use RPC service to get RPC URL (with custom RPC support)
+            const { rpcService } = await import('./rpc-service.js');
+            const rpcUrl = rpcService.getRPCUrl(network.chainId);
+            this.provider = new ethers.JsonRpcProvider(rpcUrl);
         }
     }
 
@@ -195,10 +306,95 @@ export class Wallet {
         }
     }
 
+    /**
+     * Delete private key from storage (for security when linking to HaLo chip)
+     * WARNING: This is irreversible - user will need HaLo chip to access funds
+     */
+    async deletePrivateKey(address: string): Promise<void> {
+        try {
+            await chrome.storage.local.remove(`key_${address}`);
+            console.log(`[Wallet] Private key deleted for account ${address}`);
+        } catch (error) {
+            console.error('[Wallet] Error deleting private key:', error);
+            throw error;
+        }
+    }
+
+    /**
+     * Delete an account from the wallet
+     * Removes the account from the accounts list and cleans up related data
+     */
+    async deleteAccount(address: string): Promise<void> {
+        try {
+            const accountIndex = this.state.accounts.findIndex(
+                acc => acc.address.toLowerCase() === address.toLowerCase()
+            );
+
+            if (accountIndex === -1) {
+                throw new Error('Account not found');
+            }
+
+            // Check if this is the last account
+            if (this.state.accounts.length === 1) {
+                throw new Error('Cannot delete the last account');
+            }
+
+            // Remove account from list
+            this.state.accounts.splice(accountIndex, 1);
+
+            // If deleted account was selected, select the first available account
+            if (this.state.selectedAccount?.toLowerCase() === address.toLowerCase()) {
+                if (this.state.accounts.length > 0) {
+                    this.state.selectedAccount = this.state.accounts[0].address;
+                } else {
+                    this.state.selectedAccount = undefined;
+                }
+            }
+
+            // Clean up related data
+            try {
+                // Delete private key if exists
+                await chrome.storage.local.remove(`key_${address.toLowerCase()}`);
+
+                // Delete HaLo link if exists
+                await chrome.storage.local.remove(`halo_link_${address.toLowerCase()}`);
+
+                // Delete any account-specific preferences
+                await chrome.storage.local.remove(`account_${address.toLowerCase()}`);
+            } catch (cleanupError) {
+                console.warn('[Wallet] Error during account cleanup:', cleanupError);
+                // Continue even if cleanup fails
+            }
+
+            await this.saveState();
+            console.log(`[Wallet] Account deleted: ${address}`);
+        } catch (error: any) {
+            console.error('[Wallet] Error deleting account:', error);
+            throw error;
+        }
+    }
+
     async signTransaction(transaction: Transaction): Promise<string> {
         const account = this.getSelectedAccount();
         if (!account) {
             throw new Error('No account selected');
+        }
+
+        // SECURITY CHECK: Block private key signing for HaLo-linked accounts
+        // This prevents theft if storage is compromised - attacker cannot use stolen private keys
+        try {
+            const { HaloChip } = await import('../halo/halo.js');
+            const isLinked = await HaloChip.isAccountLinked(account.address);
+            if (isLinked) {
+                throw new Error('SECURITY: This account is protected by a HaLo chip. Private key signing is disabled. All transactions must be signed with the HaLo chip hardware key.');
+            }
+        } catch (error: any) {
+            // If error is about HaLo protection, re-throw it
+            if (error.message && error.message.includes('HaLo chip')) {
+                throw error;
+            }
+            // If HaloChip import/check fails, allow signing (HaLo module may not be available)
+            // This is a fallback for environments without HaLo support
         }
 
         const privateKey = await this.getPrivateKey(account.address);
@@ -221,7 +417,7 @@ export class Wallet {
             {
                 chainId: 1,
                 name: 'Ethereum Mainnet',
-                rpcUrl: 'https://eth.llamarpc.com',
+                rpcUrl: 'https://mainnet.infura.io/v3/db2e296c0a0f475fb6c3a3281a0c39d6',
                 blockExplorer: 'https://etherscan.io',
                 currency: {
                     name: 'Ether',
@@ -232,7 +428,7 @@ export class Wallet {
             {
                 chainId: 11155111,
                 name: 'Sepolia',
-                rpcUrl: 'https://sepolia.infura.io/v3/YOUR_PROJECT_ID',
+                rpcUrl: 'https://sepolia.infura.io/v3/db2e296c0a0f475fb6c3a3281a0c39d6',
                 blockExplorer: 'https://sepolia.etherscan.io',
                 currency: {
                     name: 'Sepolia Ether',
@@ -243,3 +439,4 @@ export class Wallet {
         ];
     }
 }
+

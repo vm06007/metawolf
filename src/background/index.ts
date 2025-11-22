@@ -2,12 +2,13 @@
 console.log('[Wolfy] Service worker starting...');
 
 // Import all dependencies
+import { ethers } from 'ethers';
 import { Wallet } from '../core/wallet.js';
 import { EIP7702 } from '../eips/eip7702.js';
 import { EIP5742 } from '../eips/eip5742.js';
 import { HaloChip } from '../halo/halo.js';
 import { handleSignMessage, handleSignTypedData } from './message-handler.js';
-import type { Transaction, EIP7702Transaction, EIP5742Batch } from '../core/types.js';
+import type { Transaction } from '../core/types.js';
 
 console.log('[Wolfy] Imports loaded');
 
@@ -27,26 +28,108 @@ async function ensureWalletReady() {
     }
 }
 
-// Initialize wallet
+// Initialize wallet and RPC service
 (async () => {
     try {
         await ensureWalletReady();
         console.log('[Wolfy] Wallet initialized');
+
+        // Initialize RPC service
+        const { rpcService } = await import('../core/rpc-service.js');
+        await rpcService.init();
+        console.log('[Wolfy] RPC service initialized');
     } catch (error: any) {
         console.error('[Wolfy] Initialization error:', error);
     }
 })();
 
+// Register in-page content script (MAIN world) for provider injection
+// This is required for Manifest V3 - provider must be in MAIN world, not isolated
+const registerInPageContentScript = async () => {
+    try {
+        // First, try to unregister any existing script with the same ID
+        try {
+            await chrome.scripting.unregisterContentScripts({ ids: ['wolfy-provider'] });
+        } catch (e) {
+            // Ignore if not registered
+        }
+
+        // Register the script
+        await chrome.scripting.registerContentScripts([
+            {
+                id: 'wolfy-provider',
+                matches: ['file://*/*', 'http://*/*', 'https://*/*'],
+                js: ['inpage.js'],
+                runAt: 'document_start',
+                world: 'MAIN',
+                allFrames: true,
+            },
+        ]);
+        console.log('[Wolfy] ✅ Successfully registered in-page provider script');
+
+        // Verify registration
+        const scripts = await chrome.scripting.getRegisteredContentScripts({ ids: ['wolfy-provider'] });
+        if (scripts && scripts.length > 0) {
+            console.log('[Wolfy] ✅ Provider script registration verified');
+        } else {
+            console.error('[Wolfy] ❌ Provider script registration failed - script not found');
+        }
+    } catch (err: any) {
+        console.error('[Wolfy] ❌ Failed to register provider script:', err);
+        // Don't throw - extension should still work
+    }
+};
+
 // Initialize on install/startup
 chrome.runtime.onInstalled.addListener(async () => {
     await ensureWalletReady();
+    await registerInPageContentScript();
     console.log('[Wolfy] Wallet installed');
 });
 
 chrome.runtime.onStartup.addListener(async () => {
     await ensureWalletReady();
+    await registerInPageContentScript();
     console.log('[Wolfy] Wallet started');
 });
+
+// Also register on extension load
+registerInPageContentScript();
+
+// Inject script into all existing tabs when extension loads
+// This ensures provider is available on already-open pages
+const injectIntoExistingTabs = async () => {
+    try {
+        const tabs = await chrome.tabs.query({});
+        for (const tab of tabs) {
+            if (tab.id && tab.url &&
+                (tab.url.startsWith('http://') ||
+                    tab.url.startsWith('https://') ||
+                    tab.url.startsWith('file://'))) {
+                try {
+                    await chrome.scripting.executeScript({
+                        target: { tabId: tab.id },
+                        files: ['inpage.js'],
+                        world: 'MAIN',
+                    });
+                    console.log(`[Wolfy] ✅ Injected into tab ${tab.id}: ${tab.url}`);
+                } catch (err: any) {
+                    // Ignore errors (tab might not be accessible, e.g., chrome:// pages)
+                    if (!err.message?.includes('Cannot access')) {
+                        console.warn(`[Wolfy] Failed to inject into tab ${tab.id}:`, err.message);
+                    }
+                }
+            }
+        }
+    } catch (err) {
+        console.error('[Wolfy] Error injecting into tabs:', err);
+    }
+};
+
+// Inject into existing tabs after a short delay to ensure extension is ready
+setTimeout(() => {
+    injectIntoExistingTabs();
+}, 100);
 
 // Message handler
 function handleMessage(
@@ -54,7 +137,10 @@ function handleMessage(
     sender: chrome.runtime.MessageSender,
     sendResponse: (response?: any) => void
 ): boolean {
-    console.log('[Wolfy] Message received:', message?.type);
+    // Only log non-PING messages to reduce spam
+    if (message?.type !== 'PING') {
+        console.log('[Wolfy] Message received:', message?.type);
+    }
 
     if (!message || !message.type) {
         sendResponse({ success: false, error: 'Invalid message' });
@@ -83,18 +169,193 @@ function handleMessage(
                     safeSendResponse({ success: true, pong: true });
                     break;
 
+                case 'CONNECT_DAPP':
+                    try {
+                        // Open notification window for connection approval
+                        const notificationUrl = chrome.runtime.getURL('notification/index.html');
+                        const origin = message.origin || sender.origin || 'unknown';
+                        const name = message.name || 'Unknown DApp';
+                        const icon = message.icon || '';
+
+                        // Detect other wallets (passed from content script)
+                        const detectedProviders = message.providers || [];
+
+                        // Store pending connection request first
+                        await chrome.storage.local.set({
+                            pendingConnection: {
+                                origin,
+                                name,
+                                icon,
+                                providers: detectedProviders,
+                                tabId: sender.tab?.id,
+                            }
+                        });
+
+                        // Get screen dimensions to position window on the right
+                        const windowWidth = 400;
+                        const windowHeight = 600;
+                        const margin = 20; // Margin from screen edge
+                        const top = 100; // Position from top
+
+                        let left: number;
+                        try {
+                            // Try to get actual screen dimensions
+                            const displayInfo = await chrome.system.display.getInfo();
+                            const primaryDisplay = displayInfo[0];
+                            const screenWidth = primaryDisplay.workArea.width;
+                            left = screenWidth - windowWidth - margin;
+                        } catch (error) {
+                            // Fallback: Use a reasonable default (assumes 1920px screen)
+                            // Position on right side with margin
+                            left = 1920 - windowWidth - margin;
+                        }
+
+                        // Open notification window on the right side
+                        await chrome.windows.create({
+                            url: notificationUrl,
+                            type: 'popup',
+                            width: windowWidth,
+                            height: windowHeight,
+                            left: left,
+                            top: top,
+                            focused: true,
+                        });
+
+                        safeSendResponse({
+                            success: true,
+                            pending: true,
+                        });
+                    } catch (error: any) {
+                        console.error('[CONNECT_DAPP] Error:', error);
+                        safeSendResponse({
+                            success: false,
+                            error: error.message || 'Failed to open connection window',
+                        });
+                    }
+                    break;
+
+                case 'APPROVE_CONNECTION':
+                    try {
+                        const origin = message.origin;
+                        const account = message.account;
+
+                        // Store connection permission
+                        const connections = await chrome.storage.local.get('dapp_connections') || {};
+                        const dappConnections = connections.dapp_connections || {};
+                        const pending = await chrome.storage.local.get('pendingConnection');
+
+                        if (pending.pendingConnection) {
+                            dappConnections[origin] = {
+                                name: pending.pendingConnection.name,
+                                icon: pending.pendingConnection.icon,
+                                account: account,
+                                connectedAt: Date.now(),
+                            };
+                            await chrome.storage.local.set({
+                                dapp_connections: dappConnections,
+                                pendingConnection: null
+                            });
+                        }
+
+                        safeSendResponse({ success: true });
+                    } catch (error: any) {
+                        console.error('[APPROVE_CONNECTION] Error:', error);
+                        safeSendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'REJECT_CONNECTION':
+                    try {
+                        await chrome.storage.local.set({ pendingConnection: null });
+                        safeSendResponse({ success: true });
+                    } catch (error: any) {
+                        safeSendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
                 case 'GET_ACCOUNTS':
-                    safeSendResponse({
-                        success: true,
-                        accounts: wallet.getAccounts(),
-                    });
+                    try {
+                        // Check if this is from a connected dApp
+                        const origin = sender.origin || message.origin;
+                        let accountsToReturn = wallet.getAccounts();
+
+                        if (origin) {
+                            const connections = await chrome.storage.local.get('dapp_connections');
+                            const dappConnections = connections.dapp_connections || {};
+                            const connection = dappConnections[origin];
+
+                            if (connection && connection.account) {
+                                // Return only the connected account for this dApp
+                                accountsToReturn = accountsToReturn.filter(
+                                    acc => acc.address.toLowerCase() === connection.account.toLowerCase()
+                                );
+                            }
+                        }
+
+                        // Check HaLo link status and get chip info for each account
+                        const accountsWithHalo = await Promise.all(
+                            accountsToReturn.map(async (account) => {
+                                const isLinked = await (HaloChip as any).isAccountLinked(account.address);
+                                let chipAddress: string | undefined;
+                                if (isLinked) {
+                                    const linkInfo = await (HaloChip as any).getLinkInfo(account.address);
+                                    chipAddress = linkInfo?.chipAddress;
+                                }
+                                console.log(`[GET_ACCOUNTS] Account ${account.address}: haloLinked=${isLinked}, chipAddress=${chipAddress}`);
+                                return {
+                                    ...account,
+                                    haloLinked: isLinked,
+                                    haloChipAddress: chipAddress,
+                                };
+                            })
+                        );
+                        safeSendResponse({
+                            success: true,
+                            accounts: accountsWithHalo,
+                        });
+                    } catch (error: any) {
+                        console.error('[GET_ACCOUNTS] Error:', error);
+                        // Fallback to accounts without halo status
+                        safeSendResponse({
+                            success: true,
+                            accounts: wallet.getAccounts(),
+                        });
+                    }
                     break;
 
                 case 'GET_SELECTED_ACCOUNT':
-                    safeSendResponse({
-                        success: true,
-                        account: wallet.getSelectedAccount(),
-                    });
+                    try {
+                        const account = wallet.getSelectedAccount();
+                        if (account) {
+                            // Check HaLo link status and get chip info
+                            const isLinked = await HaloChip.isAccountLinked(account.address);
+                            let chipAddress: string | undefined;
+                            if (isLinked) {
+                                const linkInfo = await HaloChip.getKeyInfo(account.address as any);
+                                chipAddress = linkInfo?.data?.chipAddress;
+                            }
+                            safeSendResponse({
+                                success: true,
+                                account: {
+                                    ...account,
+                                    haloLinked: isLinked,
+                                    haloChipAddress: chipAddress,
+                                },
+                            });
+                        } else {
+                            safeSendResponse({
+                                success: true,
+                                account: null,
+                            });
+                        }
+                    } catch (error: any) {
+                        console.error('[GET_SELECTED_ACCOUNT] Error:', error);
+                        // Fallback
+                        safeSendResponse({
+                            success: true,
+                            account: wallet.getSelectedAccount(),
+                        });
+                    }
                     break;
 
                 case 'CREATE_ACCOUNT':
@@ -106,6 +367,85 @@ function handleMessage(
                         safeSendResponse({
                             success: false,
                             error: error.message || 'Failed to create account',
+                        });
+                    }
+                    break;
+
+                case 'DELETE_ACCOUNT':
+                    if (!wallet.isUnlocked()) {
+                        safeSendResponse({ success: false, error: 'Wallet is locked' });
+                        break;
+                    }
+                    try {
+                        const addressToDelete = message.address;
+                        if (!addressToDelete) {
+                            safeSendResponse({ success: false, error: 'Address is required' });
+                            break;
+                        }
+
+                        await wallet.deleteAccount(addressToDelete);
+                        safeSendResponse({ success: true });
+                    } catch (error: any) {
+                        console.error('[Wolfy] Error deleting account:', error);
+                        safeSendResponse({
+                            success: false,
+                            error: error.message || 'Failed to delete account',
+                        });
+                    }
+                    break;
+
+                case 'CREATE_ACCOUNT_FROM_CHIP':
+                    try {
+                        if (!message.chipAddress || !message.chipPublicKey) {
+                            safeSendResponse({
+                                success: false,
+                                error: 'Chip address and public key required',
+                            });
+                            break;
+                        }
+                        const chipAccount = await wallet.createAccountFromChip(
+                            message.chipAddress,
+                            message.chipPublicKey,
+                            message.slot || 1,
+                            message.name
+                        );
+                        safeSendResponse({ success: true, account: chipAccount });
+                    } catch (error: any) {
+                        console.error('[Wolfy] Error creating account from chip:', error);
+                        safeSendResponse({
+                            success: false,
+                            error: error.message || 'Failed to create account from chip',
+                        });
+                    }
+                    break;
+
+                case 'CREATE_MULTISIG_ACCOUNT':
+                    try {
+                        if (!message.chips || !Array.isArray(message.chips) || message.chips.length < 2) {
+                            safeSendResponse({
+                                success: false,
+                                error: 'At least 2 chips required for multisig',
+                            });
+                            break;
+                        }
+                        if (!message.threshold || message.threshold < 1 || message.threshold > message.chips.length) {
+                            safeSendResponse({
+                                success: false,
+                                error: `Threshold must be between 1 and ${message.chips.length}`,
+                            });
+                            break;
+                        }
+                        const multisigAccount = await wallet.createMultisigAccount(
+                            message.chips,
+                            message.threshold,
+                            message.name
+                        );
+                        safeSendResponse({ success: true, account: multisigAccount });
+                    } catch (error: any) {
+                        console.error('[Wolfy] Error creating multisig account:', error);
+                        safeSendResponse({
+                            success: false,
+                            error: error.message || 'Failed to create multisig account',
                         });
                     }
                     break;
@@ -147,17 +487,114 @@ function handleMessage(
                             safeSendResponse({ success: false, error: 'No account selected' });
                             break;
                         }
-                        // Check if account is linked to HaLo chip
+
+                        // Check for multisig account
+                        if (account.multisig) {
+                            // Multisig signing - collect signatures from multiple chips
+                            const provider = await wallet.getProvider();
+                            const { HaloSigner } = await import('../halo/halo-signer.js');
+
+                            // Serialize transaction for signing
+                            const serializedTx = ethers.Transaction.from({
+                                to: message.transaction.to,
+                                value: message.transaction.value,
+                                data: message.transaction.data,
+                                gasLimit: message.transaction.gasLimit,
+                                gasPrice: message.transaction.gasPrice
+                                    ? BigInt(message.transaction.gasPrice)
+                                    : undefined,
+                                maxFeePerGas: message.transaction.maxFeePerGas
+                                    ? BigInt(message.transaction.maxFeePerGas)
+                                    : undefined,
+                                maxPriorityFeePerGas: message.transaction.maxPriorityFeePerGas
+                                    ? BigInt(message.transaction.maxPriorityFeePerGas)
+                                    : undefined,
+                                nonce: message.transaction.nonce,
+                                chainId: message.transaction.chainId,
+                                type: message.transaction.type,
+                            });
+
+                            const unsignedTx = serializedTx.unsignedSerialized;
+                            const txHash = ethers.keccak256(unsignedTx);
+
+                            // Collect signatures from required chips
+                            const signatures: Array<{ chipAddress: string; signature: string; slot: number }> = [];
+                            const chipsToSign = message.chipIndices ||
+                                account.multisig.chips.slice(0, account.multisig.threshold).map((_, i) => i);
+
+                            for (const chipIndex of chipsToSign.slice(0, account.multisig.threshold)) {
+                                const chip = account.multisig.chips[chipIndex];
+                                if (!chip) {
+                                    throw new Error(`Chip ${chipIndex} not found`);
+                                }
+
+                                // Sign with this chip
+                                const signResponse = await HaloChip.sign(txHash, {
+                                    slot: chip.slot,
+                                });
+
+                                if (!signResponse.success || !signResponse.data?.signature) {
+                                    throw new Error(`Failed to sign with chip ${chipIndex + 1} (${chip.address})`);
+                                }
+
+                                signatures.push({
+                                    chipAddress: chip.address,
+                                    signature: signResponse.data.signature,
+                                    slot: chip.slot,
+                                });
+
+                                console.log(`[Multisig] Chip ${chipIndex + 1} (${chip.address}) signed successfully`);
+                            }
+
+                            // Return signatures with chip identification
+                            // In production, these would be combined in a smart contract
+                            safeSendResponse({
+                                success: true,
+                                signedTransaction: null, // Multisig requires smart contract
+                                multisigSignatures: signatures,
+                                threshold: account.multisig.threshold,
+                                totalChips: account.multisig.chips.length,
+                                message: 'Multisig signatures collected. Requires smart contract deployment to combine.',
+                            });
+                            break;
+                        }
+
+                        // Check if account is chip account (single chip)
+                        if (account.isChipAccount && account.chipInfo) {
+                            // Chip account - sign with the chip
+                            const provider = await wallet.getProvider();
+                            const { HaloSigner } = await import('../halo/halo-signer.js');
+                            const haloSigner = new HaloSigner(account.address, account.chipInfo.slot, provider);
+                            const signedTx = await haloSigner.signTransaction(message.transaction);
+                            safeSendResponse({
+                                success: true,
+                                signedTransaction: signedTx,
+                                signedWithHalo: true,
+                                chipAddress: account.chipInfo.address,
+                            });
+                            break;
+                        }
+
+                        // Check if account is linked to HaLo chip (legacy linking)
                         const isHaloLinked = await HaloChip.isAccountLinked(account.address);
                         if (isHaloLinked) {
+                            // SECURITY: If account is linked to HaLo, ONLY allow HaLo signing
                             const provider = await wallet.getProvider();
                             const { HaloSigner } = await import('../halo/halo-signer.js');
                             const linkInfo = await chrome.storage.local.get(`halo_link_${account.address.toLowerCase()}`);
-                            const slot = linkInfo[`halo_link_${account.address.toLowerCase()}`]?.slot || 1;
+                            const linkData = linkInfo[`halo_link_${account.address.toLowerCase()}`];
+                            const slot = linkData?.slot || 1;
+
                             const haloSigner = new HaloSigner(account.address, slot, provider);
                             const signedTx = await haloSigner.signTransaction(message.transaction);
-                            safeSendResponse({ success: true, signedTransaction: signedTx, signedWithHalo: true });
+                            safeSendResponse({
+                                success: true,
+                                signedTransaction: signedTx,
+                                signedWithHalo: true,
+                                chipAddress: linkData?.chipAddress,
+                            });
                         } else {
+                            // Only allow private key signing for non-linked accounts
                             const signedTx = await wallet.signTransaction(message.transaction);
                             safeSendResponse({ success: true, signedTransaction: signedTx });
                         }
@@ -241,8 +678,42 @@ function handleMessage(
                             safeSendResponse({ success: false, error: 'No account selected or provided' });
                             break;
                         }
-                        const result = await HaloChip.linkAccount(accountAddress, message.slot || 1);
-                        safeSendResponse(result);
+
+                        // If keyInfo is provided from popup (gateway mode), store it directly
+                        if (message.keyInfo) {
+                            const linkData = {
+                                slot: message.slot || 1,
+                                publicKey: message.keyInfo.publicKey,
+                                chipAddress: message.keyInfo.address.toLowerCase(),
+                                walletAddress: accountAddress.toLowerCase(),
+                                linkedAt: Date.now(),
+                            };
+
+                            await chrome.storage.local.set({
+                                [`halo_link_${accountAddress.toLowerCase()}`]: linkData,
+                            });
+
+                            // SECURITY: Delete private key if requested (protects against theft)
+                            if (message.deletePrivateKey) {
+                                try {
+                                    await wallet.deletePrivateKey(accountAddress);
+                                    console.log(`[HALO_LINK] Private key deleted for ${accountAddress} - now HaLo-only access`);
+                                } catch (deleteError: any) {
+                                    console.warn(`[HALO_LINK] Failed to delete private key: ${deleteError.message}`);
+                                    // Continue anyway - link is still successful
+                                }
+                            }
+
+                            safeSendResponse({
+                                success: true,
+                                keyInfo: linkData,
+                                privateKeyDeleted: message.deletePrivateKey || false,
+                            });
+                        } else {
+                            // Fallback to direct NFC mode (if available)
+                            const result = await HaloChip.linkAccount(accountAddress, message.slot || 1);
+                            safeSendResponse(result);
+                        }
                     } catch (error: any) {
                         safeSendResponse({ success: false, error: error.message || 'Failed to link account' });
                     }
@@ -294,6 +765,38 @@ function handleMessage(
                         safeSendResponse(result);
                     } catch (error: any) {
                         safeSendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'RPC_REQUEST':
+                    // Handle generic RPC requests (eth_getBlockByNumber, etc.)
+                    try {
+                        const { method, params, chainId } = message;
+                        const targetChainId = chainId || 1; // Default to mainnet
+
+                        // Import RPC service
+                        const { rpcService } = await import('../core/rpc-service.js');
+
+                        // Try request with fallback RPCs
+                        const result = await rpcService.requestWithFallback(
+                            targetChainId,
+                            async (rpcUrl: string) => {
+                                const provider = new ethers.JsonRpcProvider(rpcUrl);
+                                return await provider.send(method, params || []);
+                            }
+                        );
+
+                        safeSendResponse({
+                            success: true,
+                            result: result,
+                            data: result,
+                        });
+                    } catch (error: any) {
+                        console.error('[RPC_REQUEST] Error:', error);
+                        safeSendResponse({
+                            success: false,
+                            error: error.message || 'RPC request failed',
+                        });
                     }
                     break;
 

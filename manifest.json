@@ -8,7 +8,9 @@
         "activeTab",
         "scripting",
         "nfc",
-        "alarms"
+        "alarms",
+        "tabs",
+        "system.display"
     ],
     "host_permissions": [
         "<all_urls>"
@@ -18,8 +20,12 @@
     },
     "content_scripts": [
         {
-            "matches": ["<all_urls>"],
-            "js": ["content/index.js"],
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "content/index.js"
+            ],
             "run_at": "document_start",
             "all_frames": true
         }
@@ -42,9 +48,16 @@
     },
     "web_accessible_resources": [
         {
-            "resources": ["inpage.js"],
-            "matches": ["<all_urls>"]
+            "resources": [
+                "inpage.js",
+                "popup/lib/libhalo.js",
+                "popup/expanded.html",
+                "popup/wolfy-logo.png",
+                "notification/index.html"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
         }
     ]
 }
-

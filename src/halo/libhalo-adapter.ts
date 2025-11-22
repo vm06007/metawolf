@@ -1,6 +1,7 @@
 /**
  * LibHaLo Adapter - Interface to LibHaLo library
  * Based on https://docs.arx.org/HaLo/overview
+ * Uses HaLo Gateway for phone-based NFC scanning
  */
 
 export interface LibHaLoKeyInfo {
@@ -14,120 +15,204 @@ export interface LibHaLoSignResult {
     messageHash: string;
 }
 
+export interface HaloGatewayPairInfo {
+    qrCode: string;
+    execURL: string;
+    serverVersion: {
+        tagName: string;
+        commitId: string;
+    };
+}
+
+export interface HaloGateway {
+    gatewayServerHttp?: string;
+    startPairing(): Promise<HaloGatewayPairInfo>;
+    waitConnected(): Promise<void>;
+    execHaloCmd(cmd: any): Promise<any>;
+    close(): Promise<void>;
+}
+
 export class LibHaLoAdapter {
+    private static gatewayUrl = 'wss://s1.halo-gateway.arx.org';
+    private static httpUrl = 'https://s1.halo-gateway.arx.org/e';
+
     /**
-     * Check if LibHaLo is available (via CDN or module)
+     * Check if LibHaLo is available (via local file or CDN)
      */
     static isAvailable(): boolean {
-        // Check if libHaLo is loaded
-        return typeof window !== 'undefined' && 'libHaLo' in window;
+        return typeof window !== 'undefined' && 'HaloGateway' in window;
     }
 
     /**
-     * Load LibHaLo from CDN if not available
+     * Load LibHaLo from local file
      */
     static async loadLibrary(): Promise<boolean> {
         if (this.isAvailable()) {
             return true;
         }
 
+        // Load from local file (CSP requires 'self' only)
         return new Promise((resolve) => {
             const script = document.createElement('script');
-            script.src = 'https://cdn.arx.org/libhalo.js'; // Update with actual CDN URL
-            script.onload = () => resolve(true);
-            script.onerror = () => resolve(false);
+            script.src = chrome.runtime.getURL('popup/lib/libhalo.js');
+            script.onload = () => {
+                // Check if HaloGateway is available
+                if (this.isAvailable()) {
+                    resolve(true);
+                } else {
+                    console.error('HaloGateway not found after loading libhalo.js');
+                    resolve(false);
+                }
+            };
+            script.onerror = () => {
+                console.error('Failed to load libhalo.js from local file');
+                resolve(false);
+            };
             document.head.appendChild(script);
         });
     }
 
     /**
-     * Get key information from HaLo chip slot
+     * Create a new HaloGateway instance
      */
-    static async getKeyInfo(slot: number = 1): Promise<LibHaLoKeyInfo | null> {
+    static async createGateway(themeName: string = 'default'): Promise<HaloGateway | null> {
         if (!this.isAvailable()) {
-            await this.loadLibrary();
+            const loaded = await this.loadLibrary();
+            if (!loaded) {
+                console.error('Failed to load LibHaLo library');
+                return null;
+            }
         }
 
         try {
-            // Using LibHaLo API (adjust based on actual API)
-            const haloChip = (window as any).libHaLo;
-            const keyInfo = await haloChip.getKeyInfo(slot);
+            const HaloGatewayClass = (window as any).HaloGateway;
+            if (!HaloGatewayClass) {
+                console.error('HaloGateway class not found');
+                return null;
+            }
 
-            return {
-                address: keyInfo.address || '',
-                publicKey: keyInfo.publicKey || '',
-                slot: slot,
-            };
+            const gate = new HaloGatewayClass(this.gatewayUrl, { themeName });
+            gate.gatewayServerHttp = this.httpUrl;
+            return gate;
         } catch (error) {
-            console.error('Error getting key info:', error);
+            console.error('Error creating HaloGateway:', error);
             return null;
         }
     }
 
     /**
-     * Sign message/hash with HaLo chip
+     * Get key information from HaLo chip slot using Gateway
+     */
+    static async getKeyInfo(
+        slot: number = 1,
+        onPairing?: (pairInfo: HaloGatewayPairInfo) => void
+    ): Promise<LibHaLoKeyInfo | null> {
+        const gate = await this.createGateway();
+        if (!gate) {
+            return null;
+        }
+
+        try {
+            // Start pairing and show QR code
+            const pairInfo = await gate.startPairing();
+            if (onPairing) {
+                onPairing(pairInfo);
+            }
+
+            // Wait for phone to connect
+            await gate.waitConnected();
+
+            // Execute command to get key info
+            const cmd = {
+                name: 'get_key_info',
+                keyNo: slot,
+            };
+
+            const result = await gate.execHaloCmd(cmd);
+            await gate.close();
+
+            if (result && result.address) {
+                return {
+                    address: result.address || '',
+                    publicKey: result.publicKey || '',
+                    slot: slot,
+                };
+            }
+
+            return null;
+        } catch (error) {
+            console.error('Error getting key info:', error);
+            try {
+                await gate.close();
+            } catch (e) {
+                // Ignore close errors
+            }
+            return null;
+        }
+    }
+
+    /**
+     * Sign message/hash with HaLo chip using Gateway
      */
     static async signMessage(
         messageHash: string,
         slot: number = 1,
-        password?: string
+        password?: string,
+        onPairing?: (pairInfo: HaloGatewayPairInfo) => void
     ): Promise<LibHaLoSignResult | null> {
-        if (!this.isAvailable()) {
-            await this.loadLibrary();
+        const gate = await this.createGateway();
+        if (!gate) {
+            return null;
         }
 
         try {
-            const haloChip = (window as any).libHaLo;
-            const result = await haloChip.sign(messageHash, {
-                slot: slot,
-                password: password,
-            });
+            // Start pairing and show QR code
+            const pairInfo = await gate.startPairing();
+            if (onPairing) {
+                onPairing(pairInfo);
+            }
 
-            return {
-                signature: result.signature || '',
-                messageHash: result.messageHash || messageHash,
+            // Wait for phone to connect
+            await gate.waitConnected();
+
+            // Execute sign command
+            const cmd = {
+                name: 'sign',
+                message: messageHash,
+                keyNo: slot,
             };
+
+            const result = await gate.execHaloCmd(cmd);
+            await gate.close();
+
+            if (result && result.signature) {
+                return {
+                    signature: result.signature || '',
+                    messageHash: result.messageHash || messageHash,
+                };
+            }
+
+            return null;
         } catch (error) {
             console.error('Error signing with HaLo:', error);
+            try {
+                await gate.close();
+            } catch (e) {
+                // Ignore close errors
+            }
             return null;
         }
     }
 
     /**
-     * Generate new key pair on HaLo chip
-     */
-    static async generateKey(
-        slot: number = 1,
-        password?: string
-    ): Promise<LibHaLoKeyInfo | null> {
-        if (!this.isAvailable()) {
-            await this.loadLibrary();
-        }
-
-        try {
-            const haloChip = (window as any).libHaLo;
-            const result = await haloChip.generateKey(slot, password);
-
-            return {
-                address: result.address || '',
-                publicKey: result.publicKey || '',
-                slot: slot,
-            };
-        } catch (error) {
-            console.error('Error generating key:', error);
-            return null;
-        }
-    }
-
-    /**
-     * Check if NFC is available
+     * Check if NFC is available (for direct NFC mode)
      */
     static isNFCAvailable(): boolean {
         return 'NDEFReader' in window;
     }
 
     /**
-     * Request NFC permission
+     * Request NFC permission (for direct NFC mode)
      */
     static async requestNFCPermission(): Promise<boolean> {
         if (!this.isNFCAvailable()) {
@@ -147,7 +232,7 @@ export class LibHaLoAdapter {
 
 declare global {
     interface Window {
-        libHaLo?: any;
+        HaloGateway?: any;
     }
 }
 

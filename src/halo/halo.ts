@@ -35,7 +35,7 @@ export class HaloChip {
         }
 
         try {
-            const reader = new NDEFReader();
+            const reader = new window.NDEFReader();
             await reader.scan();
             return true;
         } catch (error) {
@@ -82,8 +82,8 @@ export class HaloChip {
                             ? message.slice(2)
                             : message
                         : Array.from(message)
-                              .map((b) => b.toString(16).padStart(2, '0'))
-                              .join('');
+                            .map((b) => b.toString(16).padStart(2, '0'))
+                            .join('');
 
                 const result = await LibHaLoAdapter.signMessage(
                     messageHex,
@@ -110,8 +110,8 @@ export class HaloChip {
             typeof message === 'string'
                 ? message
                 : Array.from(message)
-                      .map((b) => b.toString(16).padStart(2, '0'))
-                      .join('');
+                    .map((b) => b.toString(16).padStart(2, '0'))
+                    .join('');
 
         const command = {
             action: 'sign',

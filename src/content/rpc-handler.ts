@@ -47,16 +47,16 @@ export class RPCHandler {
                         const networkResponse = await chrome.runtime.sendMessage({
                             type: 'GET_NETWORKS',
                         });
-                        let chainIdResponse = '0x1';
+                        let chainIdHex2 = '0x1';
                         if (networkResponse.success && networkResponse.networks) {
                             const selected = networkResponse.networks[0];
                             if (selected) {
-                                chainIdResponse = '0x' + selected.chainId.toString(16);
+                                chainIdHex2 = '0x' + selected.chainId.toString(16);
                             }
                         }
                         resolve({
                             id: message.id,
-                            result: chainIdResponse,
+                            result: chainIdHex2,
                             jsonrpc: '2.0',
                         });
                         break;

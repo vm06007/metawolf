@@ -7,7 +7,7 @@ import type { Transaction } from '../core/types.js';
  */
 export class HaloSigner extends ethers.AbstractSigner {
     private address: string;
-    protected provider?: ethers.Provider;
+    private provider?: ethers.Provider;
     private slot: number;
 
     constructor(address: string, slot: number = 1, provider?: ethers.Provider) {
@@ -21,8 +21,8 @@ export class HaloSigner extends ethers.AbstractSigner {
         return this.address;
     }
 
-    connect(provider: ethers.Provider | null): HaloSigner {
-        return new HaloSigner(this.address, this.slot, provider || undefined);
+    connect(provider: ethers.Provider): HaloSigner {
+        return new HaloSigner(this.address, this.slot, provider);
     }
 
     async signTransaction(transaction: Transaction): Promise<string> {

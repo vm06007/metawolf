@@ -1,8 +1,28 @@
-export interface Account {
+export interface ChipInfo {
     address: string;
+    publicKey: string;
+    slot: number;
+    name?: string;
+    linkedAt: number;
+}
+
+export interface MultisigConfig {
+    threshold: number; // Number of signatures required (e.g., 2 of 3)
+    chips: ChipInfo[]; // Array of chips that can sign
+    smartAccountAddress?: string; // Deployed smart contract address
+    deployed?: boolean; // Whether the contract is deployed on-chain
+    deploymentTxHash?: string; // Transaction hash of deployment
+}
+
+export interface Account {
+    address: string; // For single chip: chip address. For multisig: smart account address
     name?: string;
     encrypted?: boolean;
     haloLinked?: boolean;
+    // Chip-centric fields
+    isChipAccount?: boolean; // True if account is directly from chip
+    chipInfo?: ChipInfo; // Info for single chip account
+    multisig?: MultisigConfig; // Configuration for multisig account
 }
 
 export interface Transaction {
