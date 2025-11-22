@@ -14,23 +14,23 @@ export function renderAccountSelectorModal(
     const accountsHtml = accounts.map(account => {
         const isSelected = selectedAccount?.address?.toLowerCase() === account.address?.toLowerCase();
         const displayName = getDisplayName(account);
-        
+
         // Account type badges
         let typeBadge = '';
         if (account.isWatchOnly) {
-            typeBadge = '<span style="font-size: 11px; color: var(--r-neutral-foot); margin-left: 6px;">👁️ View-Only</span>';
+            typeBadge = '<span style="font-size: 11px; color: var(--r-neutral-foot);">👁️ View-Only</span>';
         } else if (account.isChipAccount) {
-            typeBadge = '<span style="font-size: 11px; color: var(--r-green-default); margin-left: 6px;">🔒 Chip</span>';
+            typeBadge = '<span style="font-size: 11px; color: var(--r-green-default);">🔒 Chip</span>';
         } else if (account.multisig) {
-            typeBadge = `<span style="font-size: 11px; color: var(--r-blue-default); margin-left: 6px;">🔐 Multisig (${account.multisig.threshold}/${account.multisig.chips.length})</span>`;
+            typeBadge = `<span style="font-size: 11px; color: var(--r-blue-default);">🔐 Multisig (${account.multisig.threshold}/${account.multisig.chips.length})</span>`;
         } else if (account.haloLinked) {
-            typeBadge = '<span style="font-size: 11px; color: var(--r-green-default); margin-left: 6px;">HaLo</span>';
+            typeBadge = '<span style="font-size: 11px; color: var(--r-green-default);">HaLo</span>';
         }
-        
+
         const canDelete = accounts.length > 1; // Can't delete if it's the last account
-        
+
         return `
-            <div class="account-selector-item ${isSelected ? 'selected' : ''}" 
+            <div class="account-selector-item ${isSelected ? 'selected' : ''}"
                  data-address="${account.address}"
                  style="
                      padding: 12px 16px;
@@ -79,7 +79,6 @@ export function renderAccountSelectorModal(
                         align-items: center;
                     ">
                         <span style="flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis;">${displayName}</span>
-                        ${typeBadge}
                     </div>
                     <div style="
                         font-size: 12px;
@@ -88,8 +87,9 @@ export function renderAccountSelectorModal(
                     ">${formatAddress(account.address)}</div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+                    ${typeBadge}
                     ${onEditAccount ? `
-                        <button class="account-edit-btn" 
+                        <button class="account-edit-btn"
                                 data-address="${account.address}"
                                 onclick="event.stopPropagation();"
                                 style="
@@ -113,7 +113,7 @@ export function renderAccountSelectorModal(
                         </button>
                     ` : ''}
                     ${canDelete && onDeleteAccount ? `
-                        <button class="account-delete-btn" 
+                        <button class="account-delete-btn"
                                 data-address="${account.address}"
                                 onclick="event.stopPropagation();"
                                 style="
@@ -170,7 +170,6 @@ export function renderAccountSelectorModal(
                     align-items: center;
                     justify-content: space-between;
                     border-bottom: 1px solid var(--r-neutral-line);
-                    background: var(--r-neutral-bg2);
                 ">
                     <h3 style="
                         font-size: 20px;

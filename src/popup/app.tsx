@@ -21,7 +21,10 @@ import { renderDeleteAccountModal } from './components/DeleteAccountModal';
 import { renderSettingsMenu } from './components/SettingsMenu';
 import { renderEthPricePanel, EthPriceData } from './components/EthPricePanel';
 import { renderPrivateKeyModal } from './components/PrivateKeyModal';
+import { renderUnifiedBalancePanel } from './components/UnifiedBalancePanel';
 import { ethPriceService } from './services/eth-price-service';
+import { unifiedBalanceService, UnifiedBalanceData } from './services/unified-balance-service';
+import { createEIP1193Provider } from './services/eip1193-provider';
 import { ethers } from 'ethers';
 
 interface AppState {
@@ -66,6 +69,8 @@ interface AppState {
     privateKeyToShow?: string;
     privateKeyRevealed: boolean;
     privateKeyModalFirstRender: boolean;
+    unifiedBalanceData: UnifiedBalanceData | null;
+    unifiedBalanceLoading: boolean;
 }
 
 export class PopupApp {
@@ -107,6 +112,8 @@ export class PopupApp {
         privateKeyToShow: undefined,
         privateKeyRevealed: false,
         privateKeyModalFirstRender: true,
+        unifiedBalanceData: null,
+        unifiedBalanceLoading: false,
     };
 
     private walletService: WalletService;
@@ -185,7 +192,120 @@ export class PopupApp {
         const selected = await this.walletService.getSelectedAccount();
         if (selected) {
             this.state.selectedAccount = selected;
-            this.state.balance = '0.00'; // TODO: Load actual balance
+            this.state.balance = ''; // Don't show balance until unified balance loads
+            // Initialize and load unified balances (don't block on errors)
+            this.initializeUnifiedBalance(selected).catch((error) => {
+                console.warn('[PopupApp] Unified balance initialization failed, continuing without it:', error);
+                // App should still work without unified balance
+            });
+        }
+    }
+
+    async initializeUnifiedBalance(account: any) {
+        if (!account || !account.address) {
+            return;
+        }
+
+        // Find a non-watch-only account to use for signing
+        // If the selected account is watch-only, find the first non-watch-only account
+        let accountToUse = account;
+        if (account.isWatchOnly) {
+            const nonWatchOnlyAccount = this.state.accounts.find(acc => !acc.isWatchOnly);
+            if (!nonWatchOnlyAccount) {
+                console.warn('[PopupApp] No non-watch-only accounts available for unified balance');
+                this.state.unifiedBalanceLoading = false;
+                this.state.unifiedBalanceData = {
+                    totalBalanceUSD: 0,
+                    assets: [],
+                    loading: false,
+                    error: 'No accounts with private keys available. Unified balance requires a signable account.',
+                };
+                return;
+            }
+            accountToUse = nonWatchOnlyAccount;
+            console.log(`[PopupApp] Selected account is watch-only, using account ${accountToUse.address} instead`);
+        }
+
+        // Ensure Buffer is available before initializing SDK
+        if (typeof (window as any).Buffer === 'undefined') {
+            console.warn('[PopupApp] Buffer not available, waiting for polyfills...');
+            // Wait a bit for polyfills to load
+            await new Promise(resolve => setTimeout(resolve, 100));
+
+            if (typeof (window as any).Buffer === 'undefined') {
+                console.error('[PopupApp] Buffer still not available after wait');
+                this.state.unifiedBalanceLoading = false;
+                this.state.unifiedBalanceData = {
+                    totalBalanceUSD: 0,
+                    assets: [],
+                    loading: false,
+                    error: 'Buffer polyfill not loaded',
+                };
+                return;
+            }
+        }
+
+        try {
+            // Clean up previous SDK instance
+            unifiedBalanceService.deinit();
+
+            // Get a provider for Ethereum mainnet (Nexus SDK needs a provider)
+            const provider = new ethers.JsonRpcProvider('https://mainnet.infura.io/v3/db2e296c0a0f475fb6c3a3281a0c39d6');
+
+            // Create EIP-1193 provider wrapper
+            // Use a non-watch-only account for signing (required for SIWE)
+            const eip1193Provider = createEIP1193Provider(provider, accountToUse.address);
+
+            // Initialize the SDK
+            // This may fail in browser extension context due to domain validation
+            // We handle the error and show a user-friendly message
+            await unifiedBalanceService.initialize(eip1193Provider, 'mainnet');
+
+            // Fetch unified balances
+            await this.loadUnifiedBalances();
+            this.render(); // Update UI after loading
+        } catch (error: any) {
+            console.error('[PopupApp] Error initializing unified balance:', error);
+            this.state.unifiedBalanceLoading = false;
+            this.state.unifiedBalanceData = {
+                totalBalanceUSD: 0,
+                assets: [],
+                loading: false,
+                error: error.message || 'Failed to initialize unified balance',
+            };
+            this.render(); // Update UI to show error
+        }
+    }
+
+    async loadUnifiedBalances() {
+        try {
+            this.state.unifiedBalanceLoading = true;
+            this.render(); // Show loading state
+
+            const data = await unifiedBalanceService.getUnifiedBalances();
+            this.state.unifiedBalanceData = data;
+
+            // Update the balance display with total USD value
+            if (data.totalBalanceUSD > 0) {
+                this.state.balance = data.totalBalanceUSD.toFixed(2);
+            }
+
+            console.log('[PopupApp] Unified balances loaded:', {
+                totalUSD: data.totalBalanceUSD,
+                assetCount: data.assets.length,
+                hasError: !!data.error
+            });
+        } catch (error: any) {
+            console.error('[PopupApp] Error loading unified balances:', error);
+            this.state.unifiedBalanceData = {
+                totalBalanceUSD: 0,
+                assets: [],
+                loading: false,
+                error: error.message || 'Failed to load unified balances',
+            };
+        } finally {
+            this.state.unifiedBalanceLoading = false;
+            this.render(); // Update UI with results
         }
     }
 
@@ -375,8 +495,14 @@ export class PopupApp {
                 () => this.handleSettings(),
                 () => this.handleExpand(),
                 formatAddress,
-                true
+                true,
+                this.state.unifiedBalanceData,
+                this.state.unifiedBalanceLoading
             )}
+                            ${renderUnifiedBalancePanel({
+                data: this.state.unifiedBalanceData,
+                loading: this.state.unifiedBalanceLoading,
+            })}
                             ${renderDashboardPanel(DEFAULT_PANEL_ITEMS, true)}
                             <div class="transaction-section">
                                 ${renderTransactionList(this.getTransactionsForAccount(selectedAccount), selectedAccount)}
@@ -484,8 +610,14 @@ export class PopupApp {
                 () => this.handleSettings(),
                 () => this.handleExpand(),
                 formatAddress,
-                false
+                false,
+                this.state.unifiedBalanceData,
+                this.state.unifiedBalanceLoading
             )}
+                    ${renderUnifiedBalancePanel({
+                data: this.state.unifiedBalanceData,
+                loading: this.state.unifiedBalanceLoading,
+            })}
                     ${renderDashboardPanel(DEFAULT_PANEL_ITEMS)}
                     <div style="padding: 0 16px 4px 16px;">
                         ${renderEthPricePanel(this.state.ethPriceData, this.state.ethPriceLoading)}
@@ -1135,6 +1267,10 @@ export class PopupApp {
         await this.walletService.selectAccount(account.address);
         this.state.selectedAccount = account;
         this.hideAccountSelector();
+
+        // Reinitialize unified balance for the new account
+        await this.initializeUnifiedBalance(account);
+
         await this.loadAccounts();
 
         // Update all connected dapp connections to use the new account

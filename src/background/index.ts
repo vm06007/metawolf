@@ -9,6 +9,7 @@ import { EIP5742 } from '../eips/eip5742.js';
 import { HaloChip } from '../halo/halo.js';
 import { handleSignMessage, handleSignTypedData } from './message-handler.js';
 import type { Transaction, EIP7702Transaction, EIP5742Batch } from '../core/types.js';
+import { updateLockIndicator } from './icon-utils.js';
 
 console.log('[Wolfy] Imports loaded');
 
@@ -33,6 +34,10 @@ async function ensureWalletReady() {
     try {
         await ensureWalletReady();
         console.log('[Wolfy] Wallet initialized');
+
+        // Update icon/badge based on initial lock state
+        const isUnlocked = wallet.isUnlocked();
+        await updateLockIndicator(!isUnlocked);
 
         // Initialize RPC service
         const { rpcService } = await import('../core/rpc-service.js');
@@ -892,11 +897,17 @@ function handleMessage(
 
                 case 'UNLOCK':
                     const unlocked = await wallet.unlock(message.password || '');
+                    // Update icon/badge when unlocked
+                    if (unlocked) {
+                        await updateLockIndicator(false);
+                    }
                     safeSendResponse({ success: unlocked });
                     break;
 
                 case 'LOCK':
                     await wallet.lock();
+                    // Update icon/badge when locked
+                    await updateLockIndicator(true);
                     safeSendResponse({ success: true });
                     break;
 

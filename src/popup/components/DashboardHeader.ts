@@ -1,3 +1,6 @@
+import { CHAIN_METADATA } from '@avail-project/nexus-core';
+import { getChainWhiteLogo } from '../utils/chain-icons';
+
 export function renderDashboardHeader(
     selectedAccount: any,
     balance: string,
@@ -8,7 +11,9 @@ export function renderDashboardHeader(
     onSettings: () => void,
     onExpand: () => void,
     formatAddress: (addr: string) => string,
-    isExpanded: boolean = false
+    isExpanded: boolean = false,
+    unifiedBalanceData: any = null,
+    unifiedBalanceLoading: boolean = false
 ): string {
     if (!selectedAccount) return '';
 
@@ -64,11 +69,107 @@ export function renderDashboardHeader(
                     </button>
                 </div>
             </div>
+            ${renderUnifiedBalanceInHeader(unifiedBalanceData, unifiedBalanceLoading, balance)}
+        </div>
+    `;
+}
+
+function renderUnifiedBalanceInHeader(data: any, loading: boolean, fallbackBalance: string): string {
+    if (loading) {
+        // Show loading skeleton instead of 0.00
+        return `
+            <div class="unified-balance-in-header">
+                <div class="balance-view">
+                    <div class="balance-amount" id="balance-amount" style="width: 150px; height: 32px; background: rgba(255,255,255,0.1); border-radius: 4px; animation: pulse 1.5s ease-in-out infinite;"></div>
+                </div>
+            </div>
+        `;
+    }
+
+    if (!data || data.error) {
+        // Don't show anything if there's no data or error - avoid showing 0.00
+        return '';
+    }
+
+    const formatUSD = (value: number): string => {
+        if (value < 0.01) return '<$0.01';
+        return `$${value.toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',')}`;
+    };
+
+    // Get unique chains from all assets
+    const chainIds = new Set<number>();
+    data.assets.forEach((asset: any) => {
+        asset.breakdown?.forEach((breakdown: any) => {
+            chainIds.add(breakdown.chain.id);
+        });
+    });
+
+    const chainLogos = Array.from(chainIds).slice(0, 8);
+    const remainingChains = chainIds.size - chainLogos.length;
+
+    // Calculate 24h change (placeholder)
+    const change24h = 1.51;
+
+    const getChainLogo = (chainId: number): string => {
+        // Use white logo from clone folder for better visibility on blue background
+        const whiteLogo = getChainWhiteLogo(chainId);
+        if (whiteLogo) return whiteLogo;
+        // Fallback to regular logo from SDK
+        return CHAIN_METADATA[chainId]?.logo || '';
+    };
+
+    const getChainName = (chainId: number): string => {
+        return CHAIN_METADATA[chainId]?.name || `Chain ${chainId}`;
+    };
+
+    return `
+        <div class="unified-balance-in-header">
             <div class="balance-view">
                 <div class="balance-amount" id="balance-amount">
-                    ${balance || '0.00'}
-                    <span class="balance-currency">USD</span>
+                    ${formatUSD(data.totalBalanceUSD)}
                 </div>
+                ${change24h !== null ? `
+                    <div class="balance-change" style="color: ${change24h >= 0 ? '#27C193' : '#F24822'}; margin-left: 12px;">
+                        ${change24h >= 0 ? '+' : ''}${change24h.toFixed(2)}%
+                    </div>
+                ` : ''}
+            </div>
+            
+            <div class="chain-logos-row-header">
+                <div class="chain-logos-header">
+                    ${chainLogos.map((chainId: number) => {
+        const logo = getChainLogo(chainId);
+        return `
+                            <div class="chain-logo-header" title="${getChainName(chainId)}">
+                                ${logo ? `
+                                    <img src="${logo}" alt="${getChainName(chainId)}" 
+                                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    <div class="chain-logo-fallback-header" style="display: none;">${getChainName(chainId).charAt(0)}</div>
+                                ` : `
+                                    <div class="chain-logo-fallback-header">${getChainName(chainId).charAt(0)}</div>
+                                `}
+                            </div>
+                        `;
+    }).join('')}
+                    ${remainingChains > 0 ? `
+                        <div class="chain-logo-more-header">+${remainingChains}</div>
+                    ` : ''}
+                </div>
+            </div>
+
+            <div class="unified-balance-chart-header">
+                <svg width="100%" height="60" viewBox="0 0 300 60" preserveAspectRatio="none">
+                    <defs>
+                        <linearGradient id="chartGradientHeader" x1="0%" y1="0%" x2="0%" y2="100%">
+                            <stop offset="0%" style="stop-color: #27C193; stop-opacity: 0.3"/>
+                            <stop offset="100%" style="stop-color: #27C193; stop-opacity: 0"/>
+                        </linearGradient>
+                    </defs>
+                    <path d="M0,50 Q75,45 150,30 T300,10" 
+                          fill="url(#chartGradientHeader)" 
+                          stroke="#27C193" 
+                          stroke-width="2"/>
+                </svg>
             </div>
         </div>
     `;

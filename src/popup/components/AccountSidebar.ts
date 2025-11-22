@@ -47,14 +47,13 @@ export function renderAccountSidebar(
                 <div class="account-sidebar-info">
                     <div class="account-sidebar-name">
                         <span class="account-name-text">${displayName}</span>
-                        ${typeBadge}
                     </div>
                     <div class="account-sidebar-address">${formatAddress(account.address)}</div>
                 </div>
-                <div style="display: flex; align-items: center; gap: 4px; margin-left: auto; opacity: 0;" 
-                     class="account-sidebar-actions"
-                     onmouseenter="this.style.opacity='1'"
-                     onmouseleave="this.style.opacity='0'">
+                <div style="display: flex; align-items: center; gap: 4px; margin-left: auto;">
+                    ${typeBadge ? `<div style="display: flex; align-items: center; margin-right: 4px;">${typeBadge}</div>` : ''}
+                    <div style="display: flex; align-items: center; gap: 4px;" 
+                         class="account-sidebar-actions">
                     ${onEditAccount ? `
                         <button class="account-sidebar-edit-btn"
                                 data-address="${account.address}"
@@ -103,6 +102,7 @@ export function renderAccountSidebar(
                             </svg>
                         </button>
                     ` : ''}
+                    </div>
                 </div>
             </div>
         `;

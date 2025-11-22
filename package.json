@@ -4,6 +4,7 @@
     "description": "Wallet extension with EIP-7702, EIP-5792, and Arx HaLo chip support",
     "type": "module",
     "scripts": {
+        "postinstall": "node scripts/patch-nexus-sdk.js",
         "dev": "bun run build:watch",
         "build": "bun run build:all",
         "build:all": "bun run build:clean && bun run build:background && bun run build:content && bun run build:popup && bun run build:notification && bun run build:inpage && bun run build:assets",
@@ -11,8 +12,9 @@
         "build:background": "cd $PWD && esbuild src/background/index.ts --bundle --outfile=dist/background/index.js --target=chrome96 --platform=browser",
         "build:content": "cd $PWD && esbuild src/content/index.ts --bundle --outfile=dist/content/index.js --target=chrome96 --platform=browser",
         "build:inpage": "cd $PWD && esbuild src/inpage.ts --bundle --outfile=dist/inpage.js --target=chrome96 --platform=browser --format=iife --global-name=WolfyProvider",
-        "build:popup": "bun run build:popup:html && bun run build:popup:js && bun run build:popup:expanded",
+        "build:popup": "bun run build:popup:html && bun run build:popup:js && bun run build:popup:expanded && bun run build:popup:polyfill",
         "build:popup:js": "bun build src/popup/index.tsx --outdir dist/popup --target browser --format esm",
+        "build:popup:polyfill": "bun build src/popup/polyfill-loader.ts --outdir dist/popup --target browser --format esm --outfile polyfill-loader.js",
         "build:popup:html": "mkdir -p dist/popup && cp src/popup/index.html dist/popup/index.html && cp src/popup/rabby-styles.css dist/popup/rabby-styles.css && cp src/popup/wolfy-logo.png dist/popup/wolfy-logo.png 2>/dev/null || true",
         "build:popup:expanded": "bun build src/popup/expanded.tsx --outdir dist/popup --target browser --format esm --outfile expanded.js && cp src/popup/expanded.html dist/popup/expanded.html",
         "build:notification": "bun run build:notification:html && bun run build:notification:js",
@@ -23,6 +25,7 @@
         "build:watch": "bun run --watch build:all"
     },
     "dependencies": {
+        "@avail-project/nexus-core": "^0.0.2",
         "@ethersproject/abi": "^5.7.0",
         "@ethersproject/address": "^5.7.2",
         "@ethersproject/bignumber": "^5.7.0",
@@ -36,12 +39,17 @@
         "@ethersproject/signing-key": "^5.7.1",
         "@ethersproject/transactions": "^5.7.1",
         "@ethersproject/wallet": "^5.7.2",
-        "ethers": "^6.0.0"
+        "buffer": "^6.0.3",
+        "ethers": "^6.0.0",
+        "process": "^0.11.10",
+        "viem": "^2.39.0"
     },
     "devDependencies": {
         "@types/chrome": "^0.0.268",
         "@types/react": "^18.2.0",
         "@types/react-dom": "^18.2.0",
+        "patch-package": "^8.0.1",
+        "postinstall-postinstall": "^2.1.0",
         "typescript": "^5.3.0"
     }
 }

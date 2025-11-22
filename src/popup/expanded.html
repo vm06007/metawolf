@@ -53,6 +53,8 @@
             </div>
         </div>
     </div>
-    <script type="module" src="expanded.js"></script>
+    <!-- Load polyfill loader FIRST - this will load Buffer and then load the main app -->
+    <script type="module" src="polyfill-loader.js"></script>
 </body>
+
 </html>

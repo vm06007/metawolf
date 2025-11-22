@@ -53,11 +53,15 @@
                 "popup/lib/libhalo.js",
                 "popup/expanded.html",
                 "popup/wolfy-logo.png",
+                "popup/lock.svg",
                 "notification/index.html"
             ],
             "matches": [
                 "<all_urls>"
             ]
         }
-    ]
+    ],
+    "content_security_policy": {
+        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+    }
 }
