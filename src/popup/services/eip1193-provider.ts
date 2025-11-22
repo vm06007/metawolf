@@ -108,8 +108,44 @@ export function createEIP1193Provider(provider: ethers.JsonRpcProvider, address:
                     }
                     return null;
                 case 'eth_sendTransaction':
-                    // Transaction signing - may be needed for some SDK operations
-                    throw new Error('eth_sendTransaction not supported - use wallet UI for transactions');
+                    // Transaction signing and sending - required by Nexus SDK
+                    if (args.params && args.params[0]) {
+                        const txParams = args.params[0];
+                        
+                        try {
+                            // Send transaction to background script for signing and sending
+                            const response = await chrome.runtime.sendMessage({
+                                type: 'SEND_TRANSACTION',
+                                transaction: {
+                                    to: txParams.to,
+                                    value: txParams.value || '0x0',
+                                    data: txParams.data || '0x',
+                                    gasLimit: txParams.gas || txParams.gasLimit,
+                                    gasPrice: txParams.gasPrice,
+                                    maxFeePerGas: txParams.maxFeePerGas,
+                                    maxPriorityFeePerGas: txParams.maxPriorityFeePerGas,
+                                    nonce: txParams.nonce,
+                                    chainId: txParams.chainId ? parseInt(txParams.chainId, 16) : undefined,
+                                    type: txParams.type,
+                                },
+                                address: address,
+                            });
+                            
+                            if (chrome.runtime.lastError) {
+                                throw new Error(chrome.runtime.lastError.message);
+                            }
+                            
+                            if (response?.success && response?.transactionHash) {
+                                return response.transactionHash;
+                            } else {
+                                throw new Error(response?.error || 'Failed to send transaction');
+                            }
+                        } catch (error: any) {
+                            console.error('[EIP1193Provider] Error sending transaction:', error);
+                            throw error;
+                        }
+                    }
+                    throw new Error('Invalid parameters for eth_sendTransaction');
                 default:
                     // For other methods, try to call the provider directly
                     try {
