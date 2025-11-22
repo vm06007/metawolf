@@ -1,9 +1,10 @@
 import { WalletService } from './services/wallet-service';
 import { HaloService } from './services/halo-service';
 import { formatAddress, getDisplayName } from './utils/account';
-
+import { renderDashboardHeader } from './components/DashboardHeader';
+import { renderDashboardPanel, DEFAULT_PANEL_ITEMS } from './components/DashboardPanel';
 import { renderLockScreen } from './components/LockScreen';
-
+import { renderAccountSelectorModal } from './components/AccountSelectorModal';
 import { renderAccountSidebar } from './components/AccountSidebar';
 import { renderTransactionList, Transaction } from './components/TransactionList';
 import { renderAddWalletModal, ADD_WALLET_OPTIONS } from './components/AddWalletModal';
@@ -287,6 +288,7 @@ export class PopupApp {
 
         // Render Rabby-style dashboard
         const selectedAccount = this.state.selectedAccount;
+        const displayName = selectedAccount ? getDisplayName(selectedAccount) : 'Account';
 
         this.attachDashboardListeners();
     }
@@ -430,6 +432,118 @@ export class PopupApp {
                     }
                 }
             });
+        });
+
+        // Account sidebar items (expanded view)
+        document.getElementById('sidebar-add-wallet-btn')?.addEventListener('click', () => this.showAddWalletModal());
+        document.getElementById('sidebar-collapse-btn')?.addEventListener('click', () => this.handleToggleSidebar());
+        document.querySelectorAll('.account-sidebar-item').forEach(item => {
+            item.addEventListener('click', () => {
+                const address = item.getAttribute('data-address');
+                if (address) {
+                    const account = this.state.accounts.find(acc => acc.address === address);
+                    if (account) {
+                        this.handleSelectAccount(account);
+                    }
+                }
+            });
+        });
+
+        // Account sidebar delete buttons (expanded view)
+        document.querySelectorAll('.account-sidebar-delete-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const address = btn.getAttribute('data-address');
+                if (address) {
+                    const account = this.state.accounts.find(acc => acc.address === address);
+                    if (account) {
+                        this.handleDeleteAccount(account);
+                    }
+                }
+            });
+        });
+
+        // Add wallet modal
+        document.getElementById('add-wallet-close')?.addEventListener('click', () => this.hideAddWalletModal());
+        document.getElementById('add-wallet-overlay')?.addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                this.hideAddWalletModal();
+            }
+        });
+        document.querySelectorAll('.add-wallet-option').forEach(item => {
+            item.addEventListener('click', () => {
+                const optionId = item.getAttribute('data-option-id');
+                if (optionId) {
+                    this.handleAddWalletOption(optionId);
+                }
+            });
+        });
+
+        // Create account form
+        document.getElementById('create-account-overlay')?.addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                this.hideCreateAccountForm();
+            }
+        });
+        document.getElementById('create-account-cancel')?.addEventListener('click', () => this.hideCreateAccountForm());
+        document.getElementById('create-account-confirm')?.addEventListener('click', () => {
+            const nameInput = document.getElementById('create-account-name') as HTMLInputElement;
+            const name = nameInput?.value.trim() || undefined;
+            this.handleCreateAccountConfirm(name);
+        });
+
+        // Import account form
+        document.getElementById('import-account-overlay')?.addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                this.hideImportAccountForm();
+            }
+        });
+        document.getElementById('import-account-cancel')?.addEventListener('click', () => this.hideImportAccountForm());
+        document.getElementById('import-account-confirm')?.addEventListener('click', () => {
+            const privateKeyInput = document.getElementById('import-account-private-key') as HTMLTextAreaElement;
+            const nameInput = document.getElementById('import-account-name') as HTMLInputElement;
+            const privateKey = privateKeyInput?.value.trim();
+            const name = nameInput?.value.trim() || undefined;
+            if (privateKey) {
+                this.handleImportAccountConfirm(privateKey, name);
+            }
+        });
+
+        // Create multisig form
+        document.getElementById('create-multisig-overlay')?.addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                this.hideCreateMultisigForm();
+            }
+        });
+        document.getElementById('multisig-cancel')?.addEventListener('click', () => this.hideCreateMultisigForm());
+        document.getElementById('multisig-confirm')?.addEventListener('click', () => {
+            const numChipsInput = document.getElementById('multisig-num-chips') as HTMLInputElement;
+            const thresholdInput = document.getElementById('multisig-threshold') as HTMLInputElement;
+            const nameInput = document.getElementById('multisig-name') as HTMLInputElement;
+            const numChips = parseInt(numChipsInput?.value || '2');
+            const threshold = parseInt(thresholdInput?.value || '2');
+            const name = nameInput?.value.trim() || undefined;
+
+            // Validate
+            const errorEl = document.getElementById('multisig-error');
+            if (numChips < 2 || numChips > 3) {
+                if (errorEl) {
+                    errorEl.style.display = 'block';
+                    errorEl.textContent = 'Please enter 2 or 3 chips';
+                }
+                return;
+            }
+            if (threshold < 1 || threshold > numChips) {
+                if (errorEl) {
+                    errorEl.style.display = 'block';
+                    errorEl.textContent = `Threshold must be between 1 and ${numChips}`;
+                }
+                return;
+            }
+            if (errorEl) {
+                errorEl.style.display = 'none';
+            }
+            this.handleCreateMultisigConfirm(numChips, threshold, name);
         });
     }
 
