@@ -2332,6 +2332,34 @@ function handleMessage(
                     }
                     break;
 
+                case 'FIREFLY_CONNECTION_RESULT':
+                    // Forward Firefly connection result from firefly-connect.html tab
+                    // Store it temporarily so popup can retrieve it via storage listener
+                    try {
+                        const requestId = message.requestId;
+                        if (requestId) {
+                            // Store the result temporarily
+                            await chrome.storage.local.set({
+                                [`firefly_result_${requestId}`]: {
+                                    success: message.success,
+                                    address: message.address,
+                                    deviceInfo: message.deviceInfo,
+                                    error: message.error,
+                                    timestamp: Date.now(),
+                                },
+                            });
+
+                            // Response not needed - popup will get it via storage listener
+                            safeSendResponse({ success: true, forwarded: true });
+                        } else {
+                            safeSendResponse({ success: false, error: 'Missing requestId' });
+                        }
+                    } catch (error: any) {
+                        console.error('[FIREFLY_CONNECTION_RESULT] Error:', error);
+                        safeSendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
                 case 'SIGN_MULTISIG_DEPLOYMENT':
                 case 'SIGN_MULTISIG_TRANSACTION':
                     // Sign transaction with a specific Halo chip for multisig operations
