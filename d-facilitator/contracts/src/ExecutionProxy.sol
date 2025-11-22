@@ -8,7 +8,7 @@ contract ExecutionProxy {
     address public immutable authorizedCaller;
 
     // Events
-    event ExecutionRequested(
+    event ExecutionSucceeded(
         address indexed caller,
         address indexed target,
         bytes data,
@@ -72,7 +72,7 @@ contract ExecutionProxy {
 
         if (success) {
             // Emit success event
-            emit ExecutionRequested(
+            emit ExecutionSucceeded(
                 msg.sender,
                 target,
                 data,
@@ -148,7 +148,7 @@ contract ExecutionProxy {
         }
 
         // Emit success event
-        emit ExecutionRequested(
+        emit ExecutionSucceeded(
             msg.sender,
             target,
             data,

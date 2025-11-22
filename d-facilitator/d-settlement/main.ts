@@ -9,7 +9,7 @@ import {
   bytesToHex,
   TxStatus
 } from "@chainlink/cre-sdk"
-import { encodeAbiParameters, parseAbiParameters, encodeFunctionData, parseErc6492Signature, type Hex } from "viem"
+import { encodeAbiParameters, parseAbiParameters, encodeFunctionData, parseErc6492Signature, type Hex, keccak256, toHex, parseAbi, decodeEventLog, type Address } from "viem"
 import {
   PaymentRequirementsSchema,
   type PaymentRequirements,
@@ -30,6 +30,9 @@ import { verify } from "x402/facilitator"
 type Config = {
   authorizedEVMAddress: string;
   settlementReceiverAddress: string; // SettlementReceiver contract address
+  executionProxyAddress: string; // ExecutionProxy contract address
+  chainSelectorName: string; // Chain selector name for EVM log trigger (e.g., "ethereum-testnet-sepolia")
+  isTestnet: boolean; // Whether the chain is a testnet
   // Note: chainSelectorName is now determined from paymentRequirements.network in the request
   // This allows the workflow to handle payments on any supported network dynamically
   gasLimit?: string; // Optional, defaults to "500000"
@@ -43,6 +46,137 @@ type SettleRequest = {
   paymentPayload: PaymentPayload;
   paymentRequirements: PaymentRequirements;
 };
+
+// Event ABIs for ExecutionProxy
+const executionProxyAbi = parseAbi([
+  "event ExecutionSucceeded(address indexed caller, address indexed target, bytes data, uint256 value, bool success, bytes result)",
+  "event ExecutionFailed(address indexed caller, address indexed target, bytes data, uint256 value, string reason)"
+]);
+
+/// @notice Log payload structure from EVM log trigger
+type EVMLogPayload = {
+  address: string;
+  topics: Uint8Array[];
+  data: Uint8Array;
+  blockNumber?: bigint;
+  transactionHash?: string;
+  logIndex?: number;
+};
+
+/// @notice Handles EVM log events from ExecutionProxy contract
+/// @param runtime The CRE runtime
+/// @param payload The log payload containing event data
+/// @returns A string summary of the processed event
+async function onEVMLogTrigger(runtime: Runtime<Config>, payload: EVMLogPayload): Promise<string> {
+  try {
+    runtime.log("\n=== EVM Log Event Detected ===");
+    runtime.log(`Timestamp: ${new Date().toISOString()}`);
+    
+    // Extract log data
+    const logAddress = payload.address;
+    const logTopics = payload.topics || [];
+    const logData = payload.data || new Uint8Array(0);
+
+    runtime.log(`Contract Address: ${logAddress}`);
+    runtime.log(`Topics Count: ${logTopics.length}`);
+    runtime.log(`Data Length: ${logData.length} bytes`);
+
+    // Verify it's from ExecutionProxy
+    const isExecutionProxy = logAddress.toLowerCase() === runtime.config.executionProxyAddress.toLowerCase();
+
+    if (!isExecutionProxy) {
+      runtime.log(`Warning: Event from unknown contract: ${logAddress}`);
+      return JSON.stringify({ status: "ignored", reason: "unknown_contract" });
+    }
+
+    // Get event signature from topics[0]
+    const eventSignature = logTopics.length > 0 ? bytesToHex(logTopics[0]) : null;
+    
+    if (!eventSignature) {
+      runtime.log("Warning: No event signature found in topics");
+      return JSON.stringify({ status: "error", reason: "no_signature" });
+    }
+
+    // Calculate event selectors for comparison
+    const executionSucceededHash = keccak256(toHex("ExecutionSucceeded(address,address,bytes,uint256,bool,bytes)"));
+    const executionFailedHash = keccak256(toHex("ExecutionFailed(address,address,bytes,uint256,string)"));
+
+    if (eventSignature === executionSucceededHash) {
+      // Decode ExecutionSucceeded event
+      try {
+        const decoded = decodeEventLog({
+          abi: executionProxyAbi,
+          data: bytesToHex(logData),
+          topics: logTopics.map(t => bytesToHex(t)),
+          eventName: "ExecutionSucceeded",
+        });
+
+        runtime.log(`\n--- ExecutionProxy.ExecutionSucceeded ---`);
+        runtime.log(`Caller: ${decoded.args.caller}`);
+        runtime.log(`Target: ${decoded.args.target}`);
+        runtime.log(`Value: ${decoded.args.value.toString()}`);
+        runtime.log(`Success: ${decoded.args.success}`);
+        runtime.log(`Data Length: ${decoded.args.data.length} bytes`);
+        runtime.log(`Result Length: ${decoded.args.result.length} bytes`);
+
+        return JSON.stringify({
+          status: "processed",
+          contract: "ExecutionProxy",
+          event: "ExecutionSucceeded",
+          caller: decoded.args.caller,
+          target: decoded.args.target,
+          value: decoded.args.value.toString(),
+          success: decoded.args.success,
+          dataLength: decoded.args.data.length,
+          resultLength: decoded.args.result.length,
+        });
+      } catch (error) {
+        runtime.log(`Error decoding ExecutionProxy.ExecutionSucceeded: ${error instanceof Error ? error.message : String(error)}`);
+        return JSON.stringify({ status: "error", reason: "decode_failed" });
+      }
+    } else if (eventSignature === executionFailedHash) {
+      // Decode ExecutionFailed event
+      try {
+        const decoded = decodeEventLog({
+          abi: executionProxyAbi,
+          data: bytesToHex(logData),
+          topics: logTopics.map(t => bytesToHex(t)),
+          eventName: "ExecutionFailed",
+        });
+
+        runtime.log(`\n--- ExecutionProxy.ExecutionFailed ---`);
+        runtime.log(`Caller: ${decoded.args.caller}`);
+        runtime.log(`Target: ${decoded.args.target}`);
+        runtime.log(`Value: ${decoded.args.value.toString()}`);
+        runtime.log(`Reason: ${decoded.args.reason}`);
+        runtime.log(`Data Length: ${decoded.args.data.length} bytes`);
+
+        return JSON.stringify({
+          status: "processed",
+          contract: "ExecutionProxy",
+          event: "ExecutionFailed",
+          caller: decoded.args.caller,
+          target: decoded.args.target,
+          value: decoded.args.value.toString(),
+          reason: decoded.args.reason,
+          dataLength: decoded.args.data.length,
+        });
+      } catch (error) {
+        runtime.log(`Error decoding ExecutionProxy.ExecutionFailed: ${error instanceof Error ? error.message : String(error)}`);
+        return JSON.stringify({ status: "error", reason: "decode_failed" });
+      }
+    } else {
+      runtime.log(`Warning: Unknown event signature: ${eventSignature}`);
+      return JSON.stringify({ status: "ignored", reason: "unknown_event" });
+    }
+  } catch (error) {
+    runtime.log(`Error processing EVM log: ${error instanceof Error ? error.message : String(error)}`);
+    return JSON.stringify({ 
+      status: "error", 
+      error: error instanceof Error ? error.message : String(error) 
+    });
+  }
+}
 
 /// @notice Maps x402 network string to CRE chainSelectorName
 /// @param network The network string from payment request (e.g., "base-sepolia", "ethereum-testnet-sepolia")
@@ -492,7 +626,25 @@ const onHttpTrigger = async (runtime: Runtime<Config>, payload: HTTPPayload): Pr
 const initWorkflow = (config: Config) => {
   const httpTrigger = new cre.capabilities.HTTPCapability()
 
+  // Get network info for EVM log trigger
+  const network = getNetwork({
+    chainFamily: "evm",
+    chainSelectorName: config.chainSelectorName,
+    isTestnet: config.isTestnet,
+  });
+
+  if (!network) {
+    throw new Error(`Network not found: ${config.chainSelectorName}`);
+  }
+
+  const evmClient = new cre.capabilities.EVMClient(network.chainSelector.selector);
+
+  // Calculate event hashes for ExecutionProxy events
+  const executionSucceededHash = keccak256(toHex("ExecutionSucceeded(address,address,bytes,uint256,bool,bytes)"));
+  const executionFailedHash = keccak256(toHex("ExecutionFailed(address,address,bytes,uint256,string)"));
+
   return [
+    // HTTP trigger for settlement API
     cre.handler(
       httpTrigger.trigger({
         authorizedKeys: [
@@ -503,6 +655,16 @@ const initWorkflow = (config: Config) => {
         ],
       }),
       onHttpTrigger
+    ),
+    // EVM log trigger for monitoring ExecutionProxy events
+    cre.handler(
+      evmClient.logTrigger({
+        addresses: [config.executionProxyAddress as Address],
+        topics: [
+          { values: [executionSucceededHash, executionFailedHash] }, // Listen for ExecutionSucceeded OR ExecutionFailed
+        ],
+      }),
+      onEVMLogTrigger
     ),
   ]
 }

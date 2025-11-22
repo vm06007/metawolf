@@ -39781,32 +39781,78 @@ async function verify3(client, payload, paymentRequirements, config2) {
     payer: SupportedEVMNetworks.includes(paymentRequirements.network) ? payload.payload.authorization.from : ""
   };
 }
-var onHttpTrigger = async (runtime2, payload) => {
+async function verifyPayment(runtime2, paymentPayload, paymentRequirements, x402Config) {
   try {
-    runtime2.log(`
-=== API Call: POST /verify ===`);
-    const body = decodeJson(payload.input);
-    const paymentRequirements = PaymentRequirementsSchema.parse(body.paymentRequirements);
-    const paymentPayload = PaymentPayloadSchema.parse(body.paymentPayload);
+    runtime2.log("Starting payment verification...");
     runtime2.log(`Network: ${paymentRequirements.network}`);
+    runtime2.log(`Payment scheme: ${paymentPayload.scheme}`);
+    runtime2.log(`X402 version: ${paymentPayload.x402Version}`);
     let client;
     if (SupportedEVMNetworks.includes(paymentRequirements.network)) {
+      runtime2.log("Creating EVM client...");
       client = createConnectedClient2(paymentRequirements.network);
     } else {
       throw new Error("Invalid network - only EVM networks are currently supported");
     }
+    runtime2.log("Calling x402 verify function...");
+    runtime2.log("Verification checks being performed:");
+    runtime2.log("  - Protocol version compatibility");
+    runtime2.log("  - Permit signature validation");
+    runtime2.log("  - USDC contract address verification");
+    runtime2.log("  - Deadline validation (validAfter/validBefore)");
+    runtime2.log("  - Balance checks");
+    runtime2.log("  - Amount validation");
+    const verifyResponse = await verify3(client, paymentPayload, paymentRequirements, x402Config);
+    if (verifyResponse.isValid) {
+      runtime2.log(`✓ Verification successful`);
+      runtime2.log(`  Payer: ${verifyResponse.payer}`);
+    } else {
+      runtime2.log(`✗ Verification failed`);
+      runtime2.log(`  Reason: ${verifyResponse.invalidReason || "Unknown"}`);
+      runtime2.log(`  Payer: ${verifyResponse.payer || "N/A"}`);
+    }
+    return {
+      isValid: verifyResponse.isValid,
+      invalidReason: verifyResponse.invalidReason,
+      payer: verifyResponse.payer,
+      errorMessage: verifyResponse.invalidReason
+    };
+  } catch (error) {
+    runtime2.log(`Verification error: ${error instanceof Error ? error.message : String(error)}`);
+    return {
+      isValid: false,
+      invalidReason: error instanceof Error ? error.message : String(error),
+      errorMessage: error instanceof Error ? error.message : String(error)
+    };
+  }
+}
+var onHttpTrigger = async (runtime2, payload) => {
+  try {
+    runtime2.log(`
+=== API Call: POST /verify ===`);
+    runtime2.log(`Timestamp: ${new Date().toISOString()}`);
+    const body = decodeJson(payload.input);
+    if (body.x402Version !== undefined && body.x402Version !== 1) {
+      runtime2.log(`Warning: Unsupported x402Version: ${body.x402Version}, expected 1`);
+    }
+    const paymentRequirements = PaymentRequirementsSchema.parse(body.paymentRequirements);
+    const paymentPayload = PaymentPayloadSchema.parse(body.paymentPayload);
+    if (!paymentPayload.x402Version) {
+      throw new Error("paymentPayload must include x402Version");
+    }
     const x402Config = runtime2.config.x402Config || {};
-    const valid = await verify3(client, paymentPayload, paymentRequirements, x402Config);
-    runtime2.log(`Verification result: ${valid}`);
+    const response = await verifyPayment(runtime2, paymentPayload, paymentRequirements, x402Config);
     runtime2.log(`=========================
 `);
-    return JSON.stringify(valid);
+    return JSON.stringify(response);
   } catch (error) {
     runtime2.log(`Error: ${error instanceof Error ? error.message : String(error)}`);
-    const errorResponse = { error: "Invalid request" };
-    if (error instanceof Error) {
-      errorResponse.error = error.message;
-    }
+    const errorResponse = {
+      isValid: false,
+      error: "Verification error",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      invalidReason: error instanceof Error ? error.message : String(error)
+    };
     return JSON.stringify(errorResponse);
   }
 };

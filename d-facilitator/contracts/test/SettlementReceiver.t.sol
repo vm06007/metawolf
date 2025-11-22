@@ -129,9 +129,9 @@ contract SettlementReceiverTest is Test {
         bytes memory data = abi.encodeWithSignature("testFunction()");
         bytes memory report = abi.encode(address(mockTarget), data, uint256(0));
         
-        // Expect ExecutionRequested event from ExecutionProxy (emitted first)
+        // Expect ExecutionSucceeded event from ExecutionProxy (emitted first)
         vm.expectEmit(true, true, false, true);
-        emit ExecutionProxy.ExecutionRequested(
+        emit ExecutionProxy.ExecutionSucceeded(
             address(receiver),
             address(mockTarget),
             data,
@@ -140,9 +140,9 @@ contract SettlementReceiverTest is Test {
             ""
         );
         
-        // Expect ExecutionRequested event from SettlementReceiver (emitted second)
+        // Expect ExecutionSucceeded event from SettlementReceiver (emitted second)
         vm.expectEmit(true, false, false, true);
-        emit SettlementReceiver.ExecutionRequested(
+        emit SettlementReceiver.ExecutionSucceeded(
             address(mockTarget),
             data,
             0,
@@ -306,9 +306,9 @@ contract SettlementReceiverTest is Test {
         bytes memory data = abi.encodeWithSignature("testFunction()");
         bytes memory report = abi.encode(address(mockTarget), data, uint256(0));
         
-        // Expect ExecutionRequested event from ExecutionProxy (emitted first)
+        // Expect ExecutionSucceeded event from ExecutionProxy (emitted first)
         vm.expectEmit(true, true, false, true);
-        emit ExecutionProxy.ExecutionRequested(
+        emit ExecutionProxy.ExecutionSucceeded(
             address(receiver),
             address(mockTarget),
             data,
@@ -317,9 +317,9 @@ contract SettlementReceiverTest is Test {
             ""
         );
         
-        // Expect ExecutionRequested event from SettlementReceiver (emitted second)
+        // Expect ExecutionSucceeded event from SettlementReceiver (emitted second)
         vm.expectEmit(true, false, false, true);
-        emit SettlementReceiver.ExecutionRequested(
+        emit SettlementReceiver.ExecutionSucceeded(
             address(mockTarget),
             data,
             0,

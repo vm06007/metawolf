@@ -150,19 +150,64 @@ function formatAbiItem(abiItem) {
 var init_formatAbiItem = __esm(() => {
   init_formatAbiParameters();
 });
+function isErrorSignature(signature) {
+  return errorSignatureRegex.test(signature);
+}
+function execErrorSignature(signature) {
+  return execTyped(errorSignatureRegex, signature);
+}
+function isEventSignature(signature) {
+  return eventSignatureRegex.test(signature);
+}
+function execEventSignature(signature) {
+  return execTyped(eventSignatureRegex, signature);
+}
+function isFunctionSignature(signature) {
+  return functionSignatureRegex.test(signature);
+}
+function execFunctionSignature(signature) {
+  return execTyped(functionSignatureRegex, signature);
+}
 function isStructSignature(signature) {
   return structSignatureRegex.test(signature);
 }
 function execStructSignature(signature) {
   return execTyped(structSignatureRegex, signature);
 }
+function isConstructorSignature(signature) {
+  return constructorSignatureRegex.test(signature);
+}
+function execConstructorSignature(signature) {
+  return execTyped(constructorSignatureRegex, signature);
+}
+function isFallbackSignature(signature) {
+  return fallbackSignatureRegex.test(signature);
+}
+function execFallbackSignature(signature) {
+  return execTyped(fallbackSignatureRegex, signature);
+}
+function isReceiveSignature(signature) {
+  return receiveSignatureRegex.test(signature);
+}
+var errorSignatureRegex;
+var eventSignatureRegex;
+var functionSignatureRegex;
 var structSignatureRegex;
+var constructorSignatureRegex;
+var fallbackSignatureRegex;
+var receiveSignatureRegex;
 var modifiers;
 var eventModifiers;
 var functionModifiers;
 var init_signatures = __esm(() => {
   init_regex();
+  errorSignatureRegex = /^error (?<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?<parameters>.*?)\)$/;
+  eventSignatureRegex = /^event (?<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?<parameters>.*?)\)$/;
+  functionSignatureRegex = /^function (?<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?<parameters>.*?)\)(?: (?<scope>external|public{1}))?(?: (?<stateMutability>pure|view|nonpayable|payable{1}))?(?: returns\s?\((?<returns>.*?)\))?$/;
   structSignatureRegex = /^struct (?<name>[a-zA-Z$_][a-zA-Z0-9$_]*) \{(?<properties>.*?)\}$/;
+  constructorSignatureRegex = /^constructor\((?<parameters>.*?)\)(?:\s(?<stateMutability>payable{1}))?$/;
+  fallbackSignatureRegex = /^fallback\(\) external(?:\s(?<stateMutability>payable{1}))?$/;
+  receiveSignatureRegex = /^receive\(\) external payable$/;
   modifiers = new Set([
     "memory",
     "indexed",
@@ -309,6 +354,7 @@ var init_abiParameter = __esm(() => {
   };
 });
 var InvalidSignatureError;
+var UnknownSignatureError;
 var InvalidStructSignatureError;
 var init_signature = __esm(() => {
   init_errors();
@@ -322,6 +368,19 @@ var init_signature = __esm(() => {
         configurable: true,
         writable: true,
         value: "InvalidSignatureError"
+      });
+    }
+  };
+  UnknownSignatureError = class UnknownSignatureError2 extends BaseError {
+    constructor({ signature }) {
+      super("Unknown signature.", {
+        details: signature
+      });
+      Object.defineProperty(this, "name", {
+        enumerable: true,
+        configurable: true,
+        writable: true,
+        value: "UnknownSignatureError"
       });
     }
   };
@@ -447,6 +506,108 @@ var init_cache = __esm(() => {
     ]
   ]);
 });
+function parseSignature(signature, structs = {}) {
+  if (isFunctionSignature(signature))
+    return parseFunctionSignature(signature, structs);
+  if (isEventSignature(signature))
+    return parseEventSignature(signature, structs);
+  if (isErrorSignature(signature))
+    return parseErrorSignature(signature, structs);
+  if (isConstructorSignature(signature))
+    return parseConstructorSignature(signature, structs);
+  if (isFallbackSignature(signature))
+    return parseFallbackSignature(signature);
+  if (isReceiveSignature(signature))
+    return {
+      type: "receive",
+      stateMutability: "payable"
+    };
+  throw new UnknownSignatureError({ signature });
+}
+function parseFunctionSignature(signature, structs = {}) {
+  const match = execFunctionSignature(signature);
+  if (!match)
+    throw new InvalidSignatureError({ signature, type: "function" });
+  const inputParams = splitParameters(match.parameters);
+  const inputs = [];
+  const inputLength = inputParams.length;
+  for (let i2 = 0;i2 < inputLength; i2++) {
+    inputs.push(parseAbiParameter(inputParams[i2], {
+      modifiers: functionModifiers,
+      structs,
+      type: "function"
+    }));
+  }
+  const outputs = [];
+  if (match.returns) {
+    const outputParams = splitParameters(match.returns);
+    const outputLength = outputParams.length;
+    for (let i2 = 0;i2 < outputLength; i2++) {
+      outputs.push(parseAbiParameter(outputParams[i2], {
+        modifiers: functionModifiers,
+        structs,
+        type: "function"
+      }));
+    }
+  }
+  return {
+    name: match.name,
+    type: "function",
+    stateMutability: match.stateMutability ?? "nonpayable",
+    inputs,
+    outputs
+  };
+}
+function parseEventSignature(signature, structs = {}) {
+  const match = execEventSignature(signature);
+  if (!match)
+    throw new InvalidSignatureError({ signature, type: "event" });
+  const params = splitParameters(match.parameters);
+  const abiParameters = [];
+  const length = params.length;
+  for (let i2 = 0;i2 < length; i2++)
+    abiParameters.push(parseAbiParameter(params[i2], {
+      modifiers: eventModifiers,
+      structs,
+      type: "event"
+    }));
+  return { name: match.name, type: "event", inputs: abiParameters };
+}
+function parseErrorSignature(signature, structs = {}) {
+  const match = execErrorSignature(signature);
+  if (!match)
+    throw new InvalidSignatureError({ signature, type: "error" });
+  const params = splitParameters(match.parameters);
+  const abiParameters = [];
+  const length = params.length;
+  for (let i2 = 0;i2 < length; i2++)
+    abiParameters.push(parseAbiParameter(params[i2], { structs, type: "error" }));
+  return { name: match.name, type: "error", inputs: abiParameters };
+}
+function parseConstructorSignature(signature, structs = {}) {
+  const match = execConstructorSignature(signature);
+  if (!match)
+    throw new InvalidSignatureError({ signature, type: "constructor" });
+  const params = splitParameters(match.parameters);
+  const abiParameters = [];
+  const length = params.length;
+  for (let i2 = 0;i2 < length; i2++)
+    abiParameters.push(parseAbiParameter(params[i2], { structs, type: "constructor" }));
+  return {
+    type: "constructor",
+    stateMutability: match.stateMutability ?? "nonpayable",
+    inputs: abiParameters
+  };
+}
+function parseFallbackSignature(signature) {
+  const match = execFallbackSignature(signature);
+  if (!match)
+    throw new InvalidSignatureError({ signature, type: "fallback" });
+  return {
+    type: "fallback",
+    stateMutability: match.stateMutability ?? "nonpayable"
+  };
+}
 function parseAbiParameter(param, options) {
   const parameterCacheKey = getParameterCacheKey(param, options?.type, options?.structs);
   if (parameterCache.has(parameterCacheKey))
@@ -546,6 +707,7 @@ var init_utils = __esm(() => {
   init_regex();
   init_abiItem();
   init_abiParameter();
+  init_signature();
   init_splitParameters();
   init_cache();
   init_signatures();
@@ -632,6 +794,23 @@ var init_structs = __esm(() => {
   init_utils();
   typeWithoutTupleRegex = /^(?<type>[a-zA-Z$_][a-zA-Z0-9$_]*)(?<array>(?:\[\d*?\])+?)?$/;
 });
+function parseAbi(signatures) {
+  const structs = parseStructs(signatures);
+  const abi = [];
+  const length = signatures.length;
+  for (let i2 = 0;i2 < length; i2++) {
+    const signature = signatures[i2];
+    if (isStructSignature(signature))
+      continue;
+    abi.push(parseSignature(signature, structs));
+  }
+  return abi;
+}
+var init_parseAbi = __esm(() => {
+  init_signatures();
+  init_structs();
+  init_utils();
+});
 function parseAbiParameters(params) {
   const abiParameters = [];
   if (typeof params === "string") {
@@ -667,6 +846,7 @@ var init_parseAbiParameters = __esm(() => {
 });
 var init_exports = __esm(() => {
   init_formatAbiItem();
+  init_parseAbi();
   init_parseAbiParameters();
 });
 function formatAbiItem2(abiItem, { includeName = false } = {}) {
@@ -794,8 +974,12 @@ var AbiDecodingZeroDataError;
 var AbiEncodingArrayLengthMismatchError;
 var AbiEncodingBytesSizeMismatchError;
 var AbiEncodingLengthMismatchError;
+var AbiEventSignatureEmptyTopicsError;
+var AbiEventSignatureNotFoundError;
 var AbiFunctionNotFoundError;
 var AbiItemAmbiguityError;
+var DecodeLogDataMismatch;
+var DecodeLogTopicsMismatch;
 var InvalidAbiEncodingTypeError;
 var InvalidAbiDecodingTypeError;
 var InvalidArrayError;
@@ -869,6 +1053,27 @@ var init_abi = __esm(() => {
 `), { name: "AbiEncodingLengthMismatchError" });
     }
   };
+  AbiEventSignatureEmptyTopicsError = class AbiEventSignatureEmptyTopicsError2 extends BaseError2 {
+    constructor({ docsPath }) {
+      super("Cannot extract event signature from empty topics.", {
+        docsPath,
+        name: "AbiEventSignatureEmptyTopicsError"
+      });
+    }
+  };
+  AbiEventSignatureNotFoundError = class AbiEventSignatureNotFoundError2 extends BaseError2 {
+    constructor(signature, { docsPath }) {
+      super([
+        `Encoded event signature "${signature}" not found on ABI.`,
+        "Make sure you are using the correct ABI and that the event exists on it.",
+        `You can look up the signature here: https://openchain.xyz/signatures?query=${signature}.`
+      ].join(`
+`), {
+        docsPath,
+        name: "AbiEventSignatureNotFoundError"
+      });
+    }
+  };
   AbiFunctionNotFoundError = class AbiFunctionNotFoundError2 extends BaseError2 {
     constructor(functionName, { docsPath } = {}) {
       super([
@@ -893,6 +1098,63 @@ var init_abi = __esm(() => {
         ],
         name: "AbiItemAmbiguityError"
       });
+    }
+  };
+  DecodeLogDataMismatch = class DecodeLogDataMismatch2 extends BaseError2 {
+    constructor({ abiItem, data, params, size: size2 }) {
+      super([
+        `Data size of ${size2} bytes is too small for non-indexed event parameters.`
+      ].join(`
+`), {
+        metaMessages: [
+          `Params: (${formatAbiParams(params, { includeName: true })})`,
+          `Data:   ${data} (${size2} bytes)`
+        ],
+        name: "DecodeLogDataMismatch"
+      });
+      Object.defineProperty(this, "abiItem", {
+        enumerable: true,
+        configurable: true,
+        writable: true,
+        value: undefined
+      });
+      Object.defineProperty(this, "data", {
+        enumerable: true,
+        configurable: true,
+        writable: true,
+        value: undefined
+      });
+      Object.defineProperty(this, "params", {
+        enumerable: true,
+        configurable: true,
+        writable: true,
+        value: undefined
+      });
+      Object.defineProperty(this, "size", {
+        enumerable: true,
+        configurable: true,
+        writable: true,
+        value: undefined
+      });
+      this.abiItem = abiItem;
+      this.data = data;
+      this.params = params;
+      this.size = size2;
+    }
+  };
+  DecodeLogTopicsMismatch = class DecodeLogTopicsMismatch2 extends BaseError2 {
+    constructor({ abiItem, param }) {
+      super([
+        `Expected a topic for indexed event parameter${param.name ? ` "${param.name}"` : ""} on event "${formatAbiItem2(abiItem, { includeName: true })}".`
+      ].join(`
+`), { name: "DecodeLogTopicsMismatch" });
+      Object.defineProperty(this, "abiItem", {
+        enumerable: true,
+        configurable: true,
+        writable: true,
+        value: undefined
+      });
+      this.abiItem = abiItem;
     }
   };
   InvalidAbiEncodingTypeError = class InvalidAbiEncodingTypeError2 extends BaseError2 {
@@ -2985,12 +3247,12 @@ var init_errors2 = __esm(() => {
   BaseError3 = class BaseError32 extends Error {
     constructor(shortMessage, args = {}) {
       const details = args.cause instanceof BaseError32 ? args.cause.details : args.cause?.message ? args.cause.message : args.details;
-      const docsPath2 = args.cause instanceof BaseError32 ? args.cause.docsPath || args.docsPath : args.docsPath;
+      const docsPath3 = args.cause instanceof BaseError32 ? args.cause.docsPath || args.docsPath : args.docsPath;
       const message = [
         shortMessage || "An error occurred.",
         "",
         ...args.metaMessages ? [...args.metaMessages, ""] : [],
-        ...docsPath2 ? [`Docs: https://abitype.dev${docsPath2}`] : [],
+        ...docsPath3 ? [`Docs: https://abitype.dev${docsPath3}`] : [],
         ...details ? [`Details: ${details}`] : [],
         `Version: abitype@${version3}`
       ].join(`
@@ -3029,7 +3291,7 @@ var init_errors2 = __esm(() => {
       if (args.cause)
         this.cause = args.cause;
       this.details = details;
-      this.docsPath = docsPath2;
+      this.docsPath = docsPath3;
       this.metaMessages = args.metaMessages;
       this.shortMessage = shortMessage;
     }
@@ -3107,22 +3369,22 @@ var init_formatAbiItem3 = __esm(() => {
   init_formatAbiParameters2();
 });
 function isErrorSignature2(signature) {
-  return errorSignatureRegex.test(signature);
+  return errorSignatureRegex2.test(signature);
 }
 function execErrorSignature2(signature) {
-  return execTyped2(errorSignatureRegex, signature);
+  return execTyped2(errorSignatureRegex2, signature);
 }
 function isEventSignature2(signature) {
-  return eventSignatureRegex.test(signature);
+  return eventSignatureRegex2.test(signature);
 }
 function execEventSignature2(signature) {
-  return execTyped2(eventSignatureRegex, signature);
+  return execTyped2(eventSignatureRegex2, signature);
 }
 function isFunctionSignature2(signature) {
-  return functionSignatureRegex.test(signature);
+  return functionSignatureRegex2.test(signature);
 }
 function execFunctionSignature2(signature) {
-  return execTyped2(functionSignatureRegex, signature);
+  return execTyped2(functionSignatureRegex2, signature);
 }
 function isStructSignature2(signature) {
   return structSignatureRegex2.test(signature);
@@ -3131,39 +3393,39 @@ function execStructSignature2(signature) {
   return execTyped2(structSignatureRegex2, signature);
 }
 function isConstructorSignature2(signature) {
-  return constructorSignatureRegex.test(signature);
+  return constructorSignatureRegex2.test(signature);
 }
 function execConstructorSignature2(signature) {
-  return execTyped2(constructorSignatureRegex, signature);
+  return execTyped2(constructorSignatureRegex2, signature);
 }
 function isFallbackSignature2(signature) {
-  return fallbackSignatureRegex.test(signature);
+  return fallbackSignatureRegex2.test(signature);
 }
 function execFallbackSignature2(signature) {
-  return execTyped2(fallbackSignatureRegex, signature);
+  return execTyped2(fallbackSignatureRegex2, signature);
 }
 function isReceiveSignature2(signature) {
-  return receiveSignatureRegex.test(signature);
+  return receiveSignatureRegex2.test(signature);
 }
-var errorSignatureRegex;
-var eventSignatureRegex;
-var functionSignatureRegex;
+var errorSignatureRegex2;
+var eventSignatureRegex2;
+var functionSignatureRegex2;
 var structSignatureRegex2;
-var constructorSignatureRegex;
-var fallbackSignatureRegex;
-var receiveSignatureRegex;
+var constructorSignatureRegex2;
+var fallbackSignatureRegex2;
+var receiveSignatureRegex2;
 var modifiers2;
 var eventModifiers2;
 var functionModifiers2;
 var init_signatures2 = __esm(() => {
   init_regex3();
-  errorSignatureRegex = /^error (?<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?<parameters>.*?)\)$/;
-  eventSignatureRegex = /^event (?<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?<parameters>.*?)\)$/;
-  functionSignatureRegex = /^function (?<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?<parameters>.*?)\)(?: (?<scope>external|public{1}))?(?: (?<stateMutability>pure|view|nonpayable|payable{1}))?(?: returns\s?\((?<returns>.*?)\))?$/;
+  errorSignatureRegex2 = /^error (?<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?<parameters>.*?)\)$/;
+  eventSignatureRegex2 = /^event (?<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?<parameters>.*?)\)$/;
+  functionSignatureRegex2 = /^function (?<name>[a-zA-Z$_][a-zA-Z0-9$_]*)\((?<parameters>.*?)\)(?: (?<scope>external|public{1}))?(?: (?<stateMutability>pure|view|nonpayable|payable{1}))?(?: returns\s?\((?<returns>.*?)\))?$/;
   structSignatureRegex2 = /^struct (?<name>[a-zA-Z$_][a-zA-Z0-9$_]*) \{(?<properties>.*?)\}$/;
-  constructorSignatureRegex = /^constructor\((?<parameters>.*?)\)(?:\s(?<stateMutability>payable{1}))?$/;
-  fallbackSignatureRegex = /^fallback\(\) external(?:\s(?<stateMutability>payable{1}))?$/;
-  receiveSignatureRegex = /^receive\(\) external payable$/;
+  constructorSignatureRegex2 = /^constructor\((?<parameters>.*?)\)(?:\s(?<stateMutability>payable{1}))?$/;
+  fallbackSignatureRegex2 = /^fallback\(\) external(?:\s(?<stateMutability>payable{1}))?$/;
+  receiveSignatureRegex2 = /^receive\(\) external payable$/;
   modifiers2 = new Set([
     "memory",
     "indexed",
@@ -3462,17 +3724,17 @@ var init_cache2 = __esm(() => {
     ]
   ]);
 });
-function parseSignature(signature, structs = {}) {
+function parseSignature2(signature, structs = {}) {
   if (isFunctionSignature2(signature))
-    return parseFunctionSignature(signature, structs);
+    return parseFunctionSignature2(signature, structs);
   if (isEventSignature2(signature))
-    return parseEventSignature(signature, structs);
+    return parseEventSignature2(signature, structs);
   if (isErrorSignature2(signature))
-    return parseErrorSignature(signature, structs);
+    return parseErrorSignature2(signature, structs);
   if (isConstructorSignature2(signature))
-    return parseConstructorSignature(signature, structs);
+    return parseConstructorSignature2(signature, structs);
   if (isFallbackSignature2(signature))
-    return parseFallbackSignature(signature);
+    return parseFallbackSignature2(signature);
   if (isReceiveSignature2(signature))
     return {
       type: "receive",
@@ -3480,7 +3742,7 @@ function parseSignature(signature, structs = {}) {
     };
   throw new UnknownSignatureError2({ signature });
 }
-function parseFunctionSignature(signature, structs = {}) {
+function parseFunctionSignature2(signature, structs = {}) {
   const match = execFunctionSignature2(signature);
   if (!match)
     throw new InvalidSignatureError2({ signature, type: "function" });
@@ -3514,7 +3776,7 @@ function parseFunctionSignature(signature, structs = {}) {
     outputs
   };
 }
-function parseEventSignature(signature, structs = {}) {
+function parseEventSignature2(signature, structs = {}) {
   const match = execEventSignature2(signature);
   if (!match)
     throw new InvalidSignatureError2({ signature, type: "event" });
@@ -3529,7 +3791,7 @@ function parseEventSignature(signature, structs = {}) {
     }));
   return { name: match.name, type: "event", inputs: abiParameters };
 }
-function parseErrorSignature(signature, structs = {}) {
+function parseErrorSignature2(signature, structs = {}) {
   const match = execErrorSignature2(signature);
   if (!match)
     throw new InvalidSignatureError2({ signature, type: "error" });
@@ -3540,7 +3802,7 @@ function parseErrorSignature(signature, structs = {}) {
     abiParameters.push(parseAbiParameter3(params[i2], { structs, type: "error" }));
   return { name: match.name, type: "error", inputs: abiParameters };
 }
-function parseConstructorSignature(signature, structs = {}) {
+function parseConstructorSignature2(signature, structs = {}) {
   const match = execConstructorSignature2(signature);
   if (!match)
     throw new InvalidSignatureError2({ signature, type: "constructor" });
@@ -3555,7 +3817,7 @@ function parseConstructorSignature(signature, structs = {}) {
     inputs: abiParameters
   };
 }
-function parseFallbackSignature(signature) {
+function parseFallbackSignature2(signature) {
   const match = execFallbackSignature2(signature);
   if (!match)
     throw new InvalidSignatureError2({ signature, type: "fallback" });
@@ -3756,11 +4018,11 @@ function parseAbi2(signatures) {
     const signature = signatures[i2];
     if (isStructSignature2(signature))
       continue;
-    abi.push(parseSignature(signature, structs));
+    abi.push(parseSignature2(signature, structs));
   }
   return abi;
 }
-var init_parseAbi = __esm(() => {
+var init_parseAbi2 = __esm(() => {
   init_signatures2();
   init_structs2();
   init_utils3();
@@ -3768,7 +4030,7 @@ var init_parseAbi = __esm(() => {
 function parseAbiItem2(signature) {
   let abiItem;
   if (typeof signature === "string")
-    abiItem = parseSignature(signature);
+    abiItem = parseSignature2(signature);
   else {
     const structs = parseStructs2(signature);
     const length = signature.length;
@@ -3776,7 +4038,7 @@ function parseAbiItem2(signature) {
       const signature_ = signature[i2];
       if (isStructSignature2(signature_))
         continue;
-      abiItem = parseSignature(signature_, structs);
+      abiItem = parseSignature2(signature_, structs);
       break;
     }
   }
@@ -3792,7 +4054,7 @@ var init_parseAbiItem = __esm(() => {
 });
 var init_exports2 = __esm(() => {
   init_formatAbiItem3();
-  init_parseAbi();
+  init_parseAbi2();
   init_parseAbiItem();
 });
 function formatAbiItem4(abiItem, { includeName = false } = {}) {
@@ -3839,7 +4101,7 @@ var errorConfig2;
 var BaseError4;
 var init_base2 = __esm(() => {
   errorConfig2 = {
-    getDocsUrl: ({ docsBaseUrl, docsPath: docsPath2 = "", docsSlug }) => docsPath2 ? `${docsBaseUrl ?? "https://viem.sh"}${docsPath2}${docsSlug ? `#${docsSlug}` : ""}` : undefined,
+    getDocsUrl: ({ docsBaseUrl, docsPath: docsPath3 = "", docsSlug }) => docsPath3 ? `${docsBaseUrl ?? "https://viem.sh"}${docsPath3}${docsSlug ? `#${docsSlug}` : ""}` : undefined,
     version: `viem@${version4}`
   };
   BaseError4 = class BaseError42 extends Error {
@@ -3851,12 +4113,12 @@ var init_base2 = __esm(() => {
           return args.cause.message;
         return args.details;
       })();
-      const docsPath2 = (() => {
+      const docsPath3 = (() => {
         if (args.cause instanceof BaseError42)
           return args.cause.docsPath || args.docsPath;
         return args.docsPath;
       })();
-      const docsUrl = errorConfig2.getDocsUrl?.({ ...args, docsPath: docsPath2 });
+      const docsUrl = errorConfig2.getDocsUrl?.({ ...args, docsPath: docsPath3 });
       const message = [
         shortMessage || "An error occurred.",
         "",
@@ -3904,7 +4166,7 @@ var init_base2 = __esm(() => {
         value: "BaseError"
       });
       this.details = details;
-      this.docsPath = docsPath2;
+      this.docsPath = docsPath3;
       this.metaMessages = args.metaMessages;
       this.name = args.name ?? this.name;
       this.shortMessage = shortMessage;
@@ -3925,16 +4187,16 @@ var AbiEncodingLengthMismatchError2;
 var AbiErrorInputsNotFoundError;
 var AbiErrorNotFoundError;
 var AbiErrorSignatureNotFoundError;
-var AbiEventSignatureEmptyTopicsError;
-var AbiEventSignatureNotFoundError;
+var AbiEventSignatureEmptyTopicsError2;
+var AbiEventSignatureNotFoundError2;
 var AbiEventNotFoundError;
 var AbiFunctionNotFoundError2;
 var AbiFunctionOutputsNotFoundError;
 var AbiFunctionSignatureNotFoundError;
 var AbiItemAmbiguityError2;
 var BytesSizeMismatchError;
-var DecodeLogDataMismatch;
-var DecodeLogTopicsMismatch;
+var DecodeLogDataMismatch2;
+var DecodeLogTopicsMismatch2;
 var InvalidAbiEncodingTypeError2;
 var InvalidAbiDecodingTypeError2;
 var InvalidArrayError2;
@@ -3944,25 +4206,25 @@ var init_abi2 = __esm(() => {
   init_size2();
   init_base2();
   AbiConstructorNotFoundError = class AbiConstructorNotFoundError2 extends BaseError4 {
-    constructor({ docsPath: docsPath2 }) {
+    constructor({ docsPath: docsPath3 }) {
       super([
         "A constructor was not found on the ABI.",
         "Make sure you are using the correct ABI and that the constructor exists on it."
       ].join(`
 `), {
-        docsPath: docsPath2,
+        docsPath: docsPath3,
         name: "AbiConstructorNotFoundError"
       });
     }
   };
   AbiConstructorParamsNotFoundError = class AbiConstructorParamsNotFoundError2 extends BaseError4 {
-    constructor({ docsPath: docsPath2 }) {
+    constructor({ docsPath: docsPath3 }) {
       super([
         "Constructor arguments were provided (`args`), but a constructor parameters (`inputs`) were not found on the ABI.",
         "Make sure you are using the correct ABI, and that the `inputs` attribute on the constructor exists."
       ].join(`
 `), {
-        docsPath: docsPath2,
+        docsPath: docsPath3,
         name: "AbiConstructorParamsNotFoundError"
       });
     }
@@ -4033,39 +4295,39 @@ var init_abi2 = __esm(() => {
     }
   };
   AbiErrorInputsNotFoundError = class AbiErrorInputsNotFoundError2 extends BaseError4 {
-    constructor(errorName, { docsPath: docsPath2 }) {
+    constructor(errorName, { docsPath: docsPath3 }) {
       super([
         `Arguments (\`args\`) were provided to "${errorName}", but "${errorName}" on the ABI does not contain any parameters (\`inputs\`).`,
         "Cannot encode error result without knowing what the parameter types are.",
         "Make sure you are using the correct ABI and that the inputs exist on it."
       ].join(`
 `), {
-        docsPath: docsPath2,
+        docsPath: docsPath3,
         name: "AbiErrorInputsNotFoundError"
       });
     }
   };
   AbiErrorNotFoundError = class AbiErrorNotFoundError2 extends BaseError4 {
-    constructor(errorName, { docsPath: docsPath2 } = {}) {
+    constructor(errorName, { docsPath: docsPath3 } = {}) {
       super([
         `Error ${errorName ? `"${errorName}" ` : ""}not found on ABI.`,
         "Make sure you are using the correct ABI and that the error exists on it."
       ].join(`
 `), {
-        docsPath: docsPath2,
+        docsPath: docsPath3,
         name: "AbiErrorNotFoundError"
       });
     }
   };
   AbiErrorSignatureNotFoundError = class AbiErrorSignatureNotFoundError2 extends BaseError4 {
-    constructor(signature, { docsPath: docsPath2 }) {
+    constructor(signature, { docsPath: docsPath3 }) {
       super([
         `Encoded error signature "${signature}" not found on ABI.`,
         "Make sure you are using the correct ABI and that the error exists on it.",
         `You can look up the decoded signature here: https://openchain.xyz/signatures?query=${signature}.`
       ].join(`
 `), {
-        docsPath: docsPath2,
+        docsPath: docsPath3,
         name: "AbiErrorSignatureNotFoundError"
       });
       Object.defineProperty(this, "signature", {
@@ -4077,73 +4339,73 @@ var init_abi2 = __esm(() => {
       this.signature = signature;
     }
   };
-  AbiEventSignatureEmptyTopicsError = class AbiEventSignatureEmptyTopicsError2 extends BaseError4 {
-    constructor({ docsPath: docsPath2 }) {
+  AbiEventSignatureEmptyTopicsError2 = class AbiEventSignatureEmptyTopicsError22 extends BaseError4 {
+    constructor({ docsPath: docsPath3 }) {
       super("Cannot extract event signature from empty topics.", {
-        docsPath: docsPath2,
+        docsPath: docsPath3,
         name: "AbiEventSignatureEmptyTopicsError"
       });
     }
   };
-  AbiEventSignatureNotFoundError = class AbiEventSignatureNotFoundError2 extends BaseError4 {
-    constructor(signature, { docsPath: docsPath2 }) {
+  AbiEventSignatureNotFoundError2 = class AbiEventSignatureNotFoundError22 extends BaseError4 {
+    constructor(signature, { docsPath: docsPath3 }) {
       super([
         `Encoded event signature "${signature}" not found on ABI.`,
         "Make sure you are using the correct ABI and that the event exists on it.",
         `You can look up the signature here: https://openchain.xyz/signatures?query=${signature}.`
       ].join(`
 `), {
-        docsPath: docsPath2,
+        docsPath: docsPath3,
         name: "AbiEventSignatureNotFoundError"
       });
     }
   };
   AbiEventNotFoundError = class AbiEventNotFoundError2 extends BaseError4 {
-    constructor(eventName, { docsPath: docsPath2 } = {}) {
+    constructor(eventName, { docsPath: docsPath3 } = {}) {
       super([
         `Event ${eventName ? `"${eventName}" ` : ""}not found on ABI.`,
         "Make sure you are using the correct ABI and that the event exists on it."
       ].join(`
 `), {
-        docsPath: docsPath2,
+        docsPath: docsPath3,
         name: "AbiEventNotFoundError"
       });
     }
   };
   AbiFunctionNotFoundError2 = class AbiFunctionNotFoundError22 extends BaseError4 {
-    constructor(functionName, { docsPath: docsPath2 } = {}) {
+    constructor(functionName, { docsPath: docsPath3 } = {}) {
       super([
         `Function ${functionName ? `"${functionName}" ` : ""}not found on ABI.`,
         "Make sure you are using the correct ABI and that the function exists on it."
       ].join(`
 `), {
-        docsPath: docsPath2,
+        docsPath: docsPath3,
         name: "AbiFunctionNotFoundError"
       });
     }
   };
   AbiFunctionOutputsNotFoundError = class AbiFunctionOutputsNotFoundError2 extends BaseError4 {
-    constructor(functionName, { docsPath: docsPath2 }) {
+    constructor(functionName, { docsPath: docsPath3 }) {
       super([
         `Function "${functionName}" does not contain any \`outputs\` on ABI.`,
         "Cannot decode function result without knowing what the parameter types are.",
         "Make sure you are using the correct ABI and that the function exists on it."
       ].join(`
 `), {
-        docsPath: docsPath2,
+        docsPath: docsPath3,
         name: "AbiFunctionOutputsNotFoundError"
       });
     }
   };
   AbiFunctionSignatureNotFoundError = class AbiFunctionSignatureNotFoundError2 extends BaseError4 {
-    constructor(signature, { docsPath: docsPath2 }) {
+    constructor(signature, { docsPath: docsPath3 }) {
       super([
         `Encoded function signature "${signature}" not found on ABI.`,
         "Make sure you are using the correct ABI and that the function exists on it.",
         `You can look up the signature here: https://openchain.xyz/signatures?query=${signature}.`
       ].join(`
 `), {
-        docsPath: docsPath2,
+        docsPath: docsPath3,
         name: "AbiFunctionSignatureNotFoundError"
       });
     }
@@ -4169,7 +4431,7 @@ var init_abi2 = __esm(() => {
       });
     }
   };
-  DecodeLogDataMismatch = class DecodeLogDataMismatch2 extends BaseError4 {
+  DecodeLogDataMismatch2 = class DecodeLogDataMismatch22 extends BaseError4 {
     constructor({ abiItem, data, params, size: size3 }) {
       super([
         `Data size of ${size3} bytes is too small for non-indexed event parameters.`
@@ -4211,7 +4473,7 @@ var init_abi2 = __esm(() => {
       this.size = size3;
     }
   };
-  DecodeLogTopicsMismatch = class DecodeLogTopicsMismatch2 extends BaseError4 {
+  DecodeLogTopicsMismatch2 = class DecodeLogTopicsMismatch22 extends BaseError4 {
     constructor({ abiItem, param }) {
       super([
         `Expected a topic for indexed event parameter${param.name ? ` "${param.name}"` : ""} on event "${formatAbiItem4(abiItem, { includeName: true })}".`
@@ -4227,21 +4489,21 @@ var init_abi2 = __esm(() => {
     }
   };
   InvalidAbiEncodingTypeError2 = class InvalidAbiEncodingTypeError22 extends BaseError4 {
-    constructor(type, { docsPath: docsPath2 }) {
+    constructor(type, { docsPath: docsPath3 }) {
       super([
         `Type "${type}" is not a valid encoding type.`,
         "Please provide a valid ABI type."
       ].join(`
-`), { docsPath: docsPath2, name: "InvalidAbiEncodingType" });
+`), { docsPath: docsPath3, name: "InvalidAbiEncodingType" });
     }
   };
   InvalidAbiDecodingTypeError2 = class InvalidAbiDecodingTypeError22 extends BaseError4 {
-    constructor(type, { docsPath: docsPath2 }) {
+    constructor(type, { docsPath: docsPath3 }) {
       super([
         `Type "${type}" is not a valid decoding type.`,
         "Please provide a valid ABI type."
       ].join(`
-`), { docsPath: docsPath2, name: "InvalidAbiDecodingType" });
+`), { docsPath: docsPath3, name: "InvalidAbiDecodingType" });
     }
   };
   InvalidArrayError2 = class InvalidArrayError22 extends BaseError4 {
@@ -5172,17 +5434,17 @@ function prepareEncodeFunctionData2(parameters) {
       name: functionName
     });
     if (!item)
-      throw new AbiFunctionNotFoundError2(functionName, { docsPath: docsPath3 });
+      throw new AbiFunctionNotFoundError2(functionName, { docsPath: docsPath4 });
     abiItem = item;
   }
   if (abiItem.type !== "function")
-    throw new AbiFunctionNotFoundError2(undefined, { docsPath: docsPath3 });
+    throw new AbiFunctionNotFoundError2(undefined, { docsPath: docsPath4 });
   return {
     abi: [abiItem],
     functionName: toFunctionSelector2(formatAbiItem4(abiItem))
   };
 }
-var docsPath3 = "/docs/contract/encodeFunctionData";
+var docsPath4 = "/docs/contract/encodeFunctionData";
 var init_prepareEncodeFunctionData2 = __esm(() => {
   init_abi2();
   init_toFunctionSelector2();
@@ -5859,7 +6121,7 @@ var init_transaction = __esm(() => {
     }
   };
   TransactionExecutionError = class TransactionExecutionError2 extends BaseError4 {
-    constructor(cause, { account, docsPath: docsPath4, chain, data, gas, gasPrice, maxFeePerGas, maxPriorityFeePerGas, nonce, to, value: value2 }) {
+    constructor(cause, { account, docsPath: docsPath5, chain, data, gas, gasPrice, maxFeePerGas, maxPriorityFeePerGas, nonce, to, value: value2 }) {
       const prettyArgs = prettyPrint({
         chain: chain && `${chain?.name} (id: ${chain?.id})`,
         from: account?.address,
@@ -5874,7 +6136,7 @@ var init_transaction = __esm(() => {
       });
       super(cause.shortMessage, {
         cause,
-        docsPath: docsPath4,
+        docsPath: docsPath5,
         metaMessages: [
           ...cause.metaMessages ? [...cause.metaMessages, " "] : [],
           "Request Arguments:",
@@ -5941,7 +6203,7 @@ var init_contract = __esm(() => {
   init_stateOverride();
   init_transaction();
   CallExecutionError = class CallExecutionError2 extends BaseError4 {
-    constructor(cause, { account: account_, docsPath: docsPath4, chain, data, gas, gasPrice, maxFeePerGas, maxPriorityFeePerGas, nonce, to, value: value2, stateOverride }) {
+    constructor(cause, { account: account_, docsPath: docsPath5, chain, data, gas, gasPrice, maxFeePerGas, maxPriorityFeePerGas, nonce, to, value: value2, stateOverride }) {
       const account = account_ ? parseAccount(account_) : undefined;
       let prettyArgs = prettyPrint({
         from: account?.address,
@@ -5960,7 +6222,7 @@ ${prettyStateOverride(stateOverride)}`;
       }
       super(cause.shortMessage, {
         cause,
-        docsPath: docsPath4,
+        docsPath: docsPath5,
         metaMessages: [
           ...cause.metaMessages ? [...cause.metaMessages, " "] : [],
           "Raw Call Arguments:",
@@ -5978,7 +6240,7 @@ ${prettyStateOverride(stateOverride)}`;
     }
   };
   ContractFunctionExecutionError = class ContractFunctionExecutionError2 extends BaseError4 {
-    constructor(cause, { abi, args, contractAddress, docsPath: docsPath4, functionName, sender }) {
+    constructor(cause, { abi, args, contractAddress, docsPath: docsPath5, functionName, sender }) {
       const abiItem = getAbiItem2({ abi, args, name: functionName });
       const formattedArgs = abiItem ? formatAbiItemWithArgs({
         abiItem,
@@ -5995,7 +6257,7 @@ ${prettyStateOverride(stateOverride)}`;
       });
       super(cause.shortMessage || `An unknown error occurred while executing the contract function "${functionName}".`, {
         cause,
-        docsPath: docsPath4,
+        docsPath: docsPath5,
         metaMessages: [
           ...cause.metaMessages ? [...cause.metaMessages, " "] : [],
           prettyArgs && "Contract Call:",
@@ -6292,10 +6554,10 @@ var init_rpc = __esm(() => {
   init_base2();
   init_request();
   RpcError = class RpcError2 extends BaseError4 {
-    constructor(cause, { code: code2, docsPath: docsPath4, metaMessages, name, shortMessage }) {
+    constructor(cause, { code: code2, docsPath: docsPath5, metaMessages, name, shortMessage }) {
       super(shortMessage, {
         cause,
-        docsPath: docsPath4,
+        docsPath: docsPath5,
         metaMessages: metaMessages || cause?.metaMessages,
         name: name || "RpcError"
       });
@@ -9608,13 +9870,13 @@ function decodeFunctionResult(parameters) {
   if (functionName) {
     const item = getAbiItem2({ abi, args, name: functionName });
     if (!item)
-      throw new AbiFunctionNotFoundError2(functionName, { docsPath: docsPath5 });
+      throw new AbiFunctionNotFoundError2(functionName, { docsPath: docsPath6 });
     abiItem = item;
   }
   if (abiItem.type !== "function")
-    throw new AbiFunctionNotFoundError2(undefined, { docsPath: docsPath5 });
+    throw new AbiFunctionNotFoundError2(undefined, { docsPath: docsPath6 });
   if (!abiItem.outputs)
-    throw new AbiFunctionOutputsNotFoundError(abiItem.name, { docsPath: docsPath5 });
+    throw new AbiFunctionOutputsNotFoundError(abiItem.name, { docsPath: docsPath6 });
   const values = decodeAbiParameters2(abiItem.outputs, data);
   if (values && values.length > 1)
     return values;
@@ -9622,7 +9884,7 @@ function decodeFunctionResult(parameters) {
     return values[0];
   return;
 }
-var docsPath5 = "/docs/contract/decodeFunctionResult";
+var docsPath6 = "/docs/contract/decodeFunctionResult";
 var init_decodeFunctionResult = __esm(() => {
   init_abi2();
   init_decodeAbiParameters2();
@@ -9658,20 +9920,20 @@ var init_Errors = __esm(() => {
           return options.cause.message;
         return options.details;
       })();
-      const docsPath6 = (() => {
+      const docsPath7 = (() => {
         if (options.cause instanceof BaseError52)
           return options.cause.docsPath || options.docsPath;
         return options.docsPath;
       })();
       const docsBaseUrl = "https://oxlib.sh";
-      const docs = `${docsBaseUrl}${docsPath6 ?? ""}`;
+      const docs = `${docsBaseUrl}${docsPath7 ?? ""}`;
       const message = [
         shortMessage || "An error occurred.",
         ...options.metaMessages ? ["", ...options.metaMessages] : [],
-        ...details || docsPath6 ? [
+        ...details || docsPath7 ? [
           "",
           details ? `Details: ${details}` : undefined,
-          docsPath6 ? `See: ${docs}` : undefined
+          docsPath7 ? `See: ${docs}` : undefined
         ] : []
       ].filter((x) => typeof x === "string").join(`
 `);
@@ -9721,7 +9983,7 @@ var init_Errors = __esm(() => {
       this.cause = options.cause;
       this.details = details;
       this.docs = docs;
-      this.docsPath = docsPath6;
+      this.docsPath = docsPath7;
       this.shortMessage = shortMessage;
     }
     walk(fn) {
@@ -10478,15 +10740,15 @@ function encodeDeployData(parameters) {
     return bytecode;
   const description = abi.find((x) => ("type" in x) && x.type === "constructor");
   if (!description)
-    throw new AbiConstructorNotFoundError({ docsPath: docsPath6 });
+    throw new AbiConstructorNotFoundError({ docsPath: docsPath7 });
   if (!("inputs" in description))
-    throw new AbiConstructorParamsNotFoundError({ docsPath: docsPath6 });
+    throw new AbiConstructorParamsNotFoundError({ docsPath: docsPath7 });
   if (!description.inputs || description.inputs.length === 0)
-    throw new AbiConstructorParamsNotFoundError({ docsPath: docsPath6 });
+    throw new AbiConstructorParamsNotFoundError({ docsPath: docsPath7 });
   const data = encodeAbiParameters2(description.inputs, args);
   return concatHex2([bytecode, data]);
 }
-var docsPath6 = "/docs/contract/encodeDeployData";
+var docsPath7 = "/docs/contract/encodeDeployData";
 var init_encodeDeployData = __esm(() => {
   init_abi2();
   init_encodeAbiParameters2();
@@ -10512,7 +10774,7 @@ function getChainContractAddress({ blockNumber, chain, contract: name }) {
 var init_getChainContractAddress = __esm(() => {
   init_chain();
 });
-function getCallError(err, { docsPath: docsPath7, ...args }) {
+function getCallError(err, { docsPath: docsPath8, ...args }) {
   const cause = (() => {
     const cause2 = getNodeError(err, args);
     if (cause2 instanceof UnknownNodeError)
@@ -10520,7 +10782,7 @@ function getCallError(err, { docsPath: docsPath7, ...args }) {
     return cause2;
   })();
   return new CallExecutionError(cause, {
-    docsPath: docsPath7,
+    docsPath: docsPath8,
     ...args
   });
 }
@@ -10664,22 +10926,22 @@ function encodeErrorResult(parameters) {
   if (errorName) {
     const item = getAbiItem2({ abi, args, name: errorName });
     if (!item)
-      throw new AbiErrorNotFoundError(errorName, { docsPath: docsPath7 });
+      throw new AbiErrorNotFoundError(errorName, { docsPath: docsPath8 });
     abiItem = item;
   }
   if (abiItem.type !== "error")
-    throw new AbiErrorNotFoundError(undefined, { docsPath: docsPath7 });
+    throw new AbiErrorNotFoundError(undefined, { docsPath: docsPath8 });
   const definition = formatAbiItem4(abiItem);
   const signature = toFunctionSelector2(definition);
   let data = "0x";
   if (args && args.length > 0) {
     if (!abiItem.inputs)
-      throw new AbiErrorInputsNotFoundError(abiItem.name, { docsPath: docsPath7 });
+      throw new AbiErrorInputsNotFoundError(abiItem.name, { docsPath: docsPath8 });
     data = encodeAbiParameters2(abiItem.inputs, args);
   }
   return concatHex2([signature, data]);
 }
-var docsPath7 = "/docs/contract/encodeErrorResult";
+var docsPath8 = "/docs/contract/encodeErrorResult";
 var init_encodeErrorResult = __esm(() => {
   init_abi2();
   init_toFunctionSelector2();
@@ -10693,13 +10955,13 @@ function encodeFunctionResult(parameters) {
   if (functionName) {
     const item = getAbiItem2({ abi, name: functionName });
     if (!item)
-      throw new AbiFunctionNotFoundError2(functionName, { docsPath: docsPath8 });
+      throw new AbiFunctionNotFoundError2(functionName, { docsPath: docsPath9 });
     abiItem = item;
   }
   if (abiItem.type !== "function")
-    throw new AbiFunctionNotFoundError2(undefined, { docsPath: docsPath8 });
+    throw new AbiFunctionNotFoundError2(undefined, { docsPath: docsPath9 });
   if (!abiItem.outputs)
-    throw new AbiFunctionOutputsNotFoundError(abiItem.name, { docsPath: docsPath8 });
+    throw new AbiFunctionOutputsNotFoundError(abiItem.name, { docsPath: docsPath9 });
   const values = (() => {
     if (abiItem.outputs.length === 0)
       return [];
@@ -10711,7 +10973,7 @@ function encodeFunctionResult(parameters) {
   })();
   return encodeAbiParameters2(abiItem.outputs, values);
 }
-var docsPath8 = "/docs/contract/encodeFunctionResult";
+var docsPath9 = "/docs/contract/encodeFunctionResult";
 var init_encodeFunctionResult = __esm(() => {
   init_abi2();
   init_encodeAbiParameters2();
@@ -25151,6 +25413,84 @@ class Runner {
 init_exports();
 init_sha2();
 var sha2562 = sha256;
+init_abi();
+init_cursor();
+init_size();
+init_toEventSelector();
+init_decodeAbiParameters();
+init_formatAbiItem2();
+var docsPath2 = "/docs/contract/decodeEventLog";
+function decodeEventLog(parameters) {
+  const { abi, data, strict: strict_, topics } = parameters;
+  const strict = strict_ ?? true;
+  const [signature, ...argTopics] = topics;
+  if (!signature)
+    throw new AbiEventSignatureEmptyTopicsError({ docsPath: docsPath2 });
+  const abiItem = abi.find((x) => x.type === "event" && signature === toEventSelector(formatAbiItem2(x)));
+  if (!(abiItem && ("name" in abiItem)) || abiItem.type !== "event")
+    throw new AbiEventSignatureNotFoundError(signature, { docsPath: docsPath2 });
+  const { name, inputs } = abiItem;
+  const isUnnamed = inputs?.some((x) => !(("name" in x) && x.name));
+  const args = isUnnamed ? [] : {};
+  const indexedInputs = inputs.map((x, i2) => [x, i2]).filter(([x]) => ("indexed" in x) && x.indexed);
+  for (let i2 = 0;i2 < indexedInputs.length; i2++) {
+    const [param, argIndex] = indexedInputs[i2];
+    const topic = argTopics[i2];
+    if (!topic)
+      throw new DecodeLogTopicsMismatch({
+        abiItem,
+        param
+      });
+    args[isUnnamed ? argIndex : param.name || argIndex] = decodeTopic({
+      param,
+      value: topic
+    });
+  }
+  const nonIndexedInputs = inputs.filter((x) => !(("indexed" in x) && x.indexed));
+  if (nonIndexedInputs.length > 0) {
+    if (data && data !== "0x") {
+      try {
+        const decodedData = decodeAbiParameters(nonIndexedInputs, data);
+        if (decodedData) {
+          if (isUnnamed)
+            for (let i2 = 0;i2 < inputs.length; i2++)
+              args[i2] = args[i2] ?? decodedData.shift();
+          else
+            for (let i2 = 0;i2 < nonIndexedInputs.length; i2++)
+              args[nonIndexedInputs[i2].name] = decodedData[i2];
+        }
+      } catch (err) {
+        if (strict) {
+          if (err instanceof AbiDecodingDataSizeTooSmallError || err instanceof PositionOutOfBoundsError)
+            throw new DecodeLogDataMismatch({
+              abiItem,
+              data,
+              params: nonIndexedInputs,
+              size: size(data)
+            });
+          throw err;
+        }
+      }
+    } else if (strict) {
+      throw new DecodeLogDataMismatch({
+        abiItem,
+        data: "0x",
+        params: nonIndexedInputs,
+        size: 0
+      });
+    }
+  }
+  return {
+    eventName: name,
+    args: Object.values(args).length > 0 ? args : undefined
+  };
+}
+function decodeTopic({ param, value: value2 }) {
+  if (param.type === "string" || param.type === "bytes" || param.type === "tuple" || param.type.match(/^(.*)\[(\d+)?\]$/))
+    return value2;
+  const decodedArg = decodeAbiParameters([param], value2) || [];
+  return decodedArg[0];
+}
 var erc6492MagicBytes = "0x6492649264926492649264926492649264926492649264926492649264926492";
 init_slice();
 function isErc6492Signature(signature) {
@@ -25165,6 +25505,8 @@ function parseErc6492Signature(signature) {
 }
 init_encodeAbiParameters();
 init_encodeFunctionData();
+init_toHex();
+init_keccak256();
 var __defProp2 = Object.defineProperty;
 var __require22 = /* @__PURE__ */ ((x) => __require2)(function(x) {
   if (true)
@@ -26042,18 +26384,18 @@ init_toEventSelector2();
 init_encodeAbiParameters2();
 init_formatAbiItem4();
 init_getAbiItem2();
-var docsPath2 = "/docs/contract/encodeEventTopics";
+var docsPath3 = "/docs/contract/encodeEventTopics";
 function encodeEventTopics(parameters) {
   const { abi, eventName, args } = parameters;
   let abiItem = abi[0];
   if (eventName) {
     const item = getAbiItem2({ abi, name: eventName });
     if (!item)
-      throw new AbiEventNotFoundError(eventName, { docsPath: docsPath2 });
+      throw new AbiEventNotFoundError(eventName, { docsPath: docsPath3 });
     abiItem = item;
   }
   if (abiItem.type !== "event")
-    throw new AbiEventNotFoundError(undefined, { docsPath: docsPath2 });
+    throw new AbiEventNotFoundError(undefined, { docsPath: docsPath3 });
   const definition = formatAbiItem4(abiItem);
   const signature = toEventSelector2(definition);
   let topics = [];
@@ -26125,7 +26467,7 @@ init_contract();
 init_request();
 init_rpc();
 var EXECUTION_REVERTED_ERROR_CODE = 3;
-function getContractError(err, { abi, address, args, docsPath: docsPath4, functionName, sender }) {
+function getContractError(err, { abi, address, args, docsPath: docsPath5, functionName, sender }) {
   const error = err instanceof RawContractError ? err : err instanceof BaseError4 ? err.walk((err2) => ("data" in err2)) || err.walk() : {};
   const { code: code2, data, details, message, shortMessage } = error;
   const cause = (() => {
@@ -26145,7 +26487,7 @@ function getContractError(err, { abi, address, args, docsPath: docsPath4, functi
     abi,
     args,
     contractAddress: address,
-    docsPath: docsPath4,
+    docsPath: docsPath5,
     functionName,
     sender
   });
@@ -26315,7 +26657,7 @@ init_base2();
 init_transaction();
 
 class EstimateGasExecutionError extends BaseError4 {
-  constructor(cause, { account, docsPath: docsPath4, chain, data, gas, gasPrice, maxFeePerGas, maxPriorityFeePerGas, nonce, to, value: value2 }) {
+  constructor(cause, { account, docsPath: docsPath5, chain, data, gas, gasPrice, maxFeePerGas, maxPriorityFeePerGas, nonce, to, value: value2 }) {
     const prettyArgs = prettyPrint({
       from: account?.address,
       to,
@@ -26329,7 +26671,7 @@ class EstimateGasExecutionError extends BaseError4 {
     });
     super(cause.shortMessage, {
       cause,
-      docsPath: docsPath4,
+      docsPath: docsPath5,
       metaMessages: [
         ...cause.metaMessages ? [...cause.metaMessages, " "] : [],
         "Estimate Gas Arguments:",
@@ -26348,7 +26690,7 @@ class EstimateGasExecutionError extends BaseError4 {
 }
 init_node();
 init_getNodeError();
-function getEstimateGasError(err, { docsPath: docsPath4, ...args }) {
+function getEstimateGasError(err, { docsPath: docsPath5, ...args }) {
   const cause = (() => {
     const cause2 = getNodeError(err, args);
     if (cause2 instanceof UnknownNodeError)
@@ -26356,7 +26698,7 @@ function getEstimateGasError(err, { docsPath: docsPath4, ...args }) {
     return cause2;
   })();
   return new EstimateGasExecutionError(cause, {
-    docsPath: docsPath4,
+    docsPath: docsPath5,
     ...args
   });
 }
@@ -27051,16 +27393,16 @@ init_toEventSelector2();
 init_cursor3();
 init_decodeAbiParameters2();
 init_formatAbiItem4();
-var docsPath4 = "/docs/contract/decodeEventLog";
-function decodeEventLog(parameters) {
+var docsPath5 = "/docs/contract/decodeEventLog";
+function decodeEventLog2(parameters) {
   const { abi, data, strict: strict_, topics } = parameters;
   const strict = strict_ ?? true;
   const [signature, ...argTopics] = topics;
   if (!signature)
-    throw new AbiEventSignatureEmptyTopicsError({ docsPath: docsPath4 });
+    throw new AbiEventSignatureEmptyTopicsError2({ docsPath: docsPath5 });
   const abiItem = abi.find((x) => x.type === "event" && signature === toEventSelector2(formatAbiItem4(x)));
   if (!(abiItem && ("name" in abiItem)) || abiItem.type !== "event")
-    throw new AbiEventSignatureNotFoundError(signature, { docsPath: docsPath4 });
+    throw new AbiEventSignatureNotFoundError2(signature, { docsPath: docsPath5 });
   const { name, inputs } = abiItem;
   const isUnnamed = inputs?.some((x) => !(("name" in x) && x.name));
   const args = isUnnamed ? [] : {};
@@ -27069,11 +27411,11 @@ function decodeEventLog(parameters) {
     const [param, argIndex] = indexedInputs[i2];
     const topic = argTopics[i2];
     if (!topic)
-      throw new DecodeLogTopicsMismatch({
+      throw new DecodeLogTopicsMismatch2({
         abiItem,
         param
       });
-    args[isUnnamed ? argIndex : param.name || argIndex] = decodeTopic({
+    args[isUnnamed ? argIndex : param.name || argIndex] = decodeTopic2({
       param,
       value: topic
     });
@@ -27094,7 +27436,7 @@ function decodeEventLog(parameters) {
       } catch (err) {
         if (strict) {
           if (err instanceof AbiDecodingDataSizeTooSmallError2 || err instanceof PositionOutOfBoundsError2)
-            throw new DecodeLogDataMismatch({
+            throw new DecodeLogDataMismatch2({
               abiItem,
               data,
               params: nonIndexedInputs,
@@ -27104,7 +27446,7 @@ function decodeEventLog(parameters) {
         }
       }
     } else if (strict) {
-      throw new DecodeLogDataMismatch({
+      throw new DecodeLogDataMismatch2({
         abiItem,
         data: "0x",
         params: nonIndexedInputs,
@@ -27117,7 +27459,7 @@ function decodeEventLog(parameters) {
     args: Object.values(args).length > 0 ? args : undefined
   };
 }
-function decodeTopic({ param, value: value2 }) {
+function decodeTopic2({ param, value: value2 }) {
   if (param.type === "string" || param.type === "bytes" || param.type === "tuple" || param.type.match(/^(.*)\[(\d+)?\]$/))
     return value2;
   const decodedArg = decodeAbiParameters2([param], value2) || [];
@@ -27137,7 +27479,7 @@ function parseEventLogs(parameters) {
       const abiItem = abi.find((abiItem2) => abiItem2.type === "event" && log.topics[0] === toEventSelector2(abiItem2));
       if (!abiItem)
         return null;
-      const event = decodeEventLog({
+      const event = decodeEventLog2({
         ...log,
         abi: [abiItem],
         strict
@@ -27154,9 +27496,9 @@ function parseEventLogs(parameters) {
     } catch (err) {
       let eventName2;
       let isUnnamed;
-      if (err instanceof AbiEventSignatureNotFoundError)
+      if (err instanceof AbiEventSignatureNotFoundError2)
         return null;
-      if (err instanceof DecodeLogDataMismatch || err instanceof DecodeLogTopicsMismatch) {
+      if (err instanceof DecodeLogDataMismatch2 || err instanceof DecodeLogTopicsMismatch2) {
         if (strict)
           return null;
         eventName2 = err.abiItem.name;
@@ -27622,7 +27964,7 @@ function watchContractEvent(client, parameters) {
                 return;
               const log = data.result;
               try {
-                const { eventName: eventName2, args: args2 } = decodeEventLog({
+                const { eventName: eventName2, args: args2 } = decodeEventLog2({
                   abi,
                   data: log.data,
                   topics: log.topics,
@@ -27636,7 +27978,7 @@ function watchContractEvent(client, parameters) {
               } catch (err) {
                 let eventName2;
                 let isUnnamed;
-                if (err instanceof DecodeLogDataMismatch || err instanceof DecodeLogTopicsMismatch) {
+                if (err instanceof DecodeLogDataMismatch2 || err instanceof DecodeLogTopicsMismatch2) {
                   if (strict_)
                     return;
                   eventName2 = err.abiItem.name;
@@ -27668,13 +28010,13 @@ function watchContractEvent(client, parameters) {
 init_base2();
 
 class AccountNotFoundError extends BaseError4 {
-  constructor({ docsPath: docsPath9 } = {}) {
+  constructor({ docsPath: docsPath10 } = {}) {
     super([
       "Could not find an Account to execute with this Action.",
       "Please provide an Account with the `account` argument on the Action, or by supplying an `account` to the Client."
     ].join(`
 `), {
-      docsPath: docsPath9,
+      docsPath: docsPath10,
       docsSlug: "account",
       name: "AccountNotFoundError"
     });
@@ -27682,9 +28024,9 @@ class AccountNotFoundError extends BaseError4 {
 }
 
 class AccountTypeNotSupportedError extends BaseError4 {
-  constructor({ docsPath: docsPath9, metaMessages, type }) {
+  constructor({ docsPath: docsPath10, metaMessages, type }) {
     super(`Account type "${type}" is not supported.`, {
-      docsPath: docsPath9,
+      docsPath: docsPath10,
       metaMessages,
       name: "AccountTypeNotSupportedError"
     });
@@ -27702,7 +28044,7 @@ function assertCurrentChain({ chain, currentChainId }) {
 init_node();
 init_transaction();
 init_getNodeError();
-function getTransactionError(err, { docsPath: docsPath9, ...args }) {
+function getTransactionError(err, { docsPath: docsPath10, ...args }) {
   const cause = (() => {
     const cause2 = getNodeError(err, args);
     if (cause2 instanceof UnknownNodeError)
@@ -27710,7 +28052,7 @@ function getTransactionError(err, { docsPath: docsPath9, ...args }) {
     return cause2;
   })();
   return new TransactionExecutionError(cause, {
-    docsPath: docsPath9,
+    docsPath: docsPath10,
     ...args
   });
 }
@@ -31833,7 +32175,7 @@ function watchEvent(client, { address, args, batch = true, event, events, fromBl
               return;
             const log = data.result;
             try {
-              const { eventName, args: args2 } = decodeEventLog({
+              const { eventName, args: args2 } = decodeEventLog2({
                 abi: events_ ?? [],
                 data: log.data,
                 topics: log.topics,
@@ -31844,7 +32186,7 @@ function watchEvent(client, { address, args, batch = true, event, events, fromBl
             } catch (err) {
               let eventName;
               let isUnnamed;
-              if (err instanceof DecodeLogDataMismatch || err instanceof DecodeLogTopicsMismatch) {
+              if (err instanceof DecodeLogDataMismatch2 || err instanceof DecodeLogTopicsMismatch2) {
                 if (strict_)
                   return;
                 eventName = err.abiItem.name;
@@ -32344,7 +32686,7 @@ function createWalletClient(parameters) {
 }
 init_secp256k1();
 init_toHex2();
-function parseSignature2(signatureHex) {
+function parseSignature3(signatureHex) {
   const { r, s } = secp256k1.Signature.fromCompact(signatureHex.slice(2, 130));
   const yParityOrV = Number(`0x${signatureHex.slice(130)}`);
   const [v, yParity] = (() => {
@@ -34201,7 +34543,7 @@ var contractDeployerAbi = [
   }
 ];
 var accountAbstractionVersion1 = 1;
-var docsPath9 = "/docs/contract/encodeDeployData";
+var docsPath10 = "/docs/contract/encodeDeployData";
 function encodeDeployData2(parameters) {
   const { abi: abi2, args, bytecode, deploymentType, salt } = parameters;
   if (!args || args.length === 0) {
@@ -34214,11 +34556,11 @@ function encodeDeployData2(parameters) {
   }
   const description = abi2.find((x) => ("type" in x) && x.type === "constructor");
   if (!description)
-    throw new AbiConstructorNotFoundError({ docsPath: docsPath9 });
+    throw new AbiConstructorNotFoundError({ docsPath: docsPath10 });
   if (!("inputs" in description))
-    throw new AbiConstructorParamsNotFoundError({ docsPath: docsPath9 });
+    throw new AbiConstructorParamsNotFoundError({ docsPath: docsPath10 });
   if (!description.inputs || description.inputs.length === 0)
-    throw new AbiConstructorParamsNotFoundError({ docsPath: docsPath9 });
+    throw new AbiConstructorParamsNotFoundError({ docsPath: docsPath10 });
   const data = encodeAbiParameters2(description.inputs, args);
   const { functionName, argsContractDeployer } = getDeploymentDetails(deploymentType, salt ?? zeroHash, toHex2(hashBytecode(bytecode)), data);
   return encodeFunctionData2({
@@ -41771,7 +42113,7 @@ async function settle(wallet, paymentPayload, paymentRequirements) {
     };
   }
   const { signature } = parseErc6492Signature2(payload.signature);
-  const parsedSig = parseSignature2(signature);
+  const parsedSig = parseSignature3(signature);
   const tx = await wallet.writeContract({
     address: paymentRequirements.asset,
     abi: usdcABI,
@@ -42114,6 +42456,105 @@ async function verify3(client, payload, paymentRequirements, config2) {
     payer: SupportedEVMNetworks.includes(paymentRequirements.network) ? payload.payload.authorization.from : ""
   };
 }
+var executionProxyAbi = parseAbi([
+  "event ExecutionSucceeded(address indexed caller, address indexed target, bytes data, uint256 value, bool success, bytes result)",
+  "event ExecutionFailed(address indexed caller, address indexed target, bytes data, uint256 value, string reason)"
+]);
+async function onEVMLogTrigger(runtime2, payload) {
+  try {
+    runtime2.log(`
+=== EVM Log Event Detected ===`);
+    runtime2.log(`Timestamp: ${new Date().toISOString()}`);
+    const logAddress = payload.address;
+    const logTopics = payload.topics || [];
+    const logData = payload.data || new Uint8Array(0);
+    runtime2.log(`Contract Address: ${logAddress}`);
+    runtime2.log(`Topics Count: ${logTopics.length}`);
+    runtime2.log(`Data Length: ${logData.length} bytes`);
+    const isExecutionProxy = logAddress.toLowerCase() === runtime2.config.executionProxyAddress.toLowerCase();
+    if (!isExecutionProxy) {
+      runtime2.log(`Warning: Event from unknown contract: ${logAddress}`);
+      return JSON.stringify({ status: "ignored", reason: "unknown_contract" });
+    }
+    const eventSignature = logTopics.length > 0 ? bytesToHex(logTopics[0]) : null;
+    if (!eventSignature) {
+      runtime2.log("Warning: No event signature found in topics");
+      return JSON.stringify({ status: "error", reason: "no_signature" });
+    }
+    const executionSucceededHash = keccak256(toHex("ExecutionSucceeded(address,address,bytes,uint256,bool,bytes)"));
+    const executionFailedHash = keccak256(toHex("ExecutionFailed(address,address,bytes,uint256,string)"));
+    if (eventSignature === executionSucceededHash) {
+      try {
+        const decoded = decodeEventLog({
+          abi: executionProxyAbi,
+          data: bytesToHex(logData),
+          topics: logTopics.map((t3) => bytesToHex(t3)),
+          eventName: "ExecutionSucceeded"
+        });
+        runtime2.log(`
+--- ExecutionProxy.ExecutionSucceeded ---`);
+        runtime2.log(`Caller: ${decoded.args.caller}`);
+        runtime2.log(`Target: ${decoded.args.target}`);
+        runtime2.log(`Value: ${decoded.args.value.toString()}`);
+        runtime2.log(`Success: ${decoded.args.success}`);
+        runtime2.log(`Data Length: ${decoded.args.data.length} bytes`);
+        runtime2.log(`Result Length: ${decoded.args.result.length} bytes`);
+        return JSON.stringify({
+          status: "processed",
+          contract: "ExecutionProxy",
+          event: "ExecutionSucceeded",
+          caller: decoded.args.caller,
+          target: decoded.args.target,
+          value: decoded.args.value.toString(),
+          success: decoded.args.success,
+          dataLength: decoded.args.data.length,
+          resultLength: decoded.args.result.length
+        });
+      } catch (error) {
+        runtime2.log(`Error decoding ExecutionProxy.ExecutionSucceeded: ${error instanceof Error ? error.message : String(error)}`);
+        return JSON.stringify({ status: "error", reason: "decode_failed" });
+      }
+    } else if (eventSignature === executionFailedHash) {
+      try {
+        const decoded = decodeEventLog({
+          abi: executionProxyAbi,
+          data: bytesToHex(logData),
+          topics: logTopics.map((t3) => bytesToHex(t3)),
+          eventName: "ExecutionFailed"
+        });
+        runtime2.log(`
+--- ExecutionProxy.ExecutionFailed ---`);
+        runtime2.log(`Caller: ${decoded.args.caller}`);
+        runtime2.log(`Target: ${decoded.args.target}`);
+        runtime2.log(`Value: ${decoded.args.value.toString()}`);
+        runtime2.log(`Reason: ${decoded.args.reason}`);
+        runtime2.log(`Data Length: ${decoded.args.data.length} bytes`);
+        return JSON.stringify({
+          status: "processed",
+          contract: "ExecutionProxy",
+          event: "ExecutionFailed",
+          caller: decoded.args.caller,
+          target: decoded.args.target,
+          value: decoded.args.value.toString(),
+          reason: decoded.args.reason,
+          dataLength: decoded.args.data.length
+        });
+      } catch (error) {
+        runtime2.log(`Error decoding ExecutionProxy.ExecutionFailed: ${error instanceof Error ? error.message : String(error)}`);
+        return JSON.stringify({ status: "error", reason: "decode_failed" });
+      }
+    } else {
+      runtime2.log(`Warning: Unknown event signature: ${eventSignature}`);
+      return JSON.stringify({ status: "ignored", reason: "unknown_event" });
+    }
+  } catch (error) {
+    runtime2.log(`Error processing EVM log: ${error instanceof Error ? error.message : String(error)}`);
+    return JSON.stringify({
+      status: "error",
+      error: error instanceof Error ? error.message : String(error)
+    });
+  }
+}
 function getNetworkInfo(network248) {
   const networkMap = {
     arbitrum: { chainSelectorName: "ethereum-mainnet-arbitrum-1", isTestnet: false },
@@ -42393,6 +42834,17 @@ var onHttpTrigger = async (runtime2, payload) => {
 };
 var initWorkflow = (config2) => {
   const httpTrigger = new cre.capabilities.HTTPCapability;
+  const network248 = getNetwork({
+    chainFamily: "evm",
+    chainSelectorName: config2.chainSelectorName,
+    isTestnet: config2.isTestnet
+  });
+  if (!network248) {
+    throw new Error(`Network not found: ${config2.chainSelectorName}`);
+  }
+  const evmClient = new cre.capabilities.EVMClient(network248.chainSelector.selector);
+  const executionSucceededHash = keccak256(toHex("ExecutionSucceeded(address,address,bytes,uint256,bool,bytes)"));
+  const executionFailedHash = keccak256(toHex("ExecutionFailed(address,address,bytes,uint256,string)"));
   return [
     cre.handler(httpTrigger.trigger({
       authorizedKeys: [
@@ -42401,7 +42853,13 @@ var initWorkflow = (config2) => {
           publicKey: config2.authorizedEVMAddress
         }
       ]
-    }), onHttpTrigger)
+    }), onHttpTrigger),
+    cre.handler(evmClient.logTrigger({
+      addresses: [config2.executionProxyAddress],
+      topics: [
+        { values: [executionSucceededHash, executionFailedHash] }
+      ]
+    }), onEVMLogTrigger)
   ];
 };
 async function main() {

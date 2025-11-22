@@ -32,7 +32,7 @@ contract SettlementReceiver is IReceiverTemplate, Ownable {
     event ExpectedAuthorUpdated(address indexed oldAuthor, address indexed newAuthor);
     event ExpectedWorkflowNameUpdated(bytes10 indexed oldName, bytes10 indexed newName);
     event ExecutionProxyUpdated(address indexed oldProxy, address indexed newProxy);
-    event ExecutionRequested(address indexed target, bytes data, uint256 value, bool success);
+    event ExecutionSucceeded(address indexed target, bytes data, uint256 value, bool success);
 
     /// @notice Constructor sets all security parameters
     /// @param expectedAuthor The expected workflow owner address
@@ -148,7 +148,7 @@ contract SettlementReceiver is IReceiverTemplate, Ownable {
         (success, result) = ExecutionProxy(payable(executionProxy)).execute(target, data, value);
         
         // Emit additional event for SettlementReceiver tracking
-        emit ExecutionRequested(target, data, value, success);
+        emit ExecutionSucceeded(target, data, value, success);
         
         return (success, result);
     }

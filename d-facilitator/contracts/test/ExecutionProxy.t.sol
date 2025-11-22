@@ -78,9 +78,9 @@ contract ExecutionProxyTest is Test {
     function test_SuccessfulExecution() public {
         bytes memory data = abi.encodeWithSignature("testFunction()");
         
-        // Expect ExecutionRequested event with success = true
+        // Expect ExecutionSucceeded event with success = true
         vm.expectEmit(true, true, false, true);
-        emit ExecutionProxy.ExecutionRequested(
+        emit ExecutionProxy.ExecutionSucceeded(
             address(settlementReceiver),
             address(mockTarget),
             data,
@@ -103,9 +103,9 @@ contract ExecutionProxyTest is Test {
         // Fund ExecutionProxy
         vm.deal(address(executionProxy), value);
         
-        // Expect ExecutionRequested event with success = true
+        // Expect ExecutionSucceeded event with success = true
         vm.expectEmit(true, true, false, true);
-        emit ExecutionProxy.ExecutionRequested(
+        emit ExecutionProxy.ExecutionSucceeded(
             address(settlementReceiver),
             address(mockTarget),
             data,
@@ -145,10 +145,10 @@ contract ExecutionProxyTest is Test {
     function test_ExecutionWithReturnValue() public {
         bytes memory data = abi.encodeWithSignature("returnValue()");
         
-        // Expect ExecutionRequested event with success = true and return value
+        // Expect ExecutionSucceeded event with success = true and return value
         vm.expectEmit(true, true, false, true);
         bytes memory expectedResult = abi.encode(uint256(42));
-        emit ExecutionProxy.ExecutionRequested(
+        emit ExecutionProxy.ExecutionSucceeded(
             address(settlementReceiver),
             address(mockTarget),
             data,

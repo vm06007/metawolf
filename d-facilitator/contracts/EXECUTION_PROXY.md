@@ -39,7 +39,7 @@ Executes an arbitrary call and returns success status without reverting.
 - `result`: The return data from the execution
 
 **Events:**
-- `ExecutionRequested`: Emitted on both success and failure
+- `ExecutionSucceeded`: Emitted on both success and failure
 - `ExecutionFailed`: Emitted only on failure with error reason
 
 ### `executeWithRevert(address target, bytes calldata data, uint256 value)`
@@ -54,13 +54,13 @@ Executes an arbitrary call and reverts if execution fails.
 - `result`: The return data from the execution
 
 **Events:**
-- `ExecutionRequested`: Emitted only on success
+- `ExecutionSucceeded`: Emitted only on success
 
 ## Events
 
-### `ExecutionRequested`
+### `ExecutionSucceeded`
 ```solidity
-event ExecutionRequested(
+event ExecutionSucceeded(
     address indexed caller,
     address indexed target,
     bytes data,
