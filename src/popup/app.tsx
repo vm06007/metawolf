@@ -1,6 +1,7 @@
 import { WalletService } from './services/wallet-service';
 import { HaloService } from './services/halo-service';
 import { FireflyService } from './services/firefly-service';
+import { multisigService } from './services/multisig-service';
 import { formatAddress, getDisplayName } from './utils/account';
 import { renderDashboardHeader } from './components/DashboardHeader';
 import { renderDashboardPanel, DEFAULT_PANEL_ITEMS, getPanelItems } from './components/DashboardPanel';
@@ -2609,13 +2610,51 @@ export class PopupApp {
         try {
             this.hideCreateMultisigForm();
 
+            // Step 1: Scan chips and create account structure
             const response = await this.haloService.createMultisigAccount(numChips, threshold, name);
 
             await this.loadAccounts();
             this.state.unlocked = true;
             this.render();
 
-            this.showSuccessMessage(`✅ Multisig Account Created! Address: ${formatAddress(response.account.address)}`);
+            // Step 2: Deploy multisig contract using first chip
+            // NOTE: The factory contract must be deployed first on the target chain
+            // Replace this with the actual deployed factory address
+            const FACTORY_ADDRESS = '0x0000000000000000000000000000000000000000'; // TODO: Deploy MultisigFactory contract
+
+            // Get current chain ID
+            const selectedAccount = await this.walletService.getSelectedAccount();
+            const chainId = selectedAccount?.chainId || this.state.selectedAccount?.chainId || 1;
+
+            try {
+                // Show deployment progress
+                this.showSuccessMessage('Deploying multisig contract... Please scan first Halo chip.');
+
+                // Deploy multisig contract (will prompt for chip scan)
+                const deployment = await multisigService.deployMultisig(
+                    response.account,
+                    FACTORY_ADDRESS,
+                    chainId
+                );
+
+                // Update account to mark as deployed
+                await this.loadAccounts();
+                this.render();
+
+                // Show success with transaction hash
+                this.showSuccessMessage(
+                    `✅ Multisig Deployed! Address: ${formatAddress(deployment.address)}`,
+                    deployment.txHash,
+                    chainId
+                );
+            } catch (deployError: any) {
+                // Account was created but deployment failed
+                console.error('Multisig deployment failed:', deployError);
+                this.showErrorMessage(
+                    `Multisig account created but deployment failed: ${deployError.message}. ` +
+                    `You can deploy it later from the account details.`
+                );
+            }
         } catch (error: any) {
             this.showErrorMessage('Failed to create multisig account: ' + (error.message || 'Unknown error'));
         }

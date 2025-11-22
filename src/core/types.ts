@@ -11,6 +11,8 @@ export interface MultisigConfig {
     chips: ChipInfo[]; // Array of chips that can sign
     smartAccountAddress?: string; // Deployed smart contract address
     deployed?: boolean; // Whether the contract is deployed on-chain
+    deployedAddress?: string; // Actual deployed contract address
+    deployedChainId?: number; // Chain ID where contract is deployed
     deploymentTxHash?: string; // Transaction hash of deployment
 }
 

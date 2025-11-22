@@ -1,5 +1,6 @@
 import { transferService } from '../services/transfer-service';
 import { unifiedBalanceService } from '../services/unified-balance-service';
+import { multisigService } from '../services/multisig-service';
 import { loadEthers } from '../ethers-loader';
 import { encodeERC20Transfer, getTokenContractAddress } from '../utils/erc20';
 import type { AppState } from '../types/app-state';
@@ -35,6 +36,67 @@ export async function handleSendTransfer(
 
         const selectedAccount = await walletService.getSelectedAccount();
         const isHaloChipAccount = selectedAccount?.isChipAccount && selectedAccount?.chipInfo;
+        const isMultisigAccount = selectedAccount?.multisig;
+
+        // Handle multisig account transfers (requires 2 chip scans)
+        if (isMultisigAccount) {
+            if (!selectedAccount.multisig?.deployed || !selectedAccount.multisig?.deployedAddress) {
+                throw new Error('Multisig contract not deployed. Please deploy it first.');
+            }
+
+            const ethersModule = await loadEthers();
+            const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
+            
+            let value = '0x0';
+            let data = '0x';
+
+            if (isNative) {
+                // Native ETH transfer
+                value = ethers.parseEther(params.amount).toString();
+            } else {
+                // ERC20 token transfer
+                const asset = state.unifiedBalanceData?.assets.find(a => a.symbol === params.token);
+                if (!asset) {
+                    throw new Error(`Token ${params.token} not found in balance`);
+                }
+
+                let tokenContractAddress: string | null = null;
+                if ((asset as any).contractAddress) {
+                    tokenContractAddress = (asset as any).contractAddress;
+                } else if ((asset as any).address) {
+                    tokenContractAddress = (asset as any).address;
+                } else {
+                    tokenContractAddress = getTokenContractAddress(params.token, params.chainId);
+                }
+
+                if (!tokenContractAddress) {
+                    throw new Error(`Token contract address not found for ${params.token} on chain ${params.chainId}`);
+                }
+
+                const decimals = (asset as any).decimals || 18;
+                const amountBigInt = ethers.parseUnits(params.amount, decimals);
+                data = encodeERC20Transfer(params.recipient, amountBigInt);
+            }
+
+            // Execute multisig transaction (will prompt for 2 chip scans)
+            const result = await multisigService.executeMultisigTransaction(
+                selectedAccount,
+                params.recipient,
+                value,
+                data,
+                params.chainId
+            );
+
+            if (result.success) {
+                showSuccessMessage('Transfer successful!', result.transactionHash, params.chainId);
+                await loadUnifiedBalances();
+                state.showSendScreen = false;
+                render();
+            } else {
+                throw new Error(result.error || 'Multisig transfer failed');
+            }
+            return;
+        }
 
         if (isNative && isHaloChipAccount) {
             const result = await handleHaloETHTransfer({

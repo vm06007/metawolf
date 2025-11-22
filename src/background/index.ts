@@ -2332,6 +2332,84 @@ function handleMessage(
                     }
                     break;
 
+                case 'SIGN_MULTISIG_DEPLOYMENT':
+                case 'SIGN_MULTISIG_TRANSACTION':
+                    // Sign transaction with a specific Halo chip for multisig operations
+                    if (!wallet.isUnlocked()) {
+                        safeSendResponse({ success: false, error: 'Wallet is locked' });
+                        break;
+                    }
+                    try {
+                        const provider = await wallet.getProvider();
+                        const { HaloSigner } = await import('../halo/halo-signer.js');
+                        
+                        // Create signer for the specific chip
+                        const chipAddress = message.chipAddress;
+                        const slot = message.slot || 1;
+                        const haloSigner = new HaloSigner(chipAddress, slot, provider);
+                        
+                        // Sign the transaction
+                        const signedTx = await haloSigner.signTransaction(message.transaction);
+                        
+                        safeSendResponse({
+                            success: true,
+                            signedTransaction: signedTx,
+                            chipAddress: chipAddress,
+                        });
+                    } catch (error: any) {
+                        console.error('[SIGN_MULTISIG] Error:', error);
+                        safeSendResponse({ success: false, error: error.message || 'Failed to sign transaction' });
+                    }
+                    break;
+
+                case 'SEND_SIGNED_TRANSACTION':
+                    // Send a pre-signed transaction
+                    if (!wallet.isUnlocked()) {
+                        safeSendResponse({ success: false, error: 'Wallet is locked' });
+                        break;
+                    }
+                    try {
+                        const provider = await wallet.getProvider();
+                        const txResponse = await provider.broadcastTransaction(message.signedTransaction);
+                        
+                        safeSendResponse({
+                            success: true,
+                            transactionHash: txResponse.hash,
+                        });
+                    } catch (error: any) {
+                        console.error('[SEND_SIGNED_TRANSACTION] Error:', error);
+                        safeSendResponse({ success: false, error: error.message || 'Failed to send transaction' });
+                    }
+                    break;
+
+                case 'UPDATE_MULTISIG_DEPLOYED':
+                    // Update multisig account to mark as deployed
+                    if (!wallet.isUnlocked()) {
+                        safeSendResponse({ success: false, error: 'Wallet is locked' });
+                        break;
+                    }
+                    try {
+                        const account = wallet.getAccountByAddress(message.address);
+                        if (!account || !account.multisig) {
+                            safeSendResponse({ success: false, error: 'Multisig account not found' });
+                            break;
+                        }
+                        
+                        // Update multisig deployment status
+                        account.multisig.deployed = true;
+                        account.multisig.deployedAddress = message.deployedAddress;
+                        account.multisig.deployedChainId = message.chainId;
+                        
+                        // Save updated account
+                        await wallet.saveState();
+                        
+                        safeSendResponse({ success: true });
+                    } catch (error: any) {
+                        console.error('[UPDATE_MULTISIG_DEPLOYED] Error:', error);
+                        safeSendResponse({ success: false, error: error.message || 'Failed to update multisig' });
+                    }
+                    break;
+
                 default:
                     safeSendResponse({ success: false, error: 'Unknown message type: ' + message.type });
                     break;
