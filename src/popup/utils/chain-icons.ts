@@ -1,9 +1,114 @@
 /**
- * Chain icon utilities - uses white logos from DeBank (same as clone folder)
- * for better visibility on blue backgrounds
- * 
- * These white logos are extracted from clone/src/constant/default-support-chains.json
+ * Chain icon utilities - provides both colored and white logos from DeBank
+ *
+ * Colored logos are for use on light backgrounds (like modals)
+ * White logos are for use on dark/blue backgrounds
+ *
+ * These logos are from DeBank (same as clone folder)
  */
+
+// Map of chain IDs to colored logo URLs from DeBank
+// These are the regular colored logos used in the clone folder
+// Extracted from clone/src/constant/default-support-chains.json
+const CHAIN_COLORED_LOGOS: Record<number, string> = {
+    1: 'https://static.debank.com/image/chain/logo_url/eth/42ba589cd077e7bdd97db6480b0ff61d.png',
+    10: 'https://static.debank.com/image/chain/logo_url/op/68bef0c9f75488f4e302805ef9c8fc84.png',
+    14: 'https://static.debank.com/image/chain/logo_url/flr/9ee03d5d7036ad9024e81d55596bb4dc.png',
+    25: 'https://static.debank.com/image/chain/logo_url/cro/f947000cc879ee8ffa032793808c741c.png',
+    30: 'https://static.debank.com/image/chain/logo_url/rsk/ff47def89fba98394168bf5f39920c8c.png',
+    40: 'https://static.debank.com/image/chain/logo_url/tlos/6191b8e0b261536044fc70ba746ba2c9.png',
+    56: 'https://static.debank.com/image/chain/logo_url/bsc/bc73fa84b7fc5337905e527dadcbc854.png',
+    100: 'https://static.debank.com/image/chain/logo_url/xdai/43c1e09e93e68c9f0f3b132976394529.png',
+    109: 'https://static.debank.com/image/chain/logo_url/shib/4ec79ed9ee4988dfdfc41e1634a447be.png',
+    122: 'https://static.debank.com/image/chain/logo_url/fuse/7a21b958761d52d04ff0ce829d1703f4.png',
+    130: 'https://static.debank.com/image/chain/logo_url/uni/7e9011cb7bd0d19deb7727280aa5c8b1.png',
+    137: 'https://static.debank.com/image/chain/logo_url/matic/52ca152c08831e4765506c9bd75767e8.png',
+    146: 'https://static.debank.com/image/chain/logo_url/sonic/8ba4d8395618ec1329ea7142b0fde642.png',
+    169: 'https://static.debank.com/image/chain/logo_url/manta/0e25a60b96a29d6a5b9e524be7565845.png',
+    177: 'https://static.debank.com/image/chain/logo_url/hsk/3f35eb1691403fe4eae7a1d1c45b704c.png',
+    185: 'https://static.debank.com/image/chain/logo_url/mint/86404f93cd4e51eafcc2e244d417c03f.png',
+    196: 'https://static.debank.com/image/chain/logo_url/xlayer/282a62903a4c74a964b704a161d1ba39.png',
+    204: 'https://static.debank.com/image/chain/logo_url/opbnb/07e2e686e363a842d0982493638e1285.png',
+    223: 'https://static.debank.com/image/chain/logo_url/b2/6ca6c8bc33af59c5b9273a2b7efbd236.png',
+    232: 'https://static.debank.com/image/chain/logo_url/lens/d41e14ba300d526518fb8ad20714685b.png',
+    239: 'https://static.debank.com/image/chain/logo_url/tac/4b57fdb89de90a15f366cdf4bdc92665.png',
+    248: 'https://static.debank.com/image/chain/logo_url/oas/61dfecab1ba8a404354ce94b5a54d4b3.png',
+    250: 'https://static.debank.com/image/chain/logo_url/ftm/14133435f89637157a4405e954e1b1b2.png',
+    252: 'https://static.debank.com/image/chain/logo_url/frax/2e210d888690ad0c424355cc8471d48d.png',
+    288: 'https://static.debank.com/image/chain/logo_url/boba/e43d79cd8088ceb3ea3e4a240a75728f.png',
+    291: 'https://static.debank.com/image/chain/logo_url/orderly/aedf85948240dddcf334205794d2a6c9.png',
+    324: 'https://static.debank.com/image/chain/logo_url/era/2cfcd0c8436b05d811b03935f6c1d7da.png',
+    388: 'https://static.debank.com/image/chain/logo_url/croze/e9572bb5f00a04dd2e828dae75456abe.png',
+    480: 'https://static.debank.com/image/chain/logo_url/world/3e8c6af046f442cf453ce79a12433e2f.png',
+    592: 'https://static.debank.com/image/chain/logo_url/astar/398c7e0014bdada3d818367a7273fabe.png',
+    999: 'https://static.debank.com/image/chain/logo_url/hyper/0b3e288cfe418e9ce69eef4c96374583.png',
+    1030: 'https://static.debank.com/image/chain/logo_url/cfx/eab0c7304c6820b48b2a8d0930459b82.png',
+    1088: 'https://static.debank.com/image/chain/logo_url/metis/7485c0a61c1e05fdf707113b6b6ac917.png',
+    1101: 'https://static.debank.com/image/chain/logo_url/pze/a2276dce2d6a200c6148fb975f0eadd3.png',
+    1111: 'https://static.debank.com/image/chain/logo_url/wemix/d1ba88d1df6cca0b0cb359c36a09c054.png',
+    1116: 'https://static.debank.com/image/chain/logo_url/core/ccc02f660e5dd410b23ca3250ae7c060.png',
+    1135: 'https://static.debank.com/image/chain/logo_url/lisk/4d4970237c52104a22e93993de3dcdd8.png',
+    1284: 'https://static.debank.com/image/chain/logo_url/mobm/fcfe3dee0e55171580545cf4d4940257.png',
+    1285: 'https://static.debank.com/image/chain/logo_url/movr/cfdc1aef482e322abd02137b0e484dba.png',
+    1329: 'https://static.debank.com/image/chain/logo_url/sei/34ddf58f678be2db5b2636b59c9828b5.png',
+    1480: 'https://static.debank.com/image/chain/logo_url/vana/b2827795c1556eeeaeb58cb3411d0b15.png',
+    1514: 'https://static.debank.com/image/chain/logo_url/story/d2311c0952f9801e0d42e3b87b4bd755.png',
+    1625: 'https://static.debank.com/image/chain/logo_url/gravity/fa9a1d29f671b85a653f293893fa27e3.png',
+    1729: 'https://static.debank.com/image/chain/logo_url/reya/20d71aad4279c33229297da1f00d8ae1.png',
+    1868: 'https://static.debank.com/image/chain/logo_url/soneium/35014ebaa414b336a105ff2115ba2116.png',
+    1923: 'https://static.debank.com/image/chain/logo_url/swell/3e98b1f206af5f2c0c2cc4d271ee1070.png',
+    2000: 'https://static.debank.com/image/chain/logo_url/doge/2538141079688a7a43bc22c7b60fb45f.png',
+    2020: 'https://static.debank.com/image/chain/logo_url/ron/6e0f509804bc83bf042ef4d674c1c5ee.png',
+    2222: 'https://static.debank.com/image/chain/logo_url/kava/b26bf85a1a817e409f9a3902e996dc21.png',
+    2345: 'https://static.debank.com/image/chain/logo_url/goat/b324eea675692ec1c99a83e415386ed0.png',
+    2410: 'https://static.debank.com/image/chain/logo_url/karak/a9e47f00f6eeb2c9cc8f9551cff5fe68.png',
+    2741: 'https://static.debank.com/image/chain/logo_url/abs/c59200aadc06c79d7c061cfedca85c38.png',
+    2818: 'https://static.debank.com/image/chain/logo_url/morph/2b5255a6c3a36d4b39e1dea02aa2f097.png',
+    4200: 'https://static.debank.com/image/chain/logo_url/merlin/458e4686dfb909ba871bd96fe45417a8.png',
+    4689: 'https://static.debank.com/image/chain/logo_url/iotx/d3be2cd8677f86bd9ab7d5f3701afcc9.png',
+    5000: 'https://static.debank.com/image/chain/logo_url/mnt/0af11a52431d60ded59655c7ca7e1475.png',
+    50104: 'https://static.debank.com/image/chain/logo_url/sophon/edc0479e5fc884b240959449ef44a386.png',
+    534352: 'https://static.debank.com/image/chain/logo_url/scrl/1fa5c7e0bfd353ed0a97c1476c9c42d2.png',
+    53935: 'https://static.debank.com/image/chain/logo_url/dfk/233867c089c5b71be150aa56003f3f7a.png',
+    543210: 'https://static.debank.com/image/chain/logo_url/zero/d9551d98b98482204b93544f90b43985.png',
+    5545: 'https://static.debank.com/image/chain/logo_url/duck/b0b13c10586f03bcfc12358c48a22c95.png',
+    57073: 'https://static.debank.com/image/chain/logo_url/ink/af5b553a5675342e28bdb794328e8727.png',
+    59144: 'https://static.debank.com/image/chain/logo_url/linea/32d4ff2cf92c766ace975559c232179c.png',
+    6001: 'https://static.debank.com/image/chain/logo_url/bb/da74a4980f24d870cb43ccd763e0c966.png',
+    60808: 'https://static.debank.com/image/chain/logo_url/bob/4e0029be99877775664327213a8da60e.png',
+    7000: 'https://static.debank.com/image/chain/logo_url/zeta/d0e1b5e519d99c452a30e83a1263d1d0.png',
+    747474: 'https://static.debank.com/image/chain/logo_url/katana/0202d6aecd963a9c0b2afb56c4d731b5.png',
+    7560: 'https://static.debank.com/image/chain/logo_url/cyber/3a3c0c5da5fa8876c8c338afae0db478.png',
+    7700: 'https://static.debank.com/image/chain/logo_url/canto/47574ef619e057d2c6bbce1caba57fb6.png',
+    7777777: 'https://static.debank.com/image/chain/logo_url/zora/de39f62c4489a2359d5e1198a8e02ef1.png',
+    80094: 'https://static.debank.com/image/chain/logo_url/bera/89db55160bb8bbb19464cabf17e465bc.png',
+    81457: 'https://static.debank.com/image/chain/logo_url/blast/15132294afd38ce980639a381ee30149.png',
+    8217: 'https://static.debank.com/image/chain/logo_url/klay/4182ee077031d843a57e42746c30c072.png',
+    8453: 'https://static.debank.com/image/chain/logo_url/base/ccc1513e4f390542c4fb2f4b88ce9579.png',
+    88888: 'https://static.debank.com/image/chain/logo_url/chiliz/548bc261b49eabea7227832374e1fcb0.png',
+    9745: 'https://static.debank.com/image/chain/logo_url/plasma/baafefce3b9d43b12b0c016f30aff140.png',
+    98866: 'https://static.debank.com/image/chain/logo_url/plume/f74d0d202dd8af7baf6940864ee79006.png',
+    124816: 'https://static.debank.com/image/chain/logo_url/mito/d18958f17a84f20257ed89eff5ce6ff7.png',
+    167000: 'https://static.debank.com/image/chain/logo_url/taiko/7723fbdb38ef181cd07a8b8691671e6b.png',
+    200901: 'https://static.debank.com/image/chain/logo_url/btr/78ff16cf14dad73c168a70f7c971e401.png',
+    1380012617: 'https://static.debank.com/image/chain/logo_url/rari/67fc6abba5cfc6bb3a57bb6afcf5afee.png',
+    1440000: 'https://static.debank.com/image/chain/logo_url/xrpl/131298e77672be4a16611a103fa39366.png',
+    20240603: 'https://static.debank.com/image/chain/logo_url/dbk/1255de5a9316fed901d14c069ac62f39.png',
+    21000000: 'https://static.debank.com/image/chain/logo_url/corn/2ac7405fee5fdeee5964ba0bcf2216f4.png',
+    33139: 'https://static.debank.com/image/chain/logo_url/ape/290d3884861ae5e09394c913f788168d.png',
+    34443: 'https://static.debank.com/image/chain/logo_url/mode/466e6e12f4fd827f8f497cceb0601a5e.png',
+    42161: 'https://static.debank.com/image/chain/logo_url/arb/854f629937ce94bebeb2cd38fb336de7.png',
+    42170: 'https://static.debank.com/image/chain/logo_url/nova/06eb2b7add8ba443d5b219c04089c326.png',
+    42220: 'https://static.debank.com/image/chain/logo_url/celo/faae2c36714d55db1d7a36aba5868f6a.png',
+    42793: 'https://static.debank.com/image/chain/logo_url/ethlink/76f6335793b594863f41df992dc53d22.png',
+    43111: 'https://static.debank.com/image/chain/logo_url/hemi/db2e74d52c77b941d01f9beae0767ab6.png',
+    43114: 'https://static.debank.com/image/chain/logo_url/avax/4d1649e8a0c7dec9de3491b81807d402.png',
+    48900: 'https://static.debank.com/image/chain/logo_url/zircuit/0571a12255432950da5112437058fa5b.png',
+    13371: 'https://static.debank.com/image/chain/logo_url/itze/ce3a511dc511053b1b35bb48166a5d39.png',
+    // Testnets - use Ethereum logo as fallback since testnets may not have distinct logos
+    5: 'https://static.debank.com/image/chain/logo_url/eth/42ba589cd077e7bdd97db6480b0ff61d.png', // Goerli
+    11155111: 'https://static.debank.com/image/chain/logo_url/eth/42ba589cd077e7bdd97db6480b0ff61d.png', // Sepolia
+};
 
 // Map of chain IDs to white logo URLs from DeBank
 // These are the same white logos used in the clone folder
@@ -111,20 +216,31 @@ const CHAIN_WHITE_LOGOS: Record<number, string> = {
 };
 
 /**
+ * Get colored logo URL for a chain ID (for use on light backgrounds like modals)
+ */
+export function getChainColoredLogo(chainId: number, fallbackLogo?: string): string {
+    return CHAIN_COLORED_LOGOS[chainId] || fallbackLogo || '';
+}
+
+/**
  * Get white logo URL for a chain ID (for use on blue/dark backgrounds)
- * Falls back to regular logo if white logo not available
+ * Falls back to colored logo if white logo not available
  */
 export function getChainWhiteLogo(chainId: number, fallbackLogo?: string): string {
     return CHAIN_WHITE_LOGOS[chainId] || fallbackLogo || '';
 }
 
 /**
- * Get chain logo - prefers white logo for better visibility
+ * Get chain logo - prefers colored logo by default (for modals/light backgrounds)
+ * Set useWhite=true for dark backgrounds
  */
-export function getChainLogo(chainId: number, fallbackLogo?: string, useWhite: boolean = true): string {
+export function getChainLogo(chainId: number, fallbackLogo?: string, useWhite: boolean = false): string {
     if (useWhite) {
         const whiteLogo = getChainWhiteLogo(chainId, fallbackLogo);
         if (whiteLogo) return whiteLogo;
+    } else {
+        const coloredLogo = getChainColoredLogo(chainId, fallbackLogo);
+        if (coloredLogo) return coloredLogo;
     }
     return fallbackLogo || '';
 }

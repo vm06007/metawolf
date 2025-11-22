@@ -58,6 +58,21 @@ export class WalletService {
         }
     }
 
+    async getSelectedNetwork(): Promise<number | null> {
+        try {
+            const response = await sendMessageWithRetry({
+                type: 'GET_SELECTED_NETWORK',
+            }, 2, 2000);
+            if (response && response.success && response.chainId !== undefined) {
+                return response.chainId;
+            }
+            return null;
+        } catch (error: any) {
+            console.error('Error loading selected network:', error);
+            return null;
+        }
+    }
+
     private getDefaultNetworks(): any[] {
         return [
             {

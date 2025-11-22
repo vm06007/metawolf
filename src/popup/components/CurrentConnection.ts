@@ -1,5 +1,6 @@
 import { formatAddress } from '../utils/account';
 import { EthPriceData } from './EthPricePanel';
+import { getChainColoredLogo } from '../utils/chain-icons';
 
 export interface ConnectedDApp {
     origin: string;
@@ -16,7 +17,8 @@ export function renderCurrentConnection(
     ethPriceData?: EthPriceData | null,
     isExpanded?: boolean,
     ethPriceLoading?: boolean,
-    currentNetworkName?: string
+    currentNetworkName?: string,
+    currentChainId?: number
 ): string {
     if (!connectedDApp) {
         // In expanded view, show price info in the same row
@@ -177,10 +179,24 @@ export function renderCurrentConnection(
                 </div>
                 ${isConnected ? `
                     <div class="current-connection-chain-selector" id="current-connection-chain-btn">
-                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
-                            <circle cx="8" cy="8" r="7" fill="#627EEA"/>
-                            <path d="M8 2V8L11 10" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
+                        ${(() => {
+                            const chainLogo = currentChainId ? getChainColoredLogo(currentChainId) : null;
+                            return chainLogo ? `
+                                <img src="${chainLogo}" 
+                                     alt="${currentNetworkName || 'Network'}" 
+                                     style="width: 16px; height: 16px; border-radius: 50%; object-fit: cover; flex-shrink: 0;"
+                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style="display: none;">
+                                    <circle cx="8" cy="8" r="7" fill="#627EEA"/>
+                                    <path d="M8 2V8L11 10" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            ` : `
+                                <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                                    <circle cx="8" cy="8" r="7" fill="#627EEA"/>
+                                    <path d="M8 2V8L11 10" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                </svg>
+                            `;
+                        })()}
                         <span>${currentNetworkName || 'Ethereum'}</span>
                         <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                             <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>

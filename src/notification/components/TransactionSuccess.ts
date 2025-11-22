@@ -11,6 +11,7 @@ function getEtherscanUrl(chainId: number, txHash: string): string {
         10: 'https://optimistic.etherscan.io/tx',
         56: 'https://bscscan.com/tx',
         43114: 'https://snowtrace.io/tx',
+        48900: 'https://explorer.zircuit.com/tx', // Zircuit Mainnet
     };
 
     const baseUrl = explorers[chainId] || explorers[1];

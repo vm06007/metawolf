@@ -221,6 +221,28 @@ class NotificationApp {
         const app = document.getElementById('app');
         if (!app || !this.transactionRequest) return;
 
+        // Ensure minimum gas limit for contract interactions
+        const tx = this.transactionRequest.transaction;
+        const isContractInteraction = tx.data && 
+            tx.data !== '0x' && 
+            tx.data !== '0x0' && 
+            tx.data.length > 2;
+        
+        if (isContractInteraction) {
+            const MIN_CONTRACT_GAS = 1000000;
+            const currentGas = tx.gasLimit 
+                ? (typeof tx.gasLimit === 'string' 
+                    ? parseInt(tx.gasLimit, 10) 
+                    : Number(tx.gasLimit))
+                : 0;
+            
+            // If gas limit is below minimum or not set, set to minimum
+            if (!tx.gasLimit || currentGas < MIN_CONTRACT_GAS) {
+                console.log(`[Notification] Contract interaction detected. Setting minimum gas limit: ${MIN_CONTRACT_GAS} (was: ${currentGas || 'not set'})`);
+                this.transactionRequest.transaction.gasLimit = MIN_CONTRACT_GAS.toString();
+            }
+        }
+
         app.innerHTML = renderTransactionModal(
             this.transactionRequest,
             () => this.handleApproveTransaction(),
@@ -262,10 +284,26 @@ class NotificationApp {
         });
         const gasLimitInput = document.getElementById('gas-limit-input') as HTMLInputElement;
         if (gasLimitInput) {
+            gasLimitInput.addEventListener('input', (e) => {
+                const value = (e.target as HTMLInputElement).value;
+                if (this.transactionRequest && value) {
+                    // Parse and validate gas limit
+                    const gasLimit = parseInt(value, 10);
+                    if (!isNaN(gasLimit) && gasLimit > 0) {
+                        this.transactionRequest.transaction.gasLimit = gasLimit.toString();
+                        console.log('[Notification] Gas limit updated to:', gasLimit);
+                    }
+                }
+            });
             gasLimitInput.addEventListener('change', (e) => {
                 const value = (e.target as HTMLInputElement).value;
-                if (this.transactionRequest) {
-                    this.transactionRequest.transaction.gasLimit = value;
+                if (this.transactionRequest && value) {
+                    // Parse and validate gas limit
+                    const gasLimit = parseInt(value, 10);
+                    if (!isNaN(gasLimit) && gasLimit > 0) {
+                        this.transactionRequest.transaction.gasLimit = gasLimit.toString();
+                        console.log('[Notification] Gas limit updated to:', gasLimit);
+                    }
                 }
             });
         }

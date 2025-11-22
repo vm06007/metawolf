@@ -407,8 +407,12 @@ class WolfyProvider implements EthereumProvider {
 
             const handler = (response: any) => {
                 if (response.success) {
-                    // Return transaction hash (eth_sendTransaction returns the hash)
-                    resolve(response.transactionHash || response.txHash || response.signedTransaction || '0x');
+                    // Return transaction hash (eth_sendTransaction returns the hash per EIP-1193)
+                    // But also make transaction object available if dapp needs it for tracking
+                    const txHash = response.transactionHash || response.txHash || response.signedTransaction || '0x';
+                    // If dapp expects transaction object, it can access response.transaction
+                    // But per spec, we return just the hash string
+                    resolve(txHash);
                 } else {
                     reject(new Error(response.error || 'Transaction failed'));
                 }

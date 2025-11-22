@@ -511,13 +511,27 @@ function handleMessage(
                             break;
                         }
 
-                        // Get provider and sign transaction
-                        const provider = await wallet.getProvider();
                         // Use updated transaction from message if provided, otherwise use original
                         const txParams = message.transaction || pendingTransaction.transaction;
 
+                        // Get chainId from transaction (default to mainnet if not specified)
+                        const chainId = txParams.chainId || 1;
+
+                        // Create provider for the transaction's chainId to avoid chainId mismatch
+                        // This ensures transactions are broadcast to the correct chain
+                        const { rpcService } = await import('../core/rpc-service.js');
+                        const rpcUrl = rpcService.getRPCUrl(chainId);
+                        const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+                        // Check if this is a contract interaction (has data beyond '0x')
+                        const isContractInteraction = txParams.data &&
+                            txParams.data !== '0x' &&
+                            txParams.data !== '0x0' &&
+                            txParams.data.length > 2;
+
                         // Build transaction object
                         const transaction: any = {
+                            from: account.address, // Include from address
                             to: txParams.to,
                             value: txParams.value ? BigInt(txParams.value) : undefined,
                             data: txParams.data || '0x',
@@ -544,7 +558,34 @@ function handleMessage(
                                 throw new Error('Private key not found');
                             }
                             const signerWallet = new ethers.Wallet(privateKey, provider);
-                            const populatedTx = await signerWallet.populateTransaction(transaction);
+
+                            // Populate transaction (this will estimate gas if not provided)
+                            let populatedTx = await signerWallet.populateTransaction(transaction);
+
+                            // Apply minimum gas limit for contract interactions
+                            if (isContractInteraction) {
+                                const MIN_CONTRACT_GAS = BigInt(1000000); // 1 million gas minimum for contracts
+                                const currentGas = populatedTx.gasLimit ? BigInt(populatedTx.gasLimit.toString()) : BigInt(0);
+
+                                // If gas limit is below minimum or not set, use minimum
+                                if (currentGas < MIN_CONTRACT_GAS) {
+                                    console.log(`[APPROVE_TRANSACTION] Contract interaction detected. Setting minimum gas limit: ${MIN_CONTRACT_GAS} (was: ${currentGas})`);
+                                    populatedTx.gasLimit = MIN_CONTRACT_GAS;
+                                } else if (txParams.gasLimit) {
+                                    // User specified custom gas limit - use it (but ensure it's at least minimum)
+                                    const userGas = BigInt(txParams.gasLimit);
+                                    if (userGas < MIN_CONTRACT_GAS) {
+                                        console.log(`[APPROVE_TRANSACTION] User gas limit ${userGas} below minimum ${MIN_CONTRACT_GAS}, using minimum`);
+                                        populatedTx.gasLimit = MIN_CONTRACT_GAS;
+                                    } else {
+                                        populatedTx.gasLimit = userGas;
+                                    }
+                                }
+                            } else if (txParams.gasLimit) {
+                                // For non-contract transactions, use user-specified gas limit if provided
+                                populatedTx.gasLimit = BigInt(txParams.gasLimit);
+                            }
+
                             signedTx = await signerWallet.signTransaction(populatedTx);
                         }
 
@@ -553,23 +594,56 @@ function handleMessage(
                         const tx = ethers.Transaction.from(signedTx);
                         const txHash = tx.hash || (typeof txResponse === 'string' ? txResponse : txResponse?.hash);
 
+                        // Build transaction response object for dapp tracking
+                        // Convert all BigInt values to strings for JSON serialization
+                        const convertBigInt = (val: any): string | undefined => {
+                            if (val === null || val === undefined) return undefined;
+                            if (typeof val === 'bigint') return '0x' + val.toString(16);
+                            return String(val);
+                        };
+
+                        const convertNumber = (val: any): number | undefined => {
+                            if (val === null || val === undefined) return undefined;
+                            return Number(val);
+                        };
+
+                        const txResponseObject = {
+                            hash: txHash,
+                            from: account.address,
+                            to: tx.to || null,
+                            value: tx.value ? convertBigInt(tx.value) || '0x0' : '0x0',
+                            data: tx.data || '0x',
+                            gasLimit: convertBigInt(tx.gasLimit),
+                            gasPrice: convertBigInt(tx.gasPrice),
+                            maxFeePerGas: convertBigInt(tx.maxFeePerGas),
+                            maxPriorityFeePerGas: convertBigInt(tx.maxPriorityFeePerGas),
+                            nonce: convertNumber(tx.nonce),
+                            chainId: convertNumber(tx.chainId),
+                            type: convertNumber(tx.type),
+                        };
+
                         // Clear pending transaction
                         await chrome.storage.local.set({ pendingTransaction: null });
 
-                        // Send response to content script
+                        // Send response to content script with both hash and transaction object
                         if (pendingTransaction.tabId) {
                             try {
                                 await chrome.tabs.sendMessage(pendingTransaction.tabId, {
                                     type: 'TRANSACTION_APPROVED',
                                     requestId: requestId,
                                     transactionHash: txHash,
+                                    transaction: txResponseObject, // Include full transaction object for dapp tracking
                                 });
                             } catch (error) {
                                 console.error('[APPROVE_TRANSACTION] Error sending to content script:', error);
                             }
                         }
 
-                        safeSendResponse({ success: true, transactionHash: txHash });
+                        safeSendResponse({
+                            success: true,
+                            transactionHash: txHash,
+                            transaction: txResponseObject, // Include transaction object for dapp
+                        });
                     } catch (error: any) {
                         console.error('[APPROVE_TRANSACTION] Error:', error);
                         safeSendResponse({ success: false, error: error.message });
@@ -1664,12 +1738,50 @@ function handleMessage(
                                 break;
                             }
 
+                            // Get chainId from transaction and switch network to match
+                            const txChainId = message.transaction.chainId || 1;
+                            const currentNetwork = wallet.getSelectedNetwork();
+
+                            // Switch network if transaction is on a different chain
+                            if (txChainId !== currentNetwork) {
+                                console.log(`[SIGN_TRANSACTION] Switching network from ${currentNetwork} to ${txChainId} to match transaction`);
+                                await wallet.setNetwork(txChainId);
+                            }
+
+                            // Check if this is a contract interaction and set minimum gas limit
+                            const txData = message.transaction.data || '0x';
+                            const isContractInteraction = txData &&
+                                txData !== '0x' &&
+                                txData !== '0x0' &&
+                                txData.length > 2;
+
+                            // Prepare transaction with minimum gas for contract interactions
+                            // Ensure from address is set
+                            let transaction = {
+                                ...message.transaction,
+                                from: message.transaction.from || account.address // Ensure from is always set
+                            };
+                            if (isContractInteraction) {
+                                const MIN_CONTRACT_GAS = 1000000; // 1 million gas minimum
+                                const currentGas = transaction.gasLimit
+                                    ? (typeof transaction.gasLimit === 'string'
+                                        ? parseInt(transaction.gasLimit, 10)
+                                        : Number(transaction.gasLimit))
+                                    : 0;
+
+                                // If no gas limit or below minimum, set to minimum
+                                if (!transaction.gasLimit || currentGas < MIN_CONTRACT_GAS) {
+                                    console.log(`[SIGN_TRANSACTION] Contract interaction detected. Setting minimum gas limit: ${MIN_CONTRACT_GAS} (was: ${currentGas || 'not set'})`);
+                                    transaction.gasLimit = MIN_CONTRACT_GAS.toString();
+                                }
+                            }
+
                             // Store pending transaction request
                             const requestId = `tx_${Date.now()}_${Math.random()}`;
                             await chrome.storage.local.set({
                                 pendingTransaction: {
                                     id: requestId,
-                                    transaction: message.transaction,
+                                    transaction: transaction, // Use transaction with minimum gas if needed
                                     address: account.address,
                                     origin: origin,
                                     dappName: dappInfo.name,
@@ -2413,6 +2525,10 @@ function handleMessage(
 
                 case 'GET_NETWORKS':
                     safeSendResponse({ success: true, networks: wallet.getNetworks() });
+                    break;
+
+                case 'GET_SELECTED_NETWORK':
+                    safeSendResponse({ success: true, chainId: wallet.getSelectedNetwork() });
                     break;
 
                 case 'SET_NETWORK':

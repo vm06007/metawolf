@@ -108,6 +108,7 @@ function getChainName(chainId: number | undefined): string {
         10: 'Optimism',
         56: 'BSC',
         43114: 'Avalanche',
+        48900: 'Zircuit',
     };
     return chains[chainId || 1] || `Chain ${chainId || 1}`;
 }
@@ -125,10 +126,10 @@ function isContractInteraction(data: string | undefined): boolean {
  */
 function getCallDescription(call: BatchedCall, index: number): string {
     if (!call.to) return `Call ${index + 1}: Contract Creation`;
-    
+
     const hasValue = call.value && call.value !== '0x0' && call.value !== '0';
     const isContract = isContractInteraction(call.data);
-    
+
     if (hasValue && isContract) {
         return `Call ${index + 1}: Send ${formatValue(call.value)} & Interact Contract`;
     } else if (hasValue) {
@@ -161,7 +162,7 @@ function renderCallItem(
             border-radius: 8px;
             padding: 16px;
             margin-bottom: 12px;
-            border-left: 3px solid var(--r-blue-default);
+            border: 3px solid var(--r-blue-default);
         ">
             <div style="
                 display: flex;
@@ -363,7 +364,7 @@ export function renderBatchedCallsModal(
                             overflow: hidden;
                             background: var(--r-neutral-bg2);
                         ">
-                            <img src="${request.dappIcon}" 
+                            <img src="${request.dappIcon}"
                                  alt="${request.dappName}"
                                  style="width: 100%; height: 100%; object-fit: cover;"
                                  onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--r-blue-light1);color:var(--r-blue-default);font-weight:500;\\'>${request.dappName.charAt(0).toUpperCase()}</div>'">
@@ -456,10 +457,10 @@ export function renderBatchedCallsModal(
                         margin-bottom: 16px;
                     ">Actions</div>
                     ${calls.map((call, index) => {
-                        const callSimulation = simulation?.calls?.[index]?.simulation;
-                        const callDescription = simulation?.calls?.[index]?.description;
-                        return renderCallItem(call, index, callSimulation, callDescription);
-                    }).join('')}
+        const callSimulation = simulation?.calls?.[index]?.simulation;
+        const callDescription = simulation?.calls?.[index]?.description;
+        return renderCallItem(call, index, callSimulation, callDescription);
+    }).join('')}
                 </div>
 
                 <!-- Transaction Details -->

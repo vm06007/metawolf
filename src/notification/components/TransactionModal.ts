@@ -3,6 +3,7 @@ import { formatAddress } from '../../popup/utils/account';
 export interface TransactionRequest {
     id: string;
     transaction: {
+        from?: string;
         to?: string;
         value?: string;
         data?: string;
@@ -166,6 +167,7 @@ function getChainName(chainId: number | undefined): string {
         10: 'Optimism',
         56: 'BSC',
         43114: 'Avalanche',
+        48900: 'Zircuit',
     };
     return chains[chainId || 1] || `Chain ${chainId || 1}`;
 }
@@ -480,7 +482,7 @@ export function renderTransactionModal(
                                 font-size: 12px;
                                 color: var(--r-neutral-foot);
                                 margin-top: 4px;
-                            ">Est. ${gasLimit}. Current 1.5x, recommend 1.5x.</div>
+                            ">${isContract ? 'Minimum 1,000,000 for contract interactions. ' : ''}Est. ${gasLimit}. Current 1.5x, recommend 1.5x.</div>
                         </div>
                         <div>
                             <label style="

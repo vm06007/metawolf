@@ -194,6 +194,7 @@ export class UnifiedBalanceService {
                 zksync: 324,
                 linea: 59144,
                 scroll: 534352,
+                zircuit: 48900,
             };
 
             // Aggregate assets by symbol across all protocols and chains

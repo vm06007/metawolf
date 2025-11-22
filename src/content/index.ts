@@ -56,7 +56,7 @@
 
     // Store pending transaction requests to respond to them when approved
     const pendingTransactions: Map<number, {
-        resolve: (transactionHash: string) => void;
+        resolve: (transactionHash: string, transaction?: any) => void;
         reject: (error: string) => void;
         requestId: string;
     }> = new Map();
@@ -124,12 +124,14 @@
             sendResponse({ success: true });
         } else if (message.type === 'TRANSACTION_APPROVED') {
             console.log('[Wolfy Content] TRANSACTION_APPROVED with hash:', message.transactionHash?.substring(0, 20) + '...');
+            console.log('[Wolfy Content] TRANSACTION_APPROVED transaction object:', message.transaction);
             // Resolve pending transaction request
             let resolved = false;
             pendingTransactions.forEach(({ resolve, requestId }, id) => {
                 if (requestId === message.requestId || !message.requestId) {
-                    console.log('[Wolfy Content] Resolving pending transaction id:', id);
-                    resolve(message.transactionHash);
+                    console.log('[Wolfy Content] Resolving pending transaction id:', id, 'with transaction:', message.transaction);
+                    // Pass both hash and transaction object
+                    resolve(message.transactionHash, message.transaction);
                     pendingTransactions.delete(id);
                     resolved = true;
                 }
@@ -488,14 +490,28 @@
 
                     if (method === 'eth_sendTransaction') {
                         messageType = 'SIGN_TRANSACTION';
-                        // Try to get chainId from provider or use default
+                        // Get chainId from wallet's selected network (not from window.ethereum which may be stale)
                         let chainId = 1;
                         try {
-                            const provider = (window as any).ethereum;
-                            if (provider && provider.chainId) {
-                                chainId = typeof provider.chainId === 'string'
-                                    ? parseInt(provider.chainId, 16)
-                                    : provider.chainId;
+                            // Query the wallet's current selected network
+                            const networkResponse = await new Promise<any>((resolve) => {
+                                chrome.runtime.sendMessage(
+                                    { type: 'GET_SELECTED_NETWORK' },
+                                    (response) => {
+                                        resolve(response);
+                                    }
+                                );
+                            });
+                            if (networkResponse && networkResponse.success && networkResponse.chainId !== undefined) {
+                                chainId = networkResponse.chainId;
+                            } else {
+                                // Fallback: try to get from provider
+                                const provider = (window as any).ethereum;
+                                if (provider && provider.chainId) {
+                                    chainId = typeof provider.chainId === 'string'
+                                        ? parseInt(provider.chainId, 16)
+                                        : provider.chainId;
+                                }
                             }
                         } catch {
                             // Use default
@@ -832,22 +848,43 @@
                                     let responseSent = false; // Prevent duplicate responses
                                     const requestId = response.requestId;
 
-                                    const sendResponseToInpage = (success: boolean, transactionHash?: string, error?: string) => {
+                                    const sendResponseToInpage = (success: boolean, transactionHash?: string, transaction?: any, error?: string) => {
                                         if (responseSent) return; // Already sent
                                         responseSent = true;
 
                                         // Clean up
                                         pendingTransactions.delete(event.data.id);
 
+                                        // Build response object - some dapps expect transaction in result/data fields
+                                        const responseObj: any = {
+                                            success: success,
+                                            transactionHash: transactionHash,
+                                            transaction: transaction, // Include transaction object for dapp tracking
+                                            error: error,
+                                        };
+                                        
+                                        // Also include transaction in result/data for compatibility with libraries that expect it there
+                                        // Always set result and data, even if transaction is undefined (set to null to match expected format)
+                                        if (success) {
+                                            responseObj.result = transaction || null;
+                                            responseObj.data = transaction || null;
+                                        } else {
+                                            responseObj.result = null;
+                                            responseObj.data = null;
+                                        }
+                                        
+                                        console.log('[Wolfy Content] Sending response to inpage:', {
+                                            success,
+                                            hasTransaction: !!transaction,
+                                            transactionFrom: transaction?.from,
+                                            transactionHash: transactionHash
+                                        });
+                                        
                                         window.postMessage(
                                             {
                                                 type: 'WOLFY_REQUEST_RESPONSE',
                                                 id: event.data.id,
-                                                response: {
-                                                    success: success,
-                                                    transactionHash: transactionHash,
-                                                    error: error,
-                                                },
+                                                response: responseObj,
                                             },
                                             '*'
                                         );
@@ -855,11 +892,11 @@
 
                                     // Store the promise resolvers
                                     pendingTransactions.set(event.data.id, {
-                                        resolve: (transactionHash) => {
-                                            sendResponseToInpage(true, transactionHash);
+                                        resolve: (transactionHash: string, transaction?: any) => {
+                                            sendResponseToInpage(true, transactionHash, transaction);
                                         },
-                                        reject: (error) => {
-                                            sendResponseToInpage(false, undefined, error);
+                                        reject: (error: string) => {
+                                            sendResponseToInpage(false, undefined, undefined, error);
                                         },
                                         requestId: requestId,
                                     });

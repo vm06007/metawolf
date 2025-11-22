@@ -45,14 +45,11 @@ export class RPCHandler {
 
                     case 'eth_chainId':
                         const networkResponse = await chrome.runtime.sendMessage({
-                            type: 'GET_NETWORKS',
+                            type: 'GET_SELECTED_NETWORK',
                         });
                         let chainIdString = '0x1';
-                        if (networkResponse.success && networkResponse.networks) {
-                            const selected = networkResponse.networks[0];
-                            if (selected) {
-                                chainIdString = '0x' + selected.chainId.toString(16);
-                            }
+                        if (networkResponse && networkResponse.success && networkResponse.chainId !== undefined) {
+                            chainIdString = '0x' + networkResponse.chainId.toString(16);
                         }
                         resolve({
                             id: message.id,
@@ -63,18 +60,24 @@ export class RPCHandler {
 
                     case 'eth_sendTransaction':
                         const tx = message.params[0];
+                        // Build transaction object, only include from if provided
+                        const txForSigning: any = {
+                            to: tx.to,
+                            value: tx.value,
+                            data: tx.data,
+                            gasLimit: tx.gas,
+                            gasPrice: tx.gasPrice,
+                            maxFeePerGas: tx.maxFeePerGas,
+                            maxPriorityFeePerGas: tx.maxPriorityFeePerGas,
+                            nonce: tx.nonce ? parseInt(tx.nonce, 16) : undefined,
+                        };
+                        // Only include from if it exists
+                        if (tx.from) {
+                            txForSigning.from = tx.from;
+                        }
                         const signTxResponse = await chrome.runtime.sendMessage({
                             type: 'SIGN_TRANSACTION',
-                            transaction: {
-                                to: tx.to,
-                                value: tx.value,
-                                data: tx.data,
-                                gasLimit: tx.gas,
-                                gasPrice: tx.gasPrice,
-                                maxFeePerGas: tx.maxFeePerGas,
-                                maxPriorityFeePerGas: tx.maxPriorityFeePerGas,
-                                nonce: tx.nonce ? parseInt(tx.nonce, 16) : undefined,
-                            },
+                            transaction: txForSigning,
                         });
 
                         if (signTxResponse.success) {
@@ -98,21 +101,24 @@ export class RPCHandler {
 
                     case 'eth_signTransaction':
                         const txToSign = message.params[0];
+                        // Build transaction object, only include from if provided
+                        const txToSignObj: any = {
+                            to: txToSign.to,
+                            value: txToSign.value,
+                            data: txToSign.data,
+                            gasLimit: txToSign.gas,
+                            gasPrice: txToSign.gasPrice,
+                            maxFeePerGas: txToSign.maxFeePerGas,
+                            maxPriorityFeePerGas: txToSign.maxPriorityFeePerGas,
+                            nonce: txToSign.nonce ? parseInt(txToSign.nonce, 16) : undefined,
+                        };
+                        // Only include from if it exists
+                        if (txToSign.from) {
+                            txToSignObj.from = txToSign.from;
+                        }
                         const signResponse = await chrome.runtime.sendMessage({
                             type: 'SIGN_TRANSACTION',
-                            transaction: {
-                                to: txToSign.to,
-                                value: txToSign.value,
-                                data: txToSign.data,
-                                gasLimit: txToSign.gas,
-                                gasPrice: txToSign.gasPrice,
-                                maxFeePerGas: txToSign.maxFeePerGas,
-                                maxPriorityFeePerGas:
-                                    txToSign.maxPriorityFeePerGas,
-                                nonce: txToSign.nonce
-                                    ? parseInt(txToSign.nonce, 16)
-                                    : undefined,
-                            },
+                            transaction: txToSignObj,
                         });
 
                         if (signResponse.success) {

@@ -1,3 +1,5 @@
+import { getChainColoredLogo } from '../utils/chain-icons';
+
 export interface NetworkOption {
     chainId: number;
     name: string;
@@ -75,6 +77,7 @@ export function renderNetworkSelectorModal(
                 ">
                     ${networks.map(network => {
                         const isSelected = network.chainId === currentChainId;
+                        const networkLogo = network.logo || getChainColoredLogo(network.chainId);
                         return `
                             <div class="network-option" 
                                  data-chain-id="${network.chainId}"
@@ -95,22 +98,22 @@ export function renderNetworkSelectorModal(
                                     width: 32px;
                                     height: 32px;
                                     border-radius: 50%;
-                                    background: ${network.logo ? 'transparent' : 'var(--r-blue-default)'};
+                                    background: ${networkLogo ? 'transparent' : 'var(--r-blue-default)'};
                                     display: flex;
                                     align-items: center;
                                     justify-content: center;
                                     flex-shrink: 0;
                                 ">
-                                    ${network.logo ? `
-                                        <img src="${network.logo}" 
+                                    ${networkLogo ? `
+                                        <img src="${networkLogo}" 
                                              alt="${network.name}" 
                                              style="width: 32px; height: 32px; border-radius: 50%; object-fit: cover;"
                                              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                        <div style="display: none; width: 32px; height: 32px; border-radius: 50%; background: var(--r-blue-default); color: white; align-items: center; justify-content: center; font-weight: bold;">
+                                        <div style="display: none; width: 32px; height: 32px; border-radius: 50%; background: var(--r-blue-default); color: white; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;">
                                             ${network.name.charAt(0)}
                                         </div>
                                     ` : `
-                                        <div style="color: white; font-weight: bold; font-size: 14px;">
+                                        <div style="width: 32px; height: 32px; border-radius: 50%; background: var(--r-blue-default); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 14px;">
                                             ${network.name.charAt(0)}
                                         </div>
                                     `}

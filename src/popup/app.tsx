@@ -687,7 +687,12 @@ export class PopupApp {
 
     async loadNetworks() {
         this.state.networks = await this.walletService.getNetworks();
-        if (this.state.networks.length > 0) {
+        // Load the selected network from wallet state (persisted)
+        const selectedNetwork = await this.walletService.getSelectedNetwork();
+        if (selectedNetwork !== null && selectedNetwork !== undefined) {
+            this.state.selectedNetwork = selectedNetwork;
+        } else if (this.state.networks.length > 0) {
+            // Fallback to first network if no selection persisted
             this.state.selectedNetwork = this.state.networks[0].chainId;
         }
     }
@@ -1121,7 +1126,8 @@ export class PopupApp {
                 undefined,
                 false,
                 false,
-                this.state.networks.find(n => n.chainId === this.state.selectedNetwork)?.name
+                this.state.networks.find(n => n.chainId === this.state.selectedNetwork)?.name,
+                this.state.selectedNetwork
             )}
                         </div>
                 </div>
@@ -1714,7 +1720,12 @@ export class PopupApp {
         document.getElementById('panel-approvals')?.addEventListener('click', () => console.log('Approvals clicked'));
         document.getElementById('panel-settings')?.addEventListener('click', () => this.handleSettings());
         document.getElementById('panel-nft')?.addEventListener('click', () => console.log('NFT clicked'));
-        document.getElementById('panel-eip7702')?.addEventListener('click', () => this.showEip7702Modal());
+        document.getElementById('panel-eip7702')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[attachDashboardListeners] EIP-7702 button clicked');
+            this.showEip7702Modal();
+        });
     }
 
     private attachReceiveScreenListeners() {
@@ -4072,7 +4083,7 @@ export class PopupApp {
                 if (this.state.eip7702ModalAccountAddress) {
                     this.checkDelegationStatus(this.state.eip7702ModalAccountAddress);
                 }
-                // Update the modal to reflect the new network
+                // Update the modal to reflect the new network (this will update the icon)
                 this.updateEip7702Modal();
             }
         });

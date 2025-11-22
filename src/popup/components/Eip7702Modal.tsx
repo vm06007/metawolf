@@ -1,4 +1,5 @@
 import { renderSmartAccountUpgrade } from './SmartAccountUpgrade';
+import { getChainColoredLogo } from '../utils/chain-icons';
 
 interface DelegationStatus {
     isDelegated: boolean;
@@ -199,24 +200,73 @@ export function renderEip7702Modal(params: RenderEip7702ModalParams): string {
                                                 color: var(--r-neutral-foot);
                                                 margin-bottom: 6px;
                                             ">Network</label>
-                                            <select id="eip7702-network-selector" style="
-                                                width: 100%;
-                                                padding: 10px 12px;
-                                                background: var(--r-neutral-bg2);
-                                                border: 1px solid var(--r-neutral-line);
-                                                border-radius: 8px;
-                                                font-size: 14px;
-                                                color: var(--r-neutral-title1);
-                                                cursor: pointer;
-                                                outline: none;
-                                                transition: all 0.2s;
-                                            ">
-                                                ${networks.map(network => `
-                                                    <option value="${network.chainId}" ${network.chainId === chainId ? 'selected' : ''}>
-                                                        ${network.name}
-                                                    </option>
-                                                `).join('')}
-                                            </select>
+                                            <div style="position: relative;">
+                                                <select id="eip7702-network-selector" style="
+                                                    width: 100%;
+                                                    padding: 10px 12px 10px 44px;
+                                                    background: var(--r-neutral-bg2);
+                                                    border: 1px solid var(--r-neutral-line);
+                                                    border-radius: 8px;
+                                                    font-size: 14px;
+                                                    color: var(--r-neutral-title1);
+                                                    cursor: pointer;
+                                                    outline: none;
+                                                    transition: all 0.2s;
+                                                    appearance: none;
+                                                    -webkit-appearance: none;
+                                                    -moz-appearance: none;
+                                                ">
+                                                    ${networks.map(network => `
+                                                        <option value="${network.chainId}" ${network.chainId === chainId ? 'selected' : ''}>
+                                                            ${network.name}
+                                                        </option>
+                                                    `).join('')}
+                                                </select>
+                                                ${(() => {
+                                                    const selectedNetwork = networks.find(n => n.chainId === chainId) || networks[0];
+                                                    const networkLogo = selectedNetwork.logo || getChainColoredLogo(selectedNetwork.chainId);
+                                                    return `
+                                                        <div style="
+                                                            position: absolute;
+                                                            left: 12px;
+                                                            top: 50%;
+                                                            transform: translateY(-50%);
+                                                            width: 20px;
+                                                            height: 20px;
+                                                            display: flex;
+                                                            align-items: center;
+                                                            justify-content: center;
+                                                            pointer-events: none;
+                                                        ">
+                                                            ${networkLogo ? `
+                                                                <img src="${networkLogo}" 
+                                                                     alt="${selectedNetwork.name}" 
+                                                                     style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;"
+                                                                     onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                                                <div style="display: none; width: 20px; height: 20px; border-radius: 50%; background: var(--r-blue-default); color: white; align-items: center; justify-content: center; font-weight: bold; font-size: 10px;">
+                                                                    ${selectedNetwork.name.charAt(0)}
+                                                                </div>
+                                                            ` : `
+                                                                <div style="width: 20px; height: 20px; border-radius: 50%; background: var(--r-blue-default); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px;">
+                                                                    ${selectedNetwork.name.charAt(0)}
+                                                                </div>
+                                                            `}
+                                                        </div>
+                                                        <div style="
+                                                            position: absolute;
+                                                            right: 12px;
+                                                            top: 50%;
+                                                            transform: translateY(-50%);
+                                                            pointer-events: none;
+                                                            color: var(--r-neutral-foot);
+                                                        ">
+                                                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">
+                                                                <path d="M4 6L8 10L12 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                            </svg>
+                                                        </div>
+                                                    `;
+                                                })()}
+                                            </div>
                                         </div>
                                     ` : ''}
                                     ${isLoading ? `
@@ -315,24 +365,73 @@ export function renderEip7702Modal(params: RenderEip7702ModalParams): string {
                                             color: var(--r-neutral-foot);
                                             margin-bottom: 6px;
                                         ">Network</label>
-                                        <select id="eip7702-network-selector" style="
-                                            width: 100%;
-                                            padding: 10px 12px;
-                                            background: var(--r-neutral-bg2);
-                                            border: 1px solid var(--r-neutral-line);
-                                            border-radius: 8px;
-                                            font-size: 14px;
-                                            color: var(--r-neutral-title1);
-                                            cursor: pointer;
-                                            outline: none;
-                                            transition: all 0.2s;
-                                        ">
-                                            ${networks.map(network => `
-                                                <option value="${network.chainId}" ${network.chainId === chainId ? 'selected' : ''}>
-                                                    ${network.name}
-                                                </option>
-                                            `).join('')}
-                                        </select>
+                                        <div style="position: relative;">
+                                            <select id="eip7702-network-selector" style="
+                                                width: 100%;
+                                                padding: 10px 12px 10px 44px;
+                                                background: var(--r-neutral-bg2);
+                                                border: 1px solid var(--r-neutral-line);
+                                                border-radius: 8px;
+                                                font-size: 14px;
+                                                color: var(--r-neutral-title1);
+                                                cursor: pointer;
+                                                outline: none;
+                                                transition: all 0.2s;
+                                                appearance: none;
+                                                -webkit-appearance: none;
+                                                -moz-appearance: none;
+                                            ">
+                                                ${networks.map(network => `
+                                                    <option value="${network.chainId}" ${network.chainId === chainId ? 'selected' : ''}>
+                                                        ${network.name}
+                                                    </option>
+                                                `).join('')}
+                                            </select>
+                                            ${(() => {
+                                                const selectedNetwork = networks.find(n => n.chainId === chainId) || networks[0];
+                                                const networkLogo = selectedNetwork.logo || getChainColoredLogo(selectedNetwork.chainId);
+                                                return `
+                                                    <div style="
+                                                        position: absolute;
+                                                        left: 12px;
+                                                        top: 50%;
+                                                        transform: translateY(-50%);
+                                                        width: 20px;
+                                                        height: 20px;
+                                                        display: flex;
+                                                        align-items: center;
+                                                        justify-content: center;
+                                                        pointer-events: none;
+                                                    ">
+                                                        ${networkLogo ? `
+                                                            <img src="${networkLogo}" 
+                                                                 alt="${selectedNetwork.name}" 
+                                                                 style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;"
+                                                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                                            <div style="display: none; width: 20px; height: 20px; border-radius: 50%; background: var(--r-blue-default); color: white; align-items: center; justify-content: center; font-weight: bold; font-size: 10px;">
+                                                                ${selectedNetwork.name.charAt(0)}
+                                                            </div>
+                                                        ` : `
+                                                            <div style="width: 20px; height: 20px; border-radius: 50%; background: var(--r-blue-default); color: white; display: flex; align-items: center; justify-content: center; font-weight: bold; font-size: 10px;">
+                                                                ${selectedNetwork.name.charAt(0)}
+                                                            </div>
+                                                        `}
+                                                    </div>
+                                                    <div style="
+                                                        position: absolute;
+                                                        right: 12px;
+                                                        top: 50%;
+                                                        transform: translateY(-50%);
+                                                        pointer-events: none;
+                                                        color: var(--r-neutral-foot);
+                                                    ">
+                                                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">
+                                                            <path d="M4 6L8 10L12 6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                                                        </svg>
+                                                    </div>
+                                                `;
+                                            })()}
+                                        </div>
                                     </div>
                                 ` : ''}
                             `}
