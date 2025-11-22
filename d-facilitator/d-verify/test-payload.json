@@ -1,1 +1,37 @@
-{"paymentPayload":{"x402Version":1,"scheme":"exact","network":"base-sepolia","payload":{"signature":"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12","authorization":{"from":"0x0000000000000000000000000000000000000001","to":"0x0000000000000000000000000000000000000001","value":"1000000","validAfter":"1700000000","validBefore":"1800000000","nonce":"0x0000000000000000000000000000000000000000000000000000000000000001"}}},"paymentRequirements":{"scheme":"exact","network":"base-sepolia","maxAmountRequired":"1000000","resource":"https://api.example.com:443/v1/resource","description":"Test payment","mimeType":"application/json","payTo":"0x0000000000000000000000000000000000000001","maxTimeoutSeconds":3600,"asset":"0x036CbD53842c5426634e7929541eC2318f3dCF7e"}}
+{
+  "x402Version": 1,
+  "paymentPayload": {
+    "x402Version": 1,
+    "scheme": "exact",
+    "network": "base-sepolia",
+    "payload": {
+      "signature": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef12",
+      "authorization": {
+        "from": "0x0000000000000000000000000000000000000001",
+        "to": "0x0000000000000000000000000000000000000001",
+        "value": "1000000",
+        "validAfter": "1700000000",
+        "validBefore": "1800000000",
+        "nonce": "0x0000000000000000000000000000000000000000000000000000000000000001"
+      }
+    }
+  },
+  "paymentRequirements": {
+    "scheme": "exact",
+    "network": "base-sepolia",
+    "maxAmountRequired": "1000000",
+    "resource": "https://api.example.com:443/v1/resource",
+    "description": "Test payment",
+    "mimeType": "application/json",
+    "payTo": "0x0000000000000000000000000000000000000001",
+    "maxTimeoutSeconds": 3600,
+    "asset": "0x036CbD53842c5426634e7929541eC2318f3dCF7e",
+    "outputSchema": {
+      "input": {
+        "type": "http",
+        "method": "GET",
+        "discoverable": true
+      }
+    }
+  }
+}

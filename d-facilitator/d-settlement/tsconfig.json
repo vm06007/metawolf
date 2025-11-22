@@ -8,9 +8,14 @@
     "strict": true,
     "esModuleInterop": true,
     "skipLibCheck": true,
-    "forceConsistentCasingInFileNames": true
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": "..",
+    "paths": {
+      "../shared/*": ["shared/*"]
+    }
   },
   "include": [
-    "main.ts"
+    "main.ts",
+    "../shared/**/*"
   ]
 }

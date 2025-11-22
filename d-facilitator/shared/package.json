@@ -1,0 +1,11 @@
+{
+  "name": "shared",
+  "version": "1.0.0",
+  "private": true,
+  "dependencies": {
+    "@chainlink/cre-sdk": "^1.0.0",
+    "x402": "^0.7.3",
+    "viem": "^2.0.0"
+  }
+}
+

@@ -24,7 +24,9 @@ import {
   ConnectedClient,
   type X402Config,
 } from "x402/types"
-import { verify } from "x402/facilitator"
+import { verifyPayment } from "../shared/verify-payment";
+import { getNetworkInfo } from "../shared/network";
+import { prepareSettlementExecutionData } from "../shared/settlement";
 
 
 type Config = {
@@ -178,157 +180,6 @@ async function onEVMLogTrigger(runtime: Runtime<Config>, payload: EVMLogPayload)
   }
 }
 
-/// @notice Maps x402 network string to CRE chainSelectorName
-/// @param network The network string from payment request (e.g., "base-sepolia", "ethereum-testnet-sepolia")
-/// @returns The CRE chainSelectorName and isTestnet flag
-/// @dev Maps x402 network formats to CRE's official chainSelectorName format
-function getNetworkInfo(network: string): { chainSelectorName: string; isTestnet: boolean } {
-  // Mapping from x402 network strings to CRE chainSelectorName format
-  // Based on CRE's official supported networks documentation
-  const networkMap: Record<string, { chainSelectorName: string; isTestnet: boolean }> = {
-    // Mainnets
-    'arbitrum': { chainSelectorName: 'ethereum-mainnet-arbitrum-1', isTestnet: false },
-    'arbitrum-one': { chainSelectorName: 'ethereum-mainnet-arbitrum-1', isTestnet: false },
-    'avalanche': { chainSelectorName: 'avalanche-mainnet', isTestnet: false },
-    'base': { chainSelectorName: 'ethereum-mainnet-base-1', isTestnet: false },
-    'base-mainnet': { chainSelectorName: 'ethereum-mainnet-base-1', isTestnet: false },
-    'bsc': { chainSelectorName: 'binance_smart_chain-mainnet', isTestnet: false },
-    'binance-smart-chain': { chainSelectorName: 'binance_smart_chain-mainnet', isTestnet: false },
-    'ethereum': { chainSelectorName: 'ethereum-mainnet', isTestnet: false },
-    'ethereum-mainnet': { chainSelectorName: 'ethereum-mainnet', isTestnet: false },
-    'optimism': { chainSelectorName: 'ethereum-mainnet-optimism-1', isTestnet: false },
-    'optimism-mainnet': { chainSelectorName: 'ethereum-mainnet-optimism-1', isTestnet: false },
-    'op-mainnet': { chainSelectorName: 'ethereum-mainnet-optimism-1', isTestnet: false },
-    'polygon': { chainSelectorName: 'polygon-mainnet', isTestnet: false },
-    'polygon-mainnet': { chainSelectorName: 'polygon-mainnet', isTestnet: false },
-    
-    // Testnets
-    'arbitrum-sepolia': { chainSelectorName: 'ethereum-testnet-sepolia-arbitrum-1', isTestnet: true },
-    'arbitrum-testnet': { chainSelectorName: 'ethereum-testnet-sepolia-arbitrum-1', isTestnet: true },
-    'avalanche-fuji': { chainSelectorName: 'avalanche-testnet-fuji', isTestnet: true },
-    'avalanche-testnet': { chainSelectorName: 'avalanche-testnet-fuji', isTestnet: true },
-    'base-sepolia': { chainSelectorName: 'ethereum-testnet-sepolia-base-1', isTestnet: true },
-    'base-testnet': { chainSelectorName: 'ethereum-testnet-sepolia-base-1', isTestnet: true },
-    'bsc-testnet': { chainSelectorName: 'binance_smart_chain-testnet', isTestnet: true },
-    'binance-smart-chain-testnet': { chainSelectorName: 'binance_smart_chain-testnet', isTestnet: true },
-    'ethereum-sepolia': { chainSelectorName: 'ethereum-testnet-sepolia', isTestnet: true },
-    'ethereum-testnet-sepolia': { chainSelectorName: 'ethereum-testnet-sepolia', isTestnet: true },
-    'sepolia': { chainSelectorName: 'ethereum-testnet-sepolia', isTestnet: true },
-    'optimism-sepolia': { chainSelectorName: 'ethereum-testnet-sepolia-optimism-1', isTestnet: true },
-    'optimism-testnet': { chainSelectorName: 'ethereum-testnet-sepolia-optimism-1', isTestnet: true },
-    'op-sepolia': { chainSelectorName: 'ethereum-testnet-sepolia-optimism-1', isTestnet: true },
-    'polygon-amoy': { chainSelectorName: 'polygon-testnet-amoy', isTestnet: true },
-    'polygon-testnet': { chainSelectorName: 'polygon-testnet-amoy', isTestnet: true },
-  };
-  
-  // Normalize network string (lowercase, replace spaces/underscores with hyphens)
-  const normalized = network.toLowerCase().replace(/[\s_]/g, '-');
-  
-  // Check if we have a direct mapping
-  if (networkMap[normalized]) {
-    return networkMap[normalized];
-  }
-  
-  // Fallback: try to determine from common patterns
-  const isTestnet = normalized.includes('testnet') || 
-                    normalized.includes('sepolia') || 
-                    normalized.includes('goerli') ||
-                    normalized.includes('mumbai') ||
-                    normalized.includes('fuji') ||
-                    normalized.includes('amoy');
-  
-  // If no direct mapping, try to construct CRE format
-  // This is a fallback for networks that might not be in our map
-  // Most x402 networks should match CRE format directly
-  if (normalized.includes('ethereum-testnet-sepolia') || normalized === 'ethereum-testnet-sepolia') {
-    return { chainSelectorName: 'ethereum-testnet-sepolia', isTestnet: true };
-  }
-  
-  // Default: assume the network string matches CRE format
-  // Log a warning if we're using fallback
-  return {
-    chainSelectorName: network, // Use original network string as fallback
-    isTestnet,
-  };
-}
-
-
-/// @notice Prepares execution data for ERC20 transferWithAuthorization call
-/// @param paymentPayload The signed payment payload
-/// @param paymentRequirements The payment requirements
-/// @returns The execution data: target address, calldata, and value
-/// @dev Works with any ERC20 token that supports transferWithAuthorization, not just USDC
-function prepareSettlementExecutionData(
-  paymentPayload: PaymentPayload,
-  paymentRequirements: PaymentRequirements
-): { target: `0x${string}`, data: `0x${string}`, value: bigint } {
-  // Extract authorization data from EVM payload
-  if (!('authorization' in paymentPayload.payload)) {
-    throw new Error("Only EVM payloads are supported");
-  }
-
-  const auth = paymentPayload.payload.authorization;
-  const signature = paymentPayload.payload.signature as Hex;
-
-  // Parse ERC6492 signature if present (returns original signature if not ERC6492)
-  // This matches the x402 settle() function pattern
-  const { signature: parsedSignature } = parseErc6492Signature(signature);
-  
-  // Extract v, r, s from the parsed signature
-  // Signature format: 65 bytes = r (32 bytes) + s (32 bytes) + v (1 byte)
-  const sig = parsedSignature.startsWith('0x') ? parsedSignature.slice(2) : parsedSignature;
-  if (sig.length < 130) {
-    throw new Error("Invalid signature format: signature must be at least 65 bytes");
-  }
-  
-  const r = `0x${sig.slice(0, 64)}` as `0x${string}`;
-  const s = `0x${sig.slice(64, 128)}` as `0x${string}`;
-  const v = parseInt(sig.slice(128, 130), 16);
-
-  // Target is the token contract address (any ERC20 token that supports transferWithAuthorization)
-  const target = paymentRequirements.asset as `0x${string}`;
-
-  // Encode transferWithAuthorization function call
-  // transferWithAuthorization(address from, address to, uint256 value, uint256 validAfter, uint256 validBefore, bytes32 nonce, uint8 v, bytes32 r, bytes32 s)
-  // Note: For ERC6492 signatures, the signature is parsed to extract v, r, s
-  const data = encodeFunctionData({
-    abi: [{
-      name: "transferWithAuthorization",
-      type: "function",
-      stateMutability: "nonpayable",
-      inputs: [
-        { name: "from", type: "address" },
-        { name: "to", type: "address" },
-        { name: "value", type: "uint256" },
-        { name: "validAfter", type: "uint256" },
-        { name: "validBefore", type: "uint256" },
-        { name: "nonce", type: "bytes32" },
-        { name: "v", type: "uint8" },
-        { name: "r", type: "bytes32" },
-        { name: "s", type: "bytes32" },
-      ],
-      outputs: [],
-    }],
-    functionName: "transferWithAuthorization",
-    args: [
-      auth.from as `0x${string}`,
-      auth.to as `0x${string}`,
-      BigInt(auth.value),
-      BigInt(auth.validAfter),
-      BigInt(auth.validBefore),
-      auth.nonce as `0x${string}`,
-      v,
-      r,
-      s,
-    ],
-  });
-
-  // Value is 0 for token transfers (not sending ETH)
-  const value = 0n;
-
-  return { target, data, value };
-}
-
 /// @notice Re-verifies payment before settlement to ensure it's still valid
 /// @param runtime The CRE runtime
 /// @param paymentPayload The signed payment payload
@@ -343,17 +194,8 @@ async function reVerifyPayment(
 ): Promise<{ isValid: boolean; invalidReason?: string; payer?: string }> {
   runtime.log("Re-verifying payment before settlement...");
   
-  // Create a connected client for verification
-  let client: ConnectedClient;
-  
-  if (SupportedEVMNetworks.includes(paymentRequirements.network)) {
-    client = createConnectedClient(paymentRequirements.network);
-  } else {
-    throw new Error("Invalid network - only EVM networks are currently supported");
-  }
-  
-  // Re-verify to ensure the payment is still valid
-  const verifyResponse = await verify(client, paymentPayload, paymentRequirements, x402Config);
+  // Re-verify to ensure the payment is still valid using shared verification function
+  const verifyResponse = await verifyPayment(runtime, paymentPayload, paymentRequirements, x402Config);
   
   if (!verifyResponse.isValid) {
     runtime.log(`Re-verification failed: ${verifyResponse.invalidReason || 'Unknown reason'}`);
