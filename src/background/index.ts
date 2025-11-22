@@ -496,6 +496,84 @@ function handleMessage(
                     safeSendResponse({ success: true });
                     break;
 
+                case 'UPDATE_ACCOUNT_NAME':
+                    try {
+                        if (!message.address || !message.name) {
+                            safeSendResponse({
+                                success: false,
+                                error: 'Address and name are required',
+                            });
+                            break;
+                        }
+                        await wallet.updateAccountName(message.address, message.name);
+                        safeSendResponse({ success: true });
+                    } catch (error: any) {
+                        console.error('[Wolfy] Error updating account name:', error);
+                        safeSendResponse({
+                            success: false,
+                            error: error.message || 'Failed to update account name',
+                        });
+                    }
+                    break;
+
+                case 'EXPORT_PRIVATE_KEY':
+                    try {
+                        if (!wallet.isUnlocked()) {
+                            safeSendResponse({ success: false, error: 'Wallet is locked' });
+                            break;
+                        }
+                        if (!message.address) {
+                            safeSendResponse({
+                                success: false,
+                                error: 'Address is required',
+                            });
+                            break;
+                        }
+                        // Verify password
+                        const { verifyPassword } = await import('../core/password.js');
+                        const isValid = await verifyPassword(message.password);
+                        if (!isValid) {
+                            safeSendResponse({ success: false, error: 'Incorrect password' });
+                            break;
+                        }
+                        // Get private key
+                        const account = wallet.getAccounts().find(
+                            acc => acc.address.toLowerCase() === message.address.toLowerCase()
+                        );
+                        if (!account || account.isWatchOnly) {
+                            safeSendResponse({ success: false, error: 'Account not found or is watch-only' });
+                            break;
+                        }
+                        // Get private key using wallet's method (handles case normalization)
+                        const privateKey = await wallet.getPrivateKey(message.address);
+                        
+                        if (!privateKey) {
+                            // Check if this is a watch-only or chip account
+                            if (account.isWatchOnly) {
+                                safeSendResponse({ success: false, error: 'Cannot export private key for watch-only addresses' });
+                            } else if (account.isChipAccount || account.haloLinked) {
+                                safeSendResponse({ success: false, error: 'Cannot export private key for HaLo chip accounts. These accounts use hardware keys.' });
+                            } else {
+                                // Debug: Check what's actually in storage
+                                const normalizedAddress = message.address.toLowerCase();
+                                const allKeys = await chrome.storage.local.get(null);
+                                const keyPattern = Object.keys(allKeys).filter(k => k.startsWith('key_'));
+                                console.log('[EXPORT_PRIVATE_KEY] Debug - Looking for key:', `key_${normalizedAddress}`);
+                                console.log('[EXPORT_PRIVATE_KEY] Debug - All key_* entries:', keyPattern);
+                                safeSendResponse({ success: false, error: 'Private key not found. This account may have been created before private key storage was implemented, or the key was deleted. Please re-import the account with its private key.' });
+                            }
+                            break;
+                        }
+                        safeSendResponse({ success: true, privateKey });
+                    } catch (error: any) {
+                        console.error('[Wolfy] Error exporting private key:', error);
+                        safeSendResponse({
+                            success: false,
+                            error: error.message || 'Failed to export private key',
+                        });
+                    }
+                    break;
+
                 case 'ACCOUNT_CHANGED':
                     try {
                         // Update all connected dapp connections to use the new account

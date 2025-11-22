@@ -358,3 +358,4 @@ export class HaloService {
         return ethers.computeAddress('0x' + publicKey);
     }
 }
+

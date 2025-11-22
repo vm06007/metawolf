@@ -246,6 +246,21 @@ export class Wallet {
         }
     }
 
+    /**
+     * Update account name/alias
+     */
+    async updateAccountName(address: string, name: string): Promise<void> {
+        const account = this.state.accounts.find(
+            acc => acc.address.toLowerCase() === address.toLowerCase()
+        );
+        if (account) {
+            account.name = name;
+            await this.saveState();
+        } else {
+            throw new Error('Account not found');
+        }
+    }
+
     async getProvider(): Promise<ethers.JsonRpcProvider> {
         if (!this.provider) {
             await this.updateProvider();
@@ -286,9 +301,11 @@ export class Wallet {
 
     private async storePrivateKey(address: string, privateKey: string): Promise<void> {
         try {
+            // Always use lowercase for storage to ensure consistency
+            const normalizedAddress = address.toLowerCase();
             // In production, encrypt this with user password
             await chrome.storage.local.set({
-                [`key_${address}`]: privateKey,
+                [`key_${normalizedAddress}`]: privateKey,
             });
         } catch (error) {
             console.error('[Wallet] Error storing private key:', error);
@@ -296,10 +313,30 @@ export class Wallet {
         }
     }
 
-    private async getPrivateKey(address: string): Promise<string | null> {
+    async getPrivateKey(address: string): Promise<string | null> {
         try {
-            const stored = await chrome.storage.local.get(`key_${address}`);
-            return stored[`key_${address}`] || null;
+            // Always use lowercase for retrieval to ensure consistency
+            const normalizedAddress = address.toLowerCase();
+            
+            // Try lowercase first (new format)
+            let stored = await chrome.storage.local.get(`key_${normalizedAddress}`);
+            let privateKey = stored[`key_${normalizedAddress}`];
+            
+            // If not found, try with original address casing (for backward compatibility)
+            if (!privateKey && address !== normalizedAddress) {
+                stored = await chrome.storage.local.get(`key_${address}`);
+                privateKey = stored[`key_${address}`];
+                
+                // If found with old format, migrate to new format
+                if (privateKey) {
+                    await this.storePrivateKey(normalizedAddress, privateKey);
+                    // Remove old format
+                    await chrome.storage.local.remove(`key_${address}`);
+                    console.log(`[Wallet] Migrated private key storage for ${address} to lowercase format`);
+                }
+            }
+            
+            return privateKey || null;
         } catch (error) {
             console.error('[Wallet] Error getting private key:', error);
             return null;
@@ -312,7 +349,9 @@ export class Wallet {
      */
     async deletePrivateKey(address: string): Promise<void> {
         try {
-            await chrome.storage.local.remove(`key_${address}`);
+            // Always use lowercase for consistency
+            const normalizedAddress = address.toLowerCase();
+            await chrome.storage.local.remove(`key_${normalizedAddress}`);
             console.log(`[Wallet] Private key deleted for account ${address}`);
         } catch (error) {
             console.error('[Wallet] Error deleting private key:', error);
@@ -353,8 +392,9 @@ export class Wallet {
 
             // Clean up related data
             try {
-                // Delete private key if exists
-                await chrome.storage.local.remove(`key_${address.toLowerCase()}`);
+                // Delete private key if exists (already lowercase from getPrivateKey)
+                const normalizedAddress = address.toLowerCase();
+                await chrome.storage.local.remove(`key_${normalizedAddress}`);
 
                 // Delete HaLo link if exists
                 await chrome.storage.local.remove(`halo_link_${address.toLowerCase()}`);

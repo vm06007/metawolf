@@ -7,7 +7,8 @@ export function renderAccountSidebar(
     onAddWallet: () => void,
     onDeleteAccount?: (account: any) => void,
     onToggleCollapse?: () => void,
-    isCollapsed?: boolean
+    isCollapsed?: boolean,
+    onEditAccount?: (account: any) => void
 ): string {
     const accountsHtml = accounts.map(account => {
         const isSelected = selectedAccount?.address?.toLowerCase() === account.address?.toLowerCase();
@@ -15,7 +16,9 @@ export function renderAccountSidebar(
 
         // Account type badges
         let typeBadge = '';
-        if (account.isChipAccount) {
+        if (account.isWatchOnly) {
+            typeBadge = '<span class="account-type-badge watch-only">👁️ View-Only</span>';
+        } else if (account.isChipAccount) {
             typeBadge = '<span class="account-type-badge chip">🔒 Chip</span>';
         } else if (account.multisig) {
             typeBadge = `<span class="account-type-badge multisig">🔐 Multisig (${account.multisig.threshold}/${account.multisig.chips.length})</span>`;
@@ -48,32 +51,59 @@ export function renderAccountSidebar(
                     </div>
                     <div class="account-sidebar-address">${formatAddress(account.address)}</div>
                 </div>
-                ${canDelete && onDeleteAccount ? `
-                    <button class="account-sidebar-delete-btn"
-                            data-address="${account.address}"
-                            onclick="event.stopPropagation();"
-                            title="Delete account"
-                            style="
-                                background: none;
-                                border: none;
-                                padding: 4px;
-                                cursor: pointer;
-                                display: flex;
-                                align-items: center;
-                                justify-content: center;
-                                color: var(--r-neutral-foot);
-                                transition: all 0.2s;
-                                border-radius: 4px;
-                                opacity: 0;
-                                margin-left: auto;
-                            "
-                            onmouseenter="this.style.color='var(--r-red-default)'; this.style.background='var(--r-red-light)'; this.style.opacity='1'"
-                            onmouseleave="this.style.color='var(--r-neutral-foot)'; this.style.background='transparent'; this.style.opacity='0'">
-                        <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
-                            <path d="M10 4L4 10M4 4L10 10" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
-                        </svg>
-                    </button>
-                ` : ''}
+                <div style="display: flex; align-items: center; gap: 4px; margin-left: auto; opacity: 0;" 
+                     class="account-sidebar-actions"
+                     onmouseenter="this.style.opacity='1'"
+                     onmouseleave="this.style.opacity='0'">
+                    ${onEditAccount ? `
+                        <button class="account-sidebar-edit-btn"
+                                data-address="${account.address}"
+                                onclick="event.stopPropagation();"
+                                title="Edit account"
+                                style="
+                                    background: none;
+                                    border: none;
+                                    padding: 4px;
+                                    cursor: pointer;
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    color: var(--r-neutral-foot);
+                                    transition: all 0.2s;
+                                    border-radius: 4px;
+                                "
+                                onmouseenter="this.style.color='var(--r-blue-default)'; this.style.background='var(--r-blue-light1)'"
+                                onmouseleave="this.style.color='var(--r-neutral-foot)'; this.style.background='transparent'">
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
+                                <path d="M9.91667 2.33333C10.0333 2.21667 10.175 2.12833 10.3333 2.075C10.4917 2.02167 10.6583 2.005 10.8233 2.02667C10.9883 2.04833 11.1475 2.10833 11.2883 2.20167C11.4292 2.295 11.5483 2.41917 11.6375 2.565C11.7267 2.71083 11.7833 2.87417 11.8033 3.04333C11.8233 3.2125 11.8067 3.38333 11.7542 3.545C11.7017 3.70667 11.6142 3.855 11.4975 3.98L5.3975 10.08L2.33333 11.14L3.39333 8.07583L9.49333 1.97583L9.91667 2.33333Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    ` : ''}
+                    ${canDelete && onDeleteAccount ? `
+                        <button class="account-sidebar-delete-btn"
+                                data-address="${account.address}"
+                                onclick="event.stopPropagation();"
+                                title="Delete account"
+                                style="
+                                    background: none;
+                                    border: none;
+                                    padding: 4px;
+                                    cursor: pointer;
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    color: var(--r-neutral-foot);
+                                    transition: all 0.2s;
+                                    border-radius: 4px;
+                                "
+                                onmouseenter="this.style.color='var(--r-red-default)'; this.style.background='var(--r-red-light)'"
+                                onmouseleave="this.style.color='var(--r-neutral-foot)'; this.style.background='transparent'">
+                            <svg width="14" height="14" viewBox="0 0 14 14" fill="none" stroke="currentColor">
+                                <path d="M10 4L4 10M4 4L10 10" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    ` : ''}
+                </div>
             </div>
         `;
     }).join('');

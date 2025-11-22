@@ -172,7 +172,7 @@ export function renderDeleteAccountModal(
                         border-radius: 8px;
                         font-size: 15px;
                         font-weight: 500;
-                        cursor: pointer;
+                        cursor: not-allowed;
                         transition: all 0.2s;
                         background: var(--r-blue-default);
                         color: white;

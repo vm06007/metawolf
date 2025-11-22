@@ -82,3 +82,4 @@ export class EthPriceService {
 }
 
 export const ethPriceService = new EthPriceService();
+

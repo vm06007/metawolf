@@ -6,7 +6,8 @@ export function renderAccountSelectorModal(
     onSelectAccount: (account: any) => void,
     onClose: () => void,
     visible: boolean,
-    onDeleteAccount?: (account: any) => void
+    onDeleteAccount?: (account: any) => void,
+    onEditAccount?: (account: any) => void
 ): string {
     if (!visible) return '';
 
@@ -87,6 +88,30 @@ export function renderAccountSelectorModal(
                     ">${formatAddress(account.address)}</div>
                 </div>
                 <div style="display: flex; align-items: center; gap: 8px; flex-shrink: 0;">
+                    ${onEditAccount ? `
+                        <button class="account-edit-btn" 
+                                data-address="${account.address}"
+                                onclick="event.stopPropagation();"
+                                style="
+                                    background: none;
+                                    border: none;
+                                    padding: 4px;
+                                    cursor: pointer;
+                                    display: flex;
+                                    align-items: center;
+                                    justify-content: center;
+                                    color: var(--r-neutral-foot);
+                                    transition: color 0.2s;
+                                    border-radius: 4px;
+                                "
+                                onmouseenter="this.style.color='var(--r-blue-default)'; this.style.background='var(--r-blue-light1)'"
+                                onmouseleave="this.style.color='var(--r-neutral-foot)'; this.style.background='transparent'"
+                                title="Edit account">
+                            <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">
+                                <path d="M11.3333 2.00001C11.5084 1.82489 11.7163 1.68698 11.9446 1.59531C12.1729 1.50364 12.4169 1.46002 12.6629 1.46715C12.9089 1.47428 13.1517 1.53203 13.3756 1.63681C13.5995 1.74159 13.7998 1.89116 13.9644 2.07573C14.129 2.2603 14.2544 2.47588 14.3333 2.70834C14.4122 2.9408 14.4431 3.18536 14.4244 3.42834C14.4057 3.67132 14.3378 3.90764 14.2247 4.12201C14.1116 4.33638 13.9557 4.52438 13.7667 4.67334L6.16667 12.2733L2 13.3333L3.06 9.16668L10.66 1.56668L11.3333 2.00001Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                            </svg>
+                        </button>
+                    ` : ''}
                     ${canDelete && onDeleteAccount ? `
                         <button class="account-delete-btn" 
                                 data-address="${account.address}"

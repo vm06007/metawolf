@@ -5,6 +5,8 @@ import { renderDashboardHeader } from './components/DashboardHeader';
 import { renderDashboardPanel, DEFAULT_PANEL_ITEMS } from './components/DashboardPanel';
 import { renderLockScreen } from './components/LockScreen';
 import { renderAccountSelectorModal } from './components/AccountSelectorModal';
+import { renderAccountDetailModal } from './components/AccountDetailModal';
+import { renderPasswordModal } from './components/PasswordModal';
 import { renderAccountSidebar } from './components/AccountSidebar';
 import { renderTransactionList, Transaction } from './components/TransactionList';
 import { renderAddWalletModal, ADD_WALLET_OPTIONS } from './components/AddWalletModal';
@@ -18,6 +20,7 @@ import { renderSecurityConfirmModal } from './components/SecurityConfirmModal';
 import { renderDeleteAccountModal } from './components/DeleteAccountModal';
 import { renderSettingsMenu } from './components/SettingsMenu';
 import { renderEthPricePanel, EthPriceData } from './components/EthPricePanel';
+import { renderPrivateKeyModal } from './components/PrivateKeyModal';
 import { ethPriceService } from './services/eth-price-service';
 import { ethers } from 'ethers';
 
@@ -49,6 +52,20 @@ interface AppState {
     ethPriceLoading: boolean;
     sidebarCollapsed: boolean;
     showAddContactModal: boolean;
+    showAccountDetailModal: boolean;
+    accountToEdit?: any;
+    accountDetailModalFirstRender: boolean;
+    showPasswordModal: boolean;
+    passwordModalConfig?: {
+        title: string;
+        message: string;
+        onConfirm: (password: string) => void;
+    };
+    passwordModalFirstRender: boolean;
+    showPrivateKeyModal: boolean;
+    privateKeyToShow?: string;
+    privateKeyRevealed: boolean;
+    privateKeyModalFirstRender: boolean;
 }
 
 export class PopupApp {
@@ -80,6 +97,16 @@ export class PopupApp {
         ethPriceLoading: false,
         sidebarCollapsed: false,
         showAddContactModal: false,
+        showAccountDetailModal: false,
+        accountToEdit: undefined,
+        accountDetailModalFirstRender: true,
+        showPasswordModal: false,
+        passwordModalConfig: undefined,
+        passwordModalFirstRender: true,
+        showPrivateKeyModal: false,
+        privateKeyToShow: undefined,
+        privateKeyRevealed: false,
+        privateKeyModalFirstRender: true,
     };
 
     private walletService: WalletService;
@@ -332,7 +359,8 @@ export class PopupApp {
                 () => this.showAddWalletModal(),
                 (account) => this.handleDeleteAccount(account),
                 () => this.handleToggleSidebar(),
-                this.state.sidebarCollapsed
+                this.state.sidebarCollapsed,
+                (account) => this.handleEditAccount(account)
             )}
                     </div>
                     <div class="expanded-main">
@@ -410,6 +438,37 @@ export class PopupApp {
                 () => this.handleLockWallet(),
                 this.state.hasPassword
             )}
+                ${renderAccountDetailModal(
+                this.state.accountToEdit,
+                (address, name) => this.handleUpdateAccountName(address, name),
+                (address) => this.handleExportPrivateKey(address),
+                (address) => this.handleDeleteAccountFromDetail(address),
+                () => this.hideAccountDetailModal(),
+                this.state.showAccountDetailModal,
+                this.state.accountDetailModalFirstRender
+            )}
+                ${this.state.showPasswordModal && this.state.passwordModalConfig ? renderPasswordModal(
+                this.state.passwordModalConfig.title,
+                this.state.passwordModalConfig.message,
+                (password) => {
+                    // Store callback before hiding
+                    const callback = this.state.passwordModalConfig?.onConfirm;
+                    this.hidePasswordModal();
+                    if (callback) {
+                        callback(password);
+                    }
+                },
+                () => this.hidePasswordModal(),
+                this.state.showPasswordModal,
+                this.state.passwordModalFirstRender
+            ) : ''}
+            ${this.state.showPrivateKeyModal && this.state.privateKeyToShow ? renderPrivateKeyModal(
+                this.state.privateKeyToShow,
+                () => this.hidePrivateKeyModal(),
+                this.state.showPrivateKeyModal,
+                this.state.privateKeyRevealed,
+                this.state.privateKeyModalFirstRender
+            ) : ''}
             `;
         } else {
             // Popup view - normal layout
@@ -447,7 +506,17 @@ export class PopupApp {
                 (account) => this.handleSelectAccount(account),
                 () => this.hideAccountSelector(),
                 this.state.showAccountSelector,
-                (account) => this.handleDeleteAccount(account)
+                (account) => this.handleDeleteAccount(account),
+                (account) => this.handleEditAccount(account)
+            )}
+            ${renderAccountDetailModal(
+                this.state.accountToEdit,
+                (address, name) => this.handleUpdateAccountName(address, name),
+                (address) => this.handleExportPrivateKey(address),
+                (address) => this.handleDeleteAccountFromDetail(address),
+                () => this.hideAccountDetailModal(),
+                this.state.showAccountDetailModal,
+                this.state.accountDetailModalFirstRender
             )}
             ${renderAddWalletModal(
                 ADD_WALLET_OPTIONS,
@@ -498,10 +567,53 @@ export class PopupApp {
                 () => this.hideAddContactModal(),
                 this.state.showAddContactModal
             )}
+            ${this.state.showPasswordModal && this.state.passwordModalConfig ? renderPasswordModal(
+                this.state.passwordModalConfig.title,
+                this.state.passwordModalConfig.message,
+                (password) => {
+                    // Store callback before hiding
+                    const callback = this.state.passwordModalConfig?.onConfirm;
+                    this.hidePasswordModal();
+                    if (callback) {
+                        callback(password);
+                    }
+                },
+                () => this.hidePasswordModal(),
+                this.state.showPasswordModal,
+                this.state.passwordModalFirstRender
+            ) : ''}
+            ${this.state.showPrivateKeyModal && this.state.privateKeyToShow ? renderPrivateKeyModal(
+                this.state.privateKeyToShow,
+                () => this.hidePrivateKeyModal(),
+                this.state.showPrivateKeyModal,
+                this.state.privateKeyRevealed,
+                this.state.privateKeyModalFirstRender
+            ) : ''}
         `;
         }
 
         this.attachDashboardListeners();
+
+        // If account detail modal is visible, attach its listeners
+        if (this.state.showAccountDetailModal) {
+            setTimeout(() => {
+                this.attachAccountDetailListeners();
+            }, 100);
+        }
+
+        // If password modal is visible, attach its listeners
+        if (this.state.showPasswordModal) {
+            setTimeout(() => {
+                this.attachPasswordModalListeners();
+            }, 100);
+        }
+
+        // If private key modal is visible, attach its listeners
+        if (this.state.showPrivateKeyModal) {
+            setTimeout(() => {
+                this.attachPrivateKeyModalListeners();
+            }, 100);
+        }
     }
 
     private attachLockScreenListeners() {
@@ -631,6 +743,19 @@ export class PopupApp {
             });
         });
 
+        // Edit account buttons
+        document.querySelectorAll('.account-edit-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const address = btn.getAttribute('data-address');
+                if (address) {
+                    const account = this.state.accounts.find(acc => acc.address === address);
+                    if (account) {
+                        this.handleEditAccount(account);
+                    }
+                }
+            });
+        });
         // Delete account buttons
         document.querySelectorAll('.account-delete-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -660,6 +785,19 @@ export class PopupApp {
             });
         });
 
+        // Account sidebar edit buttons (expanded view)
+        document.querySelectorAll('.account-sidebar-edit-btn').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.stopPropagation();
+                const address = btn.getAttribute('data-address');
+                if (address) {
+                    const account = this.state.accounts.find(acc => acc.address === address);
+                    if (account) {
+                        this.handleEditAccount(account);
+                    }
+                }
+            });
+        });
         // Account sidebar delete buttons (expanded view)
         document.querySelectorAll('.account-sidebar-delete-btn').forEach(btn => {
             btn.addEventListener('click', (e) => {
@@ -792,6 +930,30 @@ export class PopupApp {
         });
         document.getElementById('delete-account-cancel')?.addEventListener('click', () => this.hideDeleteAccountModal());
         document.getElementById('delete-account-confirm')?.addEventListener('click', () => this.handleDeleteAccountConfirm());
+
+        // Enable/disable confirm button based on checkboxes and password
+        const updateDeleteConfirmButton = () => {
+            const checkbox1 = document.getElementById('delete-confirm-1') as HTMLInputElement;
+            const checkbox2 = document.getElementById('delete-confirm-2') as HTMLInputElement;
+            const passwordInput = document.getElementById('delete-account-password') as HTMLInputElement;
+            const confirmBtn = document.getElementById('delete-account-confirm') as HTMLButtonElement;
+
+            if (confirmBtn) {
+                const isEnabled = checkbox1?.checked && checkbox2?.checked && passwordInput?.value?.trim().length > 0;
+                confirmBtn.disabled = !isEnabled;
+                confirmBtn.style.opacity = isEnabled ? '1' : '0.5';
+                confirmBtn.style.cursor = isEnabled ? 'pointer' : 'not-allowed';
+            }
+        };
+
+        // Attach listeners to checkboxes and password input
+        const checkbox1 = document.getElementById('delete-confirm-1') as HTMLInputElement;
+        const checkbox2 = document.getElementById('delete-confirm-2') as HTMLInputElement;
+        const passwordInput = document.getElementById('delete-account-password') as HTMLInputElement;
+
+        checkbox1?.addEventListener('change', updateDeleteConfirmButton);
+        checkbox2?.addEventListener('change', updateDeleteConfirmButton);
+        passwordInput?.addEventListener('input', updateDeleteConfirmButton);
 
         // Settings menu
         document.getElementById('settings-menu-overlay')?.addEventListener('click', () => this.hideSettingsMenu());
@@ -1452,12 +1614,430 @@ export class PopupApp {
         this.state.accountToDelete = account;
         this.state.showDeleteAccountModal = true;
         this.render();
+        // Update button state after modal is rendered
+        setTimeout(() => {
+            const updateDeleteConfirmButton = () => {
+                const checkbox1 = document.getElementById('delete-confirm-1') as HTMLInputElement;
+                const checkbox2 = document.getElementById('delete-confirm-2') as HTMLInputElement;
+                const passwordInput = document.getElementById('delete-account-password') as HTMLInputElement;
+                const confirmBtn = document.getElementById('delete-account-confirm') as HTMLButtonElement;
+
+                if (confirmBtn) {
+                    const isEnabled = checkbox1?.checked && checkbox2?.checked && passwordInput?.value?.trim().length > 0;
+                    confirmBtn.disabled = !isEnabled;
+                    confirmBtn.style.opacity = isEnabled ? '1' : '0.5';
+                    confirmBtn.style.cursor = isEnabled ? 'pointer' : 'not-allowed';
+                }
+            };
+            updateDeleteConfirmButton();
+        }, 100);
     }
 
     hideDeleteAccountModal() {
         this.state.showDeleteAccountModal = false;
         this.state.accountToDelete = undefined;
         this.render();
+    }
+
+    private handleEditAccount(account: any) {
+        // Check if modal already exists (to avoid re-animation)
+        const modalExists = document.getElementById('account-detail-overlay') !== null;
+        this.state.accountToEdit = account;
+        this.state.showAccountDetailModal = true;
+        // Only animate on first render
+        this.state.accountDetailModalFirstRender = !modalExists;
+        this.hideAccountSelector();
+        this.render();
+        // Mark that we've rendered once
+        if (this.state.accountDetailModalFirstRender) {
+            setTimeout(() => {
+                this.state.accountDetailModalFirstRender = false;
+            }, 350); // After animation completes
+        } else {
+            this.state.accountDetailModalFirstRender = false;
+        }
+        // Attach listeners after render completes
+        setTimeout(() => {
+            this.attachAccountDetailListeners();
+        }, 100);
+    }
+
+    private hideAccountDetailModal() {
+        this.state.showAccountDetailModal = false;
+        this.state.accountToEdit = undefined;
+        // Reset first render flag when closing so it animates on next open
+        this.state.accountDetailModalFirstRender = true;
+        this.render();
+    }
+
+    private async handleUpdateAccountName(address: string, name: string) {
+        try {
+            if (!name || !name.trim()) {
+                this.showErrorMessage('Name cannot be empty');
+                return;
+            }
+
+            const response = await chrome.runtime.sendMessage({
+                type: 'UPDATE_ACCOUNT_NAME',
+                address: address,
+                name: name.trim(),
+            });
+
+            if (response.success) {
+                await this.loadAccounts();
+                this.hideAccountDetailModal(); // Close the modal after successful update
+                this.render();
+                this.showSuccessMessage('Account name updated successfully');
+            } else {
+                this.showErrorMessage(response.error || 'Failed to update account name');
+            }
+        } catch (error: any) {
+            console.error('Error updating account name:', error);
+            this.showErrorMessage('Failed to update account name: ' + (error.message || 'Unknown error'));
+        }
+    }
+
+    private handleExportPrivateKey(address: string) {
+        // Check if account detail modal is showing - if so, keep it visible in background
+        const accountDetailModalShowing = this.state.showAccountDetailModal ||
+            document.getElementById('account-detail-overlay') !== null;
+
+        // Show password modal without animation if transitioning from account detail modal
+        // DO NOT hide the account detail modal - keep it in background
+        this.state.passwordModalConfig = {
+            title: 'Export Private Key',
+            message: 'Enter your password to export the private key. Make sure you are in a secure location.',
+            onConfirm: async (password: string) => {
+                await this.doExportPrivateKey(address, password);
+            },
+        };
+        this.state.showPasswordModal = true;
+        // Don't animate if we're transitioning from account detail modal
+        this.state.passwordModalFirstRender = !accountDetailModalShowing;
+        this.render();
+        // Mark that we've rendered once
+        if (!accountDetailModalShowing) {
+            setTimeout(() => {
+                this.state.passwordModalFirstRender = false;
+            }, 350); // After animation completes
+        } else {
+            this.state.passwordModalFirstRender = false;
+        }
+        this.attachPasswordModalListeners();
+    }
+
+    private async doExportPrivateKey(address: string, password: string) {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: 'EXPORT_PRIVATE_KEY',
+                address: address,
+                password: password,
+            });
+
+            if (response.success) {
+                // Show private key in a modal (better than confirm)
+                // Pass false for isFirstRender since we're transitioning from password modal
+                this.showPrivateKeyModal(response.privateKey, false);
+            } else {
+                this.showErrorMessage(response.error || 'Failed to export private key');
+            }
+        } catch (error: any) {
+            console.error('Error exporting private key:', error);
+            this.showErrorMessage('Failed to export private key: ' + (error.message || 'Unknown error'));
+        }
+    }
+
+    private showPrivateKeyModal(privateKey: string, shouldAnimate: boolean = true) {
+        // Check if modal is already showing (to avoid re-animation)
+        const wasShowing = this.state.showPrivateKeyModal;
+        const modalExists = document.getElementById('private-key-modal-overlay') !== null;
+        // Check if password modal is currently showing (before it gets closed)
+        const passwordModalWasShowing = this.state.showPasswordModal || document.getElementById('password-modal-overlay') !== null;
+
+        this.state.privateKeyToShow = privateKey;
+        this.state.showPrivateKeyModal = true;
+        this.state.privateKeyRevealed = false; // Start with key hidden
+
+        // If password modal was just showing, don't animate (smooth transition)
+        // Also respect the shouldAnimate parameter
+        const actuallyAnimate = shouldAnimate && !passwordModalWasShowing;
+
+        if (!wasShowing && !modalExists) {
+            // First time showing - allow animation only if requested and password modal isn't showing
+            this.state.privateKeyModalFirstRender = actuallyAnimate;
+            this.render();
+            // Mark that we've rendered once
+            if (actuallyAnimate) {
+                setTimeout(() => {
+                    this.state.privateKeyModalFirstRender = false;
+                }, 350); // After animation completes
+            } else {
+                // If no animation, mark immediately
+                this.state.privateKeyModalFirstRender = false;
+            }
+        } else if (wasShowing || modalExists) {
+            // If modal was already showing or exists in DOM, just update the content without re-rendering
+            const showKeyBtn = document.getElementById('show-private-key-btn');
+            const keyContainer = document.getElementById('private-key-container');
+            const copyBtn = document.getElementById('private-key-copy-btn');
+            const keyText = document.getElementById('private-key-text');
+
+            if (showKeyBtn) showKeyBtn.style.display = 'block';
+            if (keyContainer) keyContainer.style.display = 'none';
+            if (copyBtn) copyBtn.style.display = 'none';
+            if (keyText) keyText.textContent = '';
+
+            // Update state without animation
+            this.state.privateKeyModalFirstRender = false;
+        }
+    }
+
+    private hidePrivateKeyModal() {
+        this.state.showPrivateKeyModal = false;
+        this.state.privateKeyToShow = undefined;
+        this.state.privateKeyRevealed = false;
+        // Reset first render flag when closing so it animates on next open
+        this.state.privateKeyModalFirstRender = true;
+        this.render();
+    }
+
+    private revealPrivateKey() {
+        // Update the content without re-rendering the entire modal
+        const keyText = document.getElementById('private-key-text');
+        const showKeyBtn = document.getElementById('show-private-key-btn');
+        const copyBtn = document.getElementById('private-key-copy-btn');
+        const closeBtnFooter = document.getElementById('private-key-close-btn');
+
+        if (this.state.privateKeyToShow && keyText && showKeyBtn) {
+            // Hide the "show key" button
+            showKeyBtn.style.display = 'none';
+
+            // Show the private key
+            keyText.textContent = this.state.privateKeyToShow;
+            const keyContainer = keyText.parentElement;
+            if (keyContainer) {
+                keyContainer.style.display = 'block';
+            }
+
+            // Show the copy button
+            if (copyBtn) {
+                copyBtn.style.display = 'block';
+            }
+
+            // Update state
+            this.state.privateKeyRevealed = true;
+        }
+    }
+
+    private attachPrivateKeyModalListeners() {
+        setTimeout(() => {
+            const overlay = document.getElementById('private-key-modal-overlay');
+            const closeBtn = document.getElementById('private-key-modal-close');
+            const closeBtnFooter = document.getElementById('private-key-close-btn');
+            const copyBtn = document.getElementById('private-key-copy-btn');
+            const showKeyBtn = document.getElementById('show-private-key-btn');
+
+            if (!overlay) return; // Modal not in DOM yet
+
+            // Remove old listeners by cloning and replacing (cleaner than tracking)
+            // But for simplicity, we'll just attach - DOM recreation handles cleanup
+
+            // Close button in header
+            if (closeBtn) {
+                closeBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.hidePrivateKeyModal();
+                };
+            }
+
+            // Close button in footer
+            if (closeBtnFooter) {
+                closeBtnFooter.onclick = (e) => {
+                    e.stopPropagation();
+                    this.hidePrivateKeyModal();
+                };
+            }
+
+            // Copy button (only visible when key is revealed)
+            if (copyBtn) {
+                copyBtn.onclick = async (e) => {
+                    e.stopPropagation();
+                    if (this.state.privateKeyToShow) {
+                        try {
+                            await navigator.clipboard.writeText(this.state.privateKeyToShow);
+                            this.showSuccessMessage('Private key copied to clipboard');
+                        } catch (error) {
+                            console.error('Failed to copy private key:', error);
+                            this.showErrorMessage('Failed to copy private key');
+                        }
+                    }
+                };
+            }
+
+            // Show key button (only visible when key is hidden)
+            if (showKeyBtn) {
+                showKeyBtn.onclick = (e) => {
+                    e.stopPropagation();
+                    this.revealPrivateKey();
+                };
+            }
+
+            // Close on overlay click
+            overlay.onclick = (e) => {
+                if (e.target === overlay) {
+                    this.hidePrivateKeyModal();
+                }
+            };
+        }, 100);
+    }
+
+    private showPasswordModal(title: string, message: string, onConfirm: (password: string) => void) {
+        // Check if modal already exists or if we're transitioning from another modal
+        const modalExists = document.getElementById('password-modal-overlay') !== null;
+        const accountDetailModalShowing = this.state.showAccountDetailModal ||
+            document.getElementById('account-detail-overlay') !== null;
+
+        this.state.passwordModalConfig = { title, message, onConfirm };
+        this.state.showPasswordModal = true;
+        // Don't animate if modal exists or we're transitioning from account detail modal
+        this.state.passwordModalFirstRender = !modalExists && !accountDetailModalShowing;
+        this.render();
+        // Mark that we've rendered once
+        if (this.state.passwordModalFirstRender) {
+            setTimeout(() => {
+                this.state.passwordModalFirstRender = false;
+            }, 350); // After animation completes
+        } else {
+            this.state.passwordModalFirstRender = false;
+        }
+        this.attachPasswordModalListeners();
+    }
+
+    private hidePasswordModal() {
+        this.state.showPasswordModal = false;
+        this.state.passwordModalConfig = undefined;
+        // Reset first render flag when closing so it animates on next open (if not transitioning)
+        this.state.passwordModalFirstRender = true;
+        this.render();
+    }
+
+    private attachPasswordModalListeners() {
+        setTimeout(() => {
+            const overlay = document.getElementById('password-modal-overlay');
+            const closeBtn = document.getElementById('password-modal-cancel');
+            const confirmBtn = document.getElementById('password-modal-confirm');
+            const passwordInput = document.getElementById('password-modal-input') as HTMLInputElement;
+            const errorDiv = document.getElementById('password-modal-error');
+
+            // Store the callback before hiding modal (which clears state)
+            const config = this.state.passwordModalConfig;
+            if (!config) {
+                console.error('[PasswordModal] No config found');
+                return;
+            }
+
+            const handleConfirm = () => {
+                const password = passwordInput?.value?.trim() || '';
+                if (!password) {
+                    if (errorDiv) {
+                        errorDiv.textContent = 'Please enter your password';
+                        errorDiv.style.display = 'block';
+                    }
+                    return;
+                }
+                // Hide modal first, then call callback
+                this.hidePasswordModal();
+                // Use stored config instead of state (which gets cleared)
+                if (config && config.onConfirm) {
+                    config.onConfirm(password);
+                }
+            };
+
+            overlay?.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    this.hidePasswordModal();
+                }
+            });
+
+            closeBtn?.addEventListener('click', () => {
+                this.hidePasswordModal();
+            });
+
+            confirmBtn?.addEventListener('click', handleConfirm);
+            passwordInput?.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    handleConfirm();
+                }
+            });
+        }, 100);
+    }
+
+    private handleDeleteAccountFromDetail(address: string) {
+        const account = this.state.accounts.find(acc => acc.address.toLowerCase() === address.toLowerCase());
+        if (account) {
+            this.hideAccountDetailModal();
+            this.handleDeleteAccount(account);
+        }
+    }
+
+    private attachAccountDetailListeners() {
+        setTimeout(() => {
+            const overlay = document.getElementById('account-detail-overlay');
+            const closeBtn = document.getElementById('account-detail-close');
+            const copyAddressBtn = document.getElementById('copy-address-btn');
+            const saveNameBtn = document.getElementById('save-name-btn');
+            const exportKeyBtn = document.getElementById('export-private-key-btn');
+            const deleteBtn = document.getElementById('delete-account-btn');
+            const nameInput = document.getElementById('account-name-input') as HTMLInputElement;
+
+            overlay?.addEventListener('click', (e) => {
+                if (e.target === overlay) {
+                    this.hideAccountDetailModal();
+                }
+            });
+
+            closeBtn?.addEventListener('click', () => {
+                this.hideAccountDetailModal();
+            });
+
+            copyAddressBtn?.addEventListener('click', async () => {
+                if (this.state.accountToEdit) {
+                    await navigator.clipboard.writeText(this.state.accountToEdit.address);
+                    this.showSuccessMessage('Address copied to clipboard');
+                }
+            });
+
+            saveNameBtn?.addEventListener('click', () => {
+                if (this.state.accountToEdit && nameInput) {
+                    const newName = nameInput.value.trim();
+                    if (newName) {
+                        this.handleUpdateAccountName(this.state.accountToEdit.address, newName);
+                    }
+                }
+            });
+
+            nameInput?.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter' && this.state.accountToEdit) {
+                    const newName = nameInput.value.trim();
+                    if (newName) {
+                        this.handleUpdateAccountName(this.state.accountToEdit.address, newName);
+                    }
+                }
+            });
+
+            exportKeyBtn?.addEventListener('click', () => {
+                if (this.state.accountToEdit) {
+                    this.handleExportPrivateKey(this.state.accountToEdit.address);
+                }
+            });
+
+            deleteBtn?.addEventListener('click', () => {
+                if (this.state.accountToEdit) {
+                    this.handleDeleteAccountFromDetail(this.state.accountToEdit.address);
+                }
+            });
+        }, 100);
     }
 
     async handleDeleteAccountConfirm() {
@@ -1505,10 +2085,13 @@ export class PopupApp {
                 errorDiv.style.display = 'none';
             }
 
+            // Store address before hiding modal (which clears accountToDelete)
+            const addressToDelete = this.state.accountToDelete.address;
+
             this.hideDeleteAccountModal();
 
             // Delete the account
-            await this.walletService.deleteAccount(this.state.accountToDelete.address);
+            await this.walletService.deleteAccount(addressToDelete);
 
             // Reload accounts
             await this.loadAccounts();
