@@ -4,5 +4,6 @@
   "isTestnet": true,
   "settlementReceiverAddress": "0xYourSettlementReceiverContractAddress",
   "executionProxyAddress": "0xYourExecutionProxyContractAddress",
-  "gasLimit": "500000"
+  "gasLimit": "500000",
+  "callbackUrl": "https://webhook.site/defe88ad-5059-4410-904c-95a2feb81dde"
 }

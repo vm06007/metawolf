@@ -23819,6 +23819,7 @@ var ListSchema = /* @__PURE__ */ messageDesc(file_values_v1_values, 3);
 var DecimalSchema = /* @__PURE__ */ messageDesc(file_values_v1_values, 4);
 var file_sdk_v1alpha_sdk = /* @__PURE__ */ fileDesc("ChVzZGsvdjFhbHBoYS9zZGsucHJvdG8SC3Nkay52MWFscGhhIrQBChVTaW1wbGVDb25zZW5zdXNJbnB1dHMSIQoFdmFsdWUYASABKAsyEC52YWx1ZXMudjEuVmFsdWVIABIPCgVlcnJvchgCIAEoCUgAEjUKC2Rlc2NyaXB0b3JzGAMgASgLMiAuc2RrLnYxYWxwaGEuQ29uc2Vuc3VzRGVzY3JpcHRvchIhCgdkZWZhdWx0GAQgASgLMhAudmFsdWVzLnYxLlZhbHVlQg0KC29ic2VydmF0aW9uIpABCglGaWVsZHNNYXASMgoGZmllbGRzGAEgAygLMiIuc2RrLnYxYWxwaGEuRmllbGRzTWFwLkZpZWxkc0VudHJ5Gk8KC0ZpZWxkc0VudHJ5EgsKA2tleRgBIAEoCRIvCgV2YWx1ZRgCIAEoCzIgLnNkay52MWFscGhhLkNvbnNlbnN1c0Rlc2NyaXB0b3I6AjgBIoYBChNDb25zZW5zdXNEZXNjcmlwdG9yEjMKC2FnZ3JlZ2F0aW9uGAEgASgOMhwuc2RrLnYxYWxwaGEuQWdncmVnYXRpb25UeXBlSAASLAoKZmllbGRzX21hcBgCIAEoCzIWLnNkay52MWFscGhhLkZpZWxkc01hcEgAQgwKCmRlc2NyaXB0b3IiagoNUmVwb3J0UmVxdWVzdBIXCg9lbmNvZGVkX3BheWxvYWQYASABKAwSFAoMZW5jb2Rlcl9uYW1lGAIgASgJEhQKDHNpZ25pbmdfYWxnbxgDIAEoCRIUCgxoYXNoaW5nX2FsZ28YBCABKAkilwEKDlJlcG9ydFJlc3BvbnNlEhUKDWNvbmZpZ19kaWdlc3QYASABKAwSEgoGc2VxX25yGAIgASgEQgIwABIWCg5yZXBvcnRfY29udGV4dBgDIAEoDBISCgpyYXdfcmVwb3J0GAQgASgMEi4KBHNpZ3MYBSADKAsyIC5zZGsudjFhbHBoYS5BdHRyaWJ1dGVkU2lnbmF0dXJlIjsKE0F0dHJpYnV0ZWRTaWduYXR1cmUSEQoJc2lnbmF0dXJlGAEgASgMEhEKCXNpZ25lcl9pZBgCIAEoDSJrChFDYXBhYmlsaXR5UmVxdWVzdBIKCgJpZBgBIAEoCRIlCgdwYXlsb2FkGAIgASgLMhQuZ29vZ2xlLnByb3RvYnVmLkFueRIOCgZtZXRob2QYAyABKAkSEwoLY2FsbGJhY2tfaWQYBCABKAUiWgoSQ2FwYWJpbGl0eVJlc3BvbnNlEicKB3BheWxvYWQYASABKAsyFC5nb29nbGUucHJvdG9idWYuQW55SAASDwoFZXJyb3IYAiABKAlIAEIKCghyZXNwb25zZSJYChNUcmlnZ2VyU3Vic2NyaXB0aW9uEgoKAmlkGAEgASgJEiUKB3BheWxvYWQYAiABKAsyFC5nb29nbGUucHJvdG9idWYuQW55Eg4KBm1ldGhvZBgDIAEoCSJVChpUcmlnZ2VyU3Vic2NyaXB0aW9uUmVxdWVzdBI3Cg1zdWJzY3JpcHRpb25zGAEgAygLMiAuc2RrLnYxYWxwaGEuVHJpZ2dlclN1YnNjcmlwdGlvbiJACgdUcmlnZ2VyEg4KAmlkGAEgASgEQgIwABIlCgdwYXlsb2FkGAIgASgLMhQuZ29vZ2xlLnByb3RvYnVmLkFueSInChhBd2FpdENhcGFiaWxpdGllc1JlcXVlc3QSCwoDaWRzGAEgAygFIrgBChlBd2FpdENhcGFiaWxpdGllc1Jlc3BvbnNlEkgKCXJlc3BvbnNlcxgBIAMoCzI1LnNkay52MWFscGhhLkF3YWl0Q2FwYWJpbGl0aWVzUmVzcG9uc2UuUmVzcG9uc2VzRW50cnkaUQoOUmVzcG9uc2VzRW50cnkSCwoDa2V5GAEgASgFEi4KBXZhbHVlGAIgASgLMh8uc2RrLnYxYWxwaGEuQ2FwYWJpbGl0eVJlc3BvbnNlOgI4ASKgAQoORXhlY3V0ZVJlcXVlc3QSDgoGY29uZmlnGAEgASgMEisKCXN1YnNjcmliZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5FbXB0eUgAEicKB3RyaWdnZXIYAyABKAsyFC5zZGsudjFhbHBoYS5UcmlnZ2VySAASHQoRbWF4X3Jlc3BvbnNlX3NpemUYBCABKARCAjAAQgkKB3JlcXVlc3QimQEKD0V4ZWN1dGlvblJlc3VsdBIhCgV2YWx1ZRgBIAEoCzIQLnZhbHVlcy52MS5WYWx1ZUgAEg8KBWVycm9yGAIgASgJSAASSAoVdHJpZ2dlcl9zdWJzY3JpcHRpb25zGAMgASgLMicuc2RrLnYxYWxwaGEuVHJpZ2dlclN1YnNjcmlwdGlvblJlcXVlc3RIAEIICgZyZXN1bHQiVgoRR2V0U2VjcmV0c1JlcXVlc3QSLAoIcmVxdWVzdHMYASADKAsyGi5zZGsudjFhbHBoYS5TZWNyZXRSZXF1ZXN0EhMKC2NhbGxiYWNrX2lkGAIgASgFIiIKE0F3YWl0U2VjcmV0c1JlcXVlc3QSCwoDaWRzGAEgAygFIqsBChRBd2FpdFNlY3JldHNSZXNwb25zZRJDCglyZXNwb25zZXMYASADKAsyMC5zZGsudjFhbHBoYS5Bd2FpdFNlY3JldHNSZXNwb25zZS5SZXNwb25zZXNFbnRyeRpOCg5SZXNwb25zZXNFbnRyeRILCgNrZXkYASABKAUSKwoFdmFsdWUYAiABKAsyHC5zZGsudjFhbHBoYS5TZWNyZXRSZXNwb25zZXM6AjgBIi4KDVNlY3JldFJlcXVlc3QSCgoCaWQYASABKAkSEQoJbmFtZXNwYWNlGAIgASgJIkUKBlNlY3JldBIKCgJpZBgBIAEoCRIRCgluYW1lc3BhY2UYAiABKAkSDQoFb3duZXIYAyABKAkSDQoFdmFsdWUYBCABKAkiSgoLU2VjcmV0RXJyb3ISCgoCaWQYASABKAkSEQoJbmFtZXNwYWNlGAIgASgJEg0KBW93bmVyGAMgASgJEg0KBWVycm9yGAQgASgJIm4KDlNlY3JldFJlc3BvbnNlEiUKBnNlY3JldBgBIAEoCzITLnNkay52MWFscGhhLlNlY3JldEgAEikKBWVycm9yGAIgASgLMhguc2RrLnYxYWxwaGEuU2VjcmV0RXJyb3JIAEIKCghyZXNwb25zZSJBCg9TZWNyZXRSZXNwb25zZXMSLgoJcmVzcG9uc2VzGAEgAygLMhsuc2RrLnYxYWxwaGEuU2VjcmV0UmVzcG9uc2UquAEKD0FnZ3JlZ2F0aW9uVHlwZRIgChxBR0dSRUdBVElPTl9UWVBFX1VOU1BFQ0lGSUVEEAASGwoXQUdHUkVHQVRJT05fVFlQRV9NRURJQU4QARIeChpBR0dSRUdBVElPTl9UWVBFX0lERU5USUNBTBACEiIKHkFHR1JFR0FUSU9OX1RZUEVfQ09NTU9OX1BSRUZJWBADEiIKHkFHR1JFR0FUSU9OX1RZUEVfQ09NTU9OX1NVRkZJWBAEKjkKBE1vZGUSFAoQTU9ERV9VTlNQRUNJRklFRBAAEgwKCE1PREVfRE9OEAESDQoJTU9ERV9OT0RFEAJCaAoPY29tLnNkay52MWFscGhhQghTZGtQcm90b1ABogIDU1hYqgILU2RrLlYxYWxwaGHKAgtTZGtcVjFhbHBoYeICF1Nka1xWMWFscGhhXEdQQk1ldGFkYXRh6gIMU2RrOjpWMWFscGhhYgZwcm90bzM", [file_google_protobuf_any, file_google_protobuf_empty, file_values_v1_values]);
 var SimpleConsensusInputsSchema = /* @__PURE__ */ messageDesc(file_sdk_v1alpha_sdk, 0);
+var ConsensusDescriptorSchema = /* @__PURE__ */ messageDesc(file_sdk_v1alpha_sdk, 2);
 var ReportRequestSchema = /* @__PURE__ */ messageDesc(file_sdk_v1alpha_sdk, 3);
 var ReportResponseSchema = /* @__PURE__ */ messageDesc(file_sdk_v1alpha_sdk, 4);
 var CapabilityRequestSchema = /* @__PURE__ */ messageDesc(file_sdk_v1alpha_sdk, 6);
@@ -25698,6 +25699,15 @@ var decodeJson = (input) => {
   const textBody = decoder2.decode(input);
   return JSON.parse(textBody);
 };
+function ok(responseOrFn) {
+  if (typeof responseOrFn === "function") {
+    return {
+      result: () => ok(responseOrFn().result)
+    };
+  } else {
+    return responseOrFn.statusCode >= 200 && responseOrFn.statusCode < 300;
+  }
+}
 function sendReport(runtime, report, fn) {
   const rawReport = report.x_generatedCodeOnly_unwrap();
   const request = fn(rawReport);
@@ -29309,6 +29319,33 @@ var getNetwork = (options) => {
   }
   return;
 };
+function consensusIdenticalAggregation() {
+  return simpleConsensus(AggregationType.IDENTICAL);
+}
+
+class ConsensusImpl {
+  descriptor;
+  defaultValue;
+  constructor(descriptor, defaultValue) {
+    this.descriptor = descriptor;
+    this.defaultValue = defaultValue;
+  }
+  withDefault(t) {
+    return new ConsensusImpl(this.descriptor, t);
+  }
+  _usesUToForceShape(_) {}
+}
+function simpleConsensus(agg) {
+  return new ConsensusImpl(simpleDescriptor(agg));
+}
+function simpleDescriptor(agg) {
+  return create(ConsensusDescriptorSchema, {
+    descriptor: {
+      case: "aggregation",
+      value: agg
+    }
+  });
+}
 
 class Int64 {
   static INT64_MIN = -(2n ** 63n);
@@ -47793,8 +47830,8 @@ function varint32read2() {
 var protoInt642 = /* @__PURE__ */ makeInt64Support2();
 function makeInt64Support2() {
   const dv = new DataView(new ArrayBuffer(8));
-  const ok = typeof BigInt === "function" && typeof dv.getBigInt64 === "function" && typeof dv.getBigUint64 === "function" && typeof dv.setBigInt64 === "function" && typeof dv.setBigUint64 === "function" && (typeof process != "object" || typeof process.env != "object" || process.env.BUF_BIGINT_DISABLE !== "1");
-  if (ok) {
+  const ok2 = typeof BigInt === "function" && typeof dv.getBigInt64 === "function" && typeof dv.getBigUint64 === "function" && typeof dv.setBigInt64 === "function" && typeof dv.setBigUint64 === "function" && (typeof process != "object" || typeof process.env != "object" || process.env.BUF_BIGINT_DISABLE !== "1");
+  if (ok2) {
     const MIN = BigInt("-9223372036854775808");
     const MAX = BigInt("9223372036854775807");
     const UMIN = BigInt("0");
@@ -50467,8 +50504,8 @@ function readField3(message, reader, field, wireType, options) {
       if (field.enum.open) {
         message.set(field, val);
       } else {
-        const ok = field.enum.values.some((v) => v.number === val);
-        if (ok) {
+        const ok2 = field.enum.values.some((v) => v.number === val);
+        if (ok2) {
           message.set(field, val);
         } else if (options.readUnknownFields) {
           const data = new BinaryWriter2().int32(val).finish();
@@ -74855,7 +74892,7 @@ async function onEVMLogTrigger(runtime3, payload) {
     runtime3.log(`
 === EVM Log Event Detected ===`);
     runtime3.log(`Timestamp: ${new Date().toISOString()}`);
-    const logAddress = payload.address;
+    const logAddress = typeof payload.address === "string" ? payload.address : bytesToHex(payload.address);
     const logTopics = payload.topics || [];
     const logData = payload.data || new Uint8Array(0);
     runtime3.log(`Contract Address: ${logAddress}`);
@@ -74878,7 +74915,7 @@ async function onEVMLogTrigger(runtime3, payload) {
         const decoded = decodeEventLog({
           abi: executionProxyAbi,
           data: bytesToHex(logData),
-          topics: logTopics.map((t5) => bytesToHex(t5)),
+          topics: [bytesToHex(logTopics[0]), ...logTopics.slice(1).map((t5) => bytesToHex(t5))],
           eventName: "ExecutionSucceeded"
         });
         runtime3.log(`
@@ -74889,17 +74926,17 @@ async function onEVMLogTrigger(runtime3, payload) {
         runtime3.log(`Success: ${decoded.args.success}`);
         runtime3.log(`Data Length: ${decoded.args.data.length} bytes`);
         runtime3.log(`Result Length: ${decoded.args.result.length} bytes`);
-        return JSON.stringify({
-          status: "processed",
-          contract: "ExecutionProxy",
-          event: "ExecutionSucceeded",
-          caller: decoded.args.caller,
-          target: decoded.args.target,
-          value: decoded.args.value.toString(),
+        runtime3.log(`Transaction Hash: ${payload.transactionHash || "N/A"}`);
+        const settleResponse = {
           success: decoded.args.success,
-          dataLength: decoded.args.data.length,
-          resultLength: decoded.args.result.length
-        });
+          payer: decoded.args.caller,
+          transaction: payload.transactionHash || "",
+          network: getX402NetworkFromChainSelector(runtime3.config.chainSelectorName)
+        };
+        if (runtime3.config.callbackUrl) {
+          await sendEventCallback(runtime3, settleResponse);
+        }
+        return JSON.stringify(settleResponse);
       } catch (error) {
         runtime3.log(`Error decoding ExecutionProxy.ExecutionSucceeded: ${error instanceof Error ? error.message : String(error)}`);
         return JSON.stringify({ status: "error", reason: "decode_failed" });
@@ -74909,7 +74946,7 @@ async function onEVMLogTrigger(runtime3, payload) {
         const decoded = decodeEventLog({
           abi: executionProxyAbi,
           data: bytesToHex(logData),
-          topics: logTopics.map((t5) => bytesToHex(t5)),
+          topics: [bytesToHex(logTopics[0]), ...logTopics.slice(1).map((t5) => bytesToHex(t5))],
           eventName: "ExecutionFailed"
         });
         runtime3.log(`
@@ -74919,16 +74956,18 @@ async function onEVMLogTrigger(runtime3, payload) {
         runtime3.log(`Value: ${decoded.args.value.toString()}`);
         runtime3.log(`Reason: ${decoded.args.reason}`);
         runtime3.log(`Data Length: ${decoded.args.data.length} bytes`);
-        return JSON.stringify({
-          status: "processed",
-          contract: "ExecutionProxy",
-          event: "ExecutionFailed",
-          caller: decoded.args.caller,
-          target: decoded.args.target,
-          value: decoded.args.value.toString(),
-          reason: decoded.args.reason,
-          dataLength: decoded.args.data.length
-        });
+        runtime3.log(`Transaction Hash: ${payload.transactionHash || "N/A"}`);
+        const settleResponse = {
+          success: false,
+          errorReason: decoded.args.reason,
+          payer: decoded.args.caller,
+          transaction: payload.transactionHash || "",
+          network: getX402NetworkFromChainSelector(runtime3.config.chainSelectorName)
+        };
+        if (runtime3.config.callbackUrl) {
+          await sendEventCallback(runtime3, settleResponse);
+        }
+        return JSON.stringify(settleResponse);
       } catch (error) {
         runtime3.log(`Error decoding ExecutionProxy.ExecutionFailed: ${error instanceof Error ? error.message : String(error)}`);
         return JSON.stringify({ status: "error", reason: "decode_failed" });
@@ -74939,10 +74978,75 @@ async function onEVMLogTrigger(runtime3, payload) {
     }
   } catch (error) {
     runtime3.log(`Error processing EVM log: ${error instanceof Error ? error.message : String(error)}`);
-    return JSON.stringify({
-      status: "error",
-      error: error instanceof Error ? error.message : String(error)
-    });
+    const errorResponse = {
+      success: false,
+      errorReason: error instanceof Error ? error.message : String(error),
+      transaction: "",
+      network: getX402NetworkFromChainSelector(runtime3.config.chainSelectorName)
+    };
+    if (runtime3.config.callbackUrl) {
+      try {
+        await sendEventCallback(runtime3, errorResponse);
+      } catch (callbackError) {
+        runtime3.log(`Warning: Failed to send error callback: ${callbackError instanceof Error ? callbackError.message : String(callbackError)}`);
+      }
+    }
+    return JSON.stringify(errorResponse);
+  }
+}
+function getX402NetworkFromChainSelector(chainSelectorName) {
+  const reverseMap = {
+    "avalanche-mainnet": "avalanche",
+    "ethereum-mainnet-base-1": "base",
+    "polygon-mainnet": "polygon",
+    "avalanche-testnet-fuji": "avalanche-fuji",
+    "ethereum-testnet-sepolia-base-1": "base-sepolia",
+    "polygon-testnet-amoy": "polygon-amoy"
+  };
+  const mapped = reverseMap[chainSelectorName];
+  if (mapped) {
+    return mapped;
+  }
+  if (chainSelectorName.includes("base-sepolia") || chainSelectorName.includes("base-1")) {
+    return "base-sepolia";
+  }
+  if (chainSelectorName.includes("avalanche-fuji") || chainSelectorName.includes("fuji")) {
+    return "avalanche-fuji";
+  }
+  if (chainSelectorName.includes("polygon-amoy") || chainSelectorName.includes("amoy")) {
+    return "polygon-amoy";
+  }
+  return "base-sepolia";
+}
+async function sendEventCallback(runtime3, settleResponse) {
+  try {
+    runtime3.log(`Sending settlement callback to: ${runtime3.config.callbackUrl}`);
+    const httpClient = new cre.capabilities.HTTPClient;
+    const sendCallback = (sendRequester, config3) => {
+      const bodyBytes = new TextEncoder().encode(JSON.stringify(settleResponse));
+      const body = Buffer.from(bodyBytes).toString("base64");
+      const req = {
+        url: config3.callbackUrl,
+        method: "POST",
+        body,
+        headers: {
+          "Content-Type": "application/json"
+        },
+        cacheSettings: {
+          readFromCache: true,
+          maxAgeMs: 60000
+        }
+      };
+      const resp = sendRequester.sendRequest(req).result();
+      if (!ok(resp)) {
+        throw new Error(`HTTP request failed with status: ${resp.statusCode}`);
+      }
+      return { statusCode: resp.statusCode };
+    };
+    const result = httpClient.sendRequest(runtime3, sendCallback, consensusIdenticalAggregation())(runtime3.config).result();
+    runtime3.log(`Callback HTTP status: ${result.statusCode}`);
+  } catch (callbackError) {
+    runtime3.log(`Warning: Failed to send settlement callback: ${callbackError instanceof Error ? callbackError.message : String(callbackError)}`);
   }
 }
 async function reVerifyPayment(runtime3, paymentPayload, paymentRequirements, x402Config) {

@@ -7,7 +7,10 @@ import {
   getNetwork,
   hexToBase64,
   bytesToHex,
-  TxStatus
+  TxStatus,
+  HTTPSendRequester,
+  ok,
+  consensusIdenticalAggregation
 } from "@chainlink/cre-sdk"
 import { encodeAbiParameters, parseAbiParameters, encodeFunctionData, parseErc6492Signature, type Hex, keccak256, toHex, parseAbi, decodeEventLog, type Address } from "viem"
 import {
@@ -23,6 +26,7 @@ import {
   Signer,
   ConnectedClient,
   type X402Config,
+  type SettleResponse,
 } from "x402/types"
 import { verifyPayment } from "../shared/verify-payment";
 import { getNetworkInfo } from "../shared/network";
@@ -39,6 +43,7 @@ type Config = {
   // This allows the workflow to handle payments on any supported network dynamically
   gasLimit?: string; // Optional, defaults to "500000"
   reVerifyBeforeSettle?: boolean; // Optional, defaults to true - re-verify payment before settling
+  callbackUrl?: string; // Optional URL to send EVM log event data via POST
   // TODO: Uncomment when CRE supports Solana (SVM)
   // svmPrivateKey?: string;
   x402Config?: X402Config;
@@ -58,10 +63,10 @@ const executionProxyAbi = parseAbi([
 
 /// @notice Log payload structure from EVM log trigger
 type EVMLogPayload = {
-  address: string;
+  address: string | Uint8Array;
   topics: Uint8Array[];
   data: Uint8Array;
-  blockNumber?: bigint;
+  blockNumber?: bigint | BigInt;
   transactionHash?: string;
   logIndex?: number;
 };
@@ -76,7 +81,10 @@ async function onEVMLogTrigger(runtime: Runtime<Config>, payload: EVMLogPayload)
     runtime.log(`Timestamp: ${new Date().toISOString()}`);
     
     // Extract log data
-    const logAddress = payload.address;
+    // Convert address to string if it's Uint8Array
+    const logAddress = typeof payload.address === 'string' 
+      ? payload.address 
+      : bytesToHex(payload.address);
     const logTopics = payload.topics || [];
     const logData = payload.data || new Uint8Array(0);
 
@@ -110,7 +118,7 @@ async function onEVMLogTrigger(runtime: Runtime<Config>, payload: EVMLogPayload)
         const decoded = decodeEventLog({
           abi: executionProxyAbi,
           data: bytesToHex(logData),
-          topics: logTopics.map(t => bytesToHex(t)),
+          topics: [bytesToHex(logTopics[0]), ...logTopics.slice(1).map(t => bytesToHex(t))] as [Hex, ...Hex[]],
           eventName: "ExecutionSucceeded",
         });
 
@@ -121,18 +129,22 @@ async function onEVMLogTrigger(runtime: Runtime<Config>, payload: EVMLogPayload)
         runtime.log(`Success: ${decoded.args.success}`);
         runtime.log(`Data Length: ${decoded.args.data.length} bytes`);
         runtime.log(`Result Length: ${decoded.args.result.length} bytes`);
+        runtime.log(`Transaction Hash: ${payload.transactionHash || 'N/A'}`);
 
-        return JSON.stringify({
-          status: "processed",
-          contract: "ExecutionProxy",
-          event: "ExecutionSucceeded",
-          caller: decoded.args.caller,
-          target: decoded.args.target,
-          value: decoded.args.value.toString(),
+        // Map event data to SettleResponse format
+        const settleResponse: SettleResponse = {
           success: decoded.args.success,
-          dataLength: decoded.args.data.length,
-          resultLength: decoded.args.result.length,
-        });
+          payer: decoded.args.caller as string,
+          transaction: payload.transactionHash || "",
+          network: getX402NetworkFromChainSelector(runtime.config.chainSelectorName),
+        };
+
+        // Send callback if configured
+        if (runtime.config.callbackUrl) {
+          await sendEventCallback(runtime, settleResponse);
+        }
+
+        return JSON.stringify(settleResponse);
       } catch (error) {
         runtime.log(`Error decoding ExecutionProxy.ExecutionSucceeded: ${error instanceof Error ? error.message : String(error)}`);
         return JSON.stringify({ status: "error", reason: "decode_failed" });
@@ -143,7 +155,7 @@ async function onEVMLogTrigger(runtime: Runtime<Config>, payload: EVMLogPayload)
         const decoded = decodeEventLog({
           abi: executionProxyAbi,
           data: bytesToHex(logData),
-          topics: logTopics.map(t => bytesToHex(t)),
+          topics: [bytesToHex(logTopics[0]), ...logTopics.slice(1).map(t => bytesToHex(t))] as [Hex, ...Hex[]],
           eventName: "ExecutionFailed",
         });
 
@@ -153,17 +165,23 @@ async function onEVMLogTrigger(runtime: Runtime<Config>, payload: EVMLogPayload)
         runtime.log(`Value: ${decoded.args.value.toString()}`);
         runtime.log(`Reason: ${decoded.args.reason}`);
         runtime.log(`Data Length: ${decoded.args.data.length} bytes`);
+        runtime.log(`Transaction Hash: ${payload.transactionHash || 'N/A'}`);
 
-        return JSON.stringify({
-          status: "processed",
-          contract: "ExecutionProxy",
-          event: "ExecutionFailed",
-          caller: decoded.args.caller,
-          target: decoded.args.target,
-          value: decoded.args.value.toString(),
-          reason: decoded.args.reason,
-          dataLength: decoded.args.data.length,
-        });
+        // Map event data to SettleResponse format
+        const settleResponse: SettleResponse = {
+          success: false,
+          errorReason: decoded.args.reason as SettleResponse["errorReason"],
+          payer: decoded.args.caller as string,
+          transaction: payload.transactionHash || "",
+          network: getX402NetworkFromChainSelector(runtime.config.chainSelectorName),
+        };
+
+        // Send callback if configured
+        if (runtime.config.callbackUrl) {
+          await sendEventCallback(runtime, settleResponse);
+        }
+
+        return JSON.stringify(settleResponse);
       } catch (error) {
         runtime.log(`Error decoding ExecutionProxy.ExecutionFailed: ${error instanceof Error ? error.message : String(error)}`);
         return JSON.stringify({ status: "error", reason: "decode_failed" });
@@ -174,10 +192,115 @@ async function onEVMLogTrigger(runtime: Runtime<Config>, payload: EVMLogPayload)
     }
   } catch (error) {
     runtime.log(`Error processing EVM log: ${error instanceof Error ? error.message : String(error)}`);
-    return JSON.stringify({ 
-      status: "error", 
-      error: error instanceof Error ? error.message : String(error) 
-    });
+    const errorResponse: SettleResponse = {
+      success: false,
+      errorReason: (error instanceof Error ? error.message : String(error)) as SettleResponse["errorReason"],
+      transaction: "",
+      network: getX402NetworkFromChainSelector(runtime.config.chainSelectorName),
+    };
+    
+    // Send callback even for errors if configured
+    if (runtime.config.callbackUrl) {
+      try {
+        await sendEventCallback(runtime, errorResponse);
+      } catch (callbackError) {
+        runtime.log(`Warning: Failed to send error callback: ${callbackError instanceof Error ? callbackError.message : String(callbackError)}`);
+      }
+    }
+    
+    return JSON.stringify(errorResponse);
+  }
+}
+
+/// @notice Maps CRE chainSelectorName back to x402 network string
+/// @param chainSelectorName The CRE chain selector name (e.g., "ethereum-testnet-sepolia-base-1")
+/// @returns The x402 network string (e.g., "base-sepolia")
+function getX402NetworkFromChainSelector(chainSelectorName: string): SettleResponse["network"] {
+  // Reverse mapping from CRE chainSelectorName to x402 network format
+  // Note: Only maps to networks that are in SettleResponse["network"] type
+  const reverseMap: Partial<Record<string, SettleResponse["network"]>> = {
+    'avalanche-mainnet': 'avalanche',
+    'ethereum-mainnet-base-1': 'base',
+    'polygon-mainnet': 'polygon',
+    'avalanche-testnet-fuji': 'avalanche-fuji',
+    'ethereum-testnet-sepolia-base-1': 'base-sepolia',
+    'polygon-testnet-amoy': 'polygon-amoy',
+  };
+  
+  const mapped = reverseMap[chainSelectorName];
+  if (mapped) {
+    return mapped;
+  }
+  
+  // Fallback: try to infer from chainSelectorName
+  if (chainSelectorName.includes('base-sepolia') || chainSelectorName.includes('base-1')) {
+    return 'base-sepolia';
+  }
+  if (chainSelectorName.includes('avalanche-fuji') || chainSelectorName.includes('fuji')) {
+    return 'avalanche-fuji';
+  }
+  if (chainSelectorName.includes('polygon-amoy') || chainSelectorName.includes('amoy')) {
+    return 'polygon-amoy';
+  }
+  
+  // Default fallback
+  return 'base-sepolia';
+}
+
+/// @notice Sends an HTTP POST callback with SettleResponse data to the configured callback URL
+/// @param runtime The CRE runtime
+/// @param settleResponse The settlement response to send
+async function sendEventCallback(runtime: Runtime<Config>, settleResponse: SettleResponse): Promise<void> {
+  try {
+    runtime.log(`Sending settlement callback to: ${runtime.config.callbackUrl}`);
+    
+    const httpClient = new cre.capabilities.HTTPClient();
+    
+    // Function to send the POST request
+    const sendCallback = (sendRequester: HTTPSendRequester, config: Config) => {
+      // 1. Serialize the settlement response to JSON and encode as bytes
+      const bodyBytes = new TextEncoder().encode(JSON.stringify(settleResponse));
+      
+      // 2. Convert to base64 for the request
+      const body = Buffer.from(bodyBytes).toString("base64");
+      
+      // 3. Construct the POST request with cacheSettings
+      const req = {
+        url: config.callbackUrl!,
+        method: "POST" as const,
+        body,
+        headers: {
+          "Content-Type": "application/json",
+        },
+        cacheSettings: {
+          readFromCache: true, // Enable reading from cache
+          maxAgeMs: 60000, // Accept cached responses up to 60 seconds old
+        },
+      };
+      
+      // 4. Send the request and wait for the response
+      const resp = sendRequester.sendRequest(req).result();
+      
+      if (!ok(resp)) {
+        throw new Error(`HTTP request failed with status: ${resp.statusCode}`);
+      }
+      
+      return { statusCode: resp.statusCode };
+    };
+
+    // Send request with consensus aggregation
+    const result = httpClient
+      .sendRequest(
+        runtime,
+        sendCallback,
+        consensusIdenticalAggregation<{ statusCode: number }>()
+      )(runtime.config)
+      .result();
+
+    runtime.log(`Callback HTTP status: ${result.statusCode}`);
+  } catch (callbackError) {
+    runtime.log(`Warning: Failed to send settlement callback: ${callbackError instanceof Error ? callbackError.message : String(callbackError)}`);
+    // Don't throw - we don't want callback failures to break the log processing
   }
 }
 
@@ -544,6 +667,7 @@ const initWorkflow = (config: Config) => {
     ),
     // EVM log trigger for monitoring ExecutionProxy events
     cre.handler(
+      // @ts-expect-error - CRE SDK logTrigger type compatibility issue with BigInt vs bigint
       evmClient.logTrigger({
         addresses: [config.executionProxyAddress as Address],
         topics: [
