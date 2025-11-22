@@ -271,6 +271,103 @@ export class Wallet {
         return this.state.accounts;
     }
 
+    /**
+     * Verify account data integrity - check if private key matches account address
+     * Returns accounts with mismatched private keys
+     */
+    async verifyAccountIntegrity(): Promise<Array<{ account: Account; issue: string; recoveredAddress: string }>> {
+        const issues: Array<{ account: Account; issue: string; recoveredAddress: string }> = [];
+        
+        for (const account of this.state.accounts) {
+            // Skip watch-only, chip accounts, and firefly accounts (they don't have stored private keys)
+            if (account.isWatchOnly || account.isChipAccount || account.isFireflyAccount) {
+                continue;
+            }
+
+            const privateKey = await this.getPrivateKey(account.address);
+            if (!privateKey) {
+                issues.push({
+                    account,
+                    issue: 'Private key not found',
+                    recoveredAddress: ''
+                });
+                continue;
+            }
+
+            // Verify private key matches account address
+            try {
+                const { privateKeyToAccount } = await import('viem/accounts');
+                const { getAddress } = await import('viem');
+                const accountFromKey = privateKeyToAccount(privateKey as `0x${string}`);
+                const addressFromKey = getAddress(accountFromKey.address).toLowerCase();
+                const expectedAddress = getAddress(account.address).toLowerCase();
+
+                if (addressFromKey !== expectedAddress) {
+                    issues.push({
+                        account,
+                        issue: `Private key belongs to different address: ${addressFromKey} (expected ${expectedAddress})`,
+                        recoveredAddress: addressFromKey
+                    });
+                }
+            } catch (error: any) {
+                issues.push({
+                    account,
+                    issue: `Error verifying private key: ${error.message}`,
+                    recoveredAddress: ''
+                });
+            }
+        }
+
+        return issues;
+    }
+
+    /**
+     * Fix account data integrity by updating the account address to match the private key
+     * WARNING: This will change the account address - use with caution
+     */
+    async fixAccountAddress(accountAddress: string): Promise<boolean> {
+        try {
+            const account = this.state.accounts.find(
+                acc => acc.address.toLowerCase() === accountAddress.toLowerCase()
+            );
+            
+            if (!account) {
+                throw new Error('Account not found');
+            }
+
+            const privateKey = await this.getPrivateKey(account.address);
+            if (!privateKey) {
+                throw new Error('Private key not found');
+            }
+
+            // Get the actual address from the private key
+            const { privateKeyToAccount } = await import('viem/accounts');
+            const { getAddress } = await import('viem');
+            const accountFromKey = privateKeyToAccount(privateKey as `0x${string}`);
+            const actualAddress = getAddress(accountFromKey.address);
+
+            // Update account address to match private key
+            const oldAddress = account.address;
+            account.address = actualAddress;
+
+            // Re-store private key under the correct address
+            await this.storePrivateKey(actualAddress, privateKey);
+            
+            // Remove old private key if address changed
+            if (oldAddress.toLowerCase() !== actualAddress.toLowerCase()) {
+                const normalizedOldAddress = oldAddress.toLowerCase();
+                await chrome.storage.local.remove(`key_${normalizedOldAddress}`);
+            }
+
+            await this.saveState();
+            console.log(`[Wallet] Fixed account address: ${oldAddress} -> ${actualAddress}`);
+            return true;
+        } catch (error: any) {
+            console.error('[Wallet] Error fixing account address:', error);
+            return false;
+        }
+    }
+
     getSelectedAccount(): Account | undefined {
         if (!this.state.selectedAccount) return undefined;
         return this.state.accounts.find(
@@ -332,6 +429,10 @@ export class Wallet {
         return this.state.networks.find(
             (n) => n.chainId === this.state.selectedNetwork
         );
+    }
+
+    getSelectedNetwork(): number {
+        return this.state.selectedNetwork;
     }
 
     getNetworks(): NetworkConfig[] {

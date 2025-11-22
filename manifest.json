@@ -2,7 +2,7 @@
     "manifest_version": 3,
     "name": "Wolfy Wallet",
     "version": "1.0.0",
-    "description": "Wallet extension with EIP-7702, EIP-5742, and Arx HaLo chip support",
+    "description": "Wallet extension with EIP-7702, EIP-5792, and Arx HaLo chip support",
     "permissions": [
         "storage",
         "activeTab",

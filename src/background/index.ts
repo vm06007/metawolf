@@ -217,7 +217,7 @@ function handleMessage(
                             if (existingNotificationWindow && existingNotificationWindow.id) {
                                 // A notification window is already open - focus it and update pending connection
                                 console.log('[CONNECT_DAPP] Notification window already open, focusing it');
-                                
+
                                 // Update pending connection to this origin (in case it's a different dapp)
                                 await chrome.storage.local.set({
                                     pendingConnection: {
@@ -228,7 +228,7 @@ function handleMessage(
                                         tabId: sender.tab?.id,
                                     }
                                 });
-                                
+
                                 await chrome.windows.update(existingNotificationWindow.id, { focused: true });
                                 // Ensure it's tracked
                                 notificationWindowIds.add(existingNotificationWindow.id);
@@ -249,14 +249,14 @@ function handleMessage(
                             console.log('[CONNECT_DAPP] Window creation already in progress, waiting...');
                             // Wait a bit and check again
                             await new Promise(resolve => setTimeout(resolve, 100));
-                            
+
                             // Re-check if window was created
                             const windows = await chrome.windows.getAll({ populate: true });
                             const existingWindow = windows.find(win => {
                                 if (!win.tabs || win.tabs.length === 0) return false;
                                 return win.tabs.some(tab => tab.url === notificationUrl);
                             });
-                            
+
                             if (existingWindow && existingWindow.id) {
                                 await chrome.storage.local.set({
                                     pendingConnection: {
@@ -391,7 +391,7 @@ function handleMessage(
                 case 'REJECT_CONNECTION':
                     try {
                         await chrome.storage.local.set({ pendingConnection: null });
-                        
+
                         // Clean up notification window tracking
                         const windows = await chrome.windows.getAll({ populate: true });
                         const notificationWindow = windows.find(win => {
@@ -401,7 +401,7 @@ function handleMessage(
                         if (notificationWindow?.id) {
                             notificationWindowIds.delete(notificationWindow.id);
                         }
-                        
+
                         safeSendResponse({ success: true });
                     } catch (error: any) {
                         safeSendResponse({ success: false, error: error.message });
@@ -413,12 +413,12 @@ function handleMessage(
                         const requestId = message.requestId;
                         const storage = await chrome.storage.local.get('pendingSignature');
                         const pendingSignature = storage.pendingSignature;
-                        
+
                         if (!pendingSignature || pendingSignature.id !== requestId) {
                             safeSendResponse({ success: false, error: 'Signature request not found' });
                             break;
                         }
-                        
+
                         // Sign the message
                         let result;
                         if (pendingSignature.isTypedData) {
@@ -434,10 +434,10 @@ function handleMessage(
                                 wallet
                             );
                         }
-                        
+
                         // Clear pending signature
                         await chrome.storage.local.set({ pendingSignature: null });
-                        
+
                         // Send response to content script
                         if (pendingSignature.tabId) {
                             try {
@@ -450,7 +450,7 @@ function handleMessage(
                                 console.error('[APPROVE_SIGNATURE] Error sending to content script:', error);
                             }
                         }
-                        
+
                         safeSendResponse({ success: true, signature: result.signature });
                     } catch (error: any) {
                         console.error('[APPROVE_SIGNATURE] Error:', error);
@@ -463,15 +463,15 @@ function handleMessage(
                         const requestId = message.requestId;
                         const storage = await chrome.storage.local.get('pendingSignature');
                         const pendingSignature = storage.pendingSignature;
-                        
+
                         if (!pendingSignature || pendingSignature.id !== requestId) {
                             safeSendResponse({ success: false, error: 'Signature request not found' });
                             break;
                         }
-                        
+
                         // Clear pending signature
                         await chrome.storage.local.set({ pendingSignature: null });
-                        
+
                         // Send rejection to content script
                         if (pendingSignature.tabId) {
                             try {
@@ -483,7 +483,7 @@ function handleMessage(
                                 console.error('[REJECT_SIGNATURE] Error sending to content script:', error);
                             }
                         }
-                        
+
                         safeSendResponse({ success: true });
                     } catch (error: any) {
                         console.error('[REJECT_SIGNATURE] Error:', error);
@@ -496,12 +496,12 @@ function handleMessage(
                         const requestId = message.requestId;
                         const storage = await chrome.storage.local.get('pendingTransaction');
                         const pendingTransaction = storage.pendingTransaction;
-                        
+
                         if (!pendingTransaction || pendingTransaction.id !== requestId) {
                             safeSendResponse({ success: false, error: 'Transaction request not found' });
                             break;
                         }
-                        
+
                         // Get account
                         const account = wallet.getAccounts().find(
                             acc => acc.address.toLowerCase() === pendingTransaction.address.toLowerCase()
@@ -510,12 +510,12 @@ function handleMessage(
                             safeSendResponse({ success: false, error: 'Account not found' });
                             break;
                         }
-                        
+
                         // Get provider and sign transaction
                         const provider = await wallet.getProvider();
                         // Use updated transaction from message if provided, otherwise use original
                         const txParams = message.transaction || pendingTransaction.transaction;
-                        
+
                         // Build transaction object
                         const transaction: any = {
                             to: txParams.to,
@@ -529,7 +529,7 @@ function handleMessage(
                             chainId: txParams.chainId,
                             type: txParams.type,
                         };
-                        
+
                         // Sign the transaction
                         let signedTx: string;
                         if (account.isChipAccount && account.chipInfo) {
@@ -547,15 +547,15 @@ function handleMessage(
                             const populatedTx = await signerWallet.populateTransaction(transaction);
                             signedTx = await signerWallet.signTransaction(populatedTx);
                         }
-                        
+
                         // Broadcast the transaction
                         const txResponse = await provider.broadcastTransaction(signedTx);
                         const tx = ethers.Transaction.from(signedTx);
                         const txHash = tx.hash || (typeof txResponse === 'string' ? txResponse : txResponse?.hash);
-                        
+
                         // Clear pending transaction
                         await chrome.storage.local.set({ pendingTransaction: null });
-                        
+
                         // Send response to content script
                         if (pendingTransaction.tabId) {
                             try {
@@ -568,7 +568,7 @@ function handleMessage(
                                 console.error('[APPROVE_TRANSACTION] Error sending to content script:', error);
                             }
                         }
-                        
+
                         safeSendResponse({ success: true, transactionHash: txHash });
                     } catch (error: any) {
                         console.error('[APPROVE_TRANSACTION] Error:', error);
@@ -581,15 +581,15 @@ function handleMessage(
                         const requestId = message.requestId;
                         const storage = await chrome.storage.local.get('pendingTransaction');
                         const pendingTransaction = storage.pendingTransaction;
-                        
+
                         if (!pendingTransaction || pendingTransaction.id !== requestId) {
                             safeSendResponse({ success: false, error: 'Transaction request not found' });
                             break;
                         }
-                        
+
                         // Clear pending transaction
                         await chrome.storage.local.set({ pendingTransaction: null });
-                        
+
                         // Send rejection to content script
                         if (pendingTransaction.tabId) {
                             try {
@@ -601,7 +601,7 @@ function handleMessage(
                                 console.error('[REJECT_TRANSACTION] Error sending to content script:', error);
                             }
                         }
-                        
+
                         safeSendResponse({ success: true });
                     } catch (error: any) {
                         console.error('[REJECT_TRANSACTION] Error:', error);
@@ -906,7 +906,7 @@ function handleMessage(
                         }
                         // Get private key using wallet's method (handles case normalization)
                         const privateKey = await wallet.getPrivateKey(message.address);
-                        
+
                         if (!privateKey) {
                             // Check if this is a watch-only or chip account
                             if (account.isWatchOnly) {
@@ -940,11 +940,11 @@ function handleMessage(
                         const connections = await chrome.storage.local.get('dapp_connections');
                         const dappConnections = connections.dapp_connections || {};
                         const newAccountAddress = message.account;
-                        
+
                         // Update all connections
                         const updatedConnections: any = {};
                         const connectedOrigins: string[] = [];
-                        
+
                         for (const [origin, connection] of Object.entries(dappConnections)) {
                             updatedConnections[origin] = {
                                 ...(connection as any),
@@ -952,23 +952,23 @@ function handleMessage(
                             };
                             connectedOrigins.push(origin);
                         }
-                        
+
                         // Save updated connections
                         await chrome.storage.local.set({ dapp_connections: updatedConnections });
-                        
+
                         // Notify all connected dapps about the account change
                         if (connectedOrigins.length > 0) {
                             // Get all tabs and find ones that match connected origins
                             const tabs = await chrome.tabs.query({});
                             const accountAddresses = [newAccountAddress];
-                            
+
                             for (const tab of tabs) {
                                 if (!tab.id || !tab.url) continue;
-                                
+
                                 try {
                                     const url = new URL(tab.url);
                                     const origin = url.origin;
-                                    
+
                                     // If this tab's origin is connected, notify it
                                     if (connectedOrigins.includes(origin)) {
                                         try {
@@ -990,7 +990,7 @@ function handleMessage(
                                 }
                             }
                         }
-                        
+
                         safeSendResponse({ success: true });
                     } catch (error: any) {
                         console.error('[ACCOUNT_CHANGED] Error:', error);
@@ -1006,7 +1006,7 @@ function handleMessage(
                     try {
                         // Check if this is a DApp request (has sender.tab) vs internal wallet operation
                         const isDAppRequest = sender.tab && sender.tab.id;
-                        
+
                         // Get origin to check if it's chrome-extension (auto-sign internal requests)
                         let origin = sender.origin || sender.url || 'Unknown';
                         // Extract origin from URL if needed
@@ -1017,14 +1017,14 @@ function handleMessage(
                         } catch {
                             // If URL parsing fails, use as-is
                         }
-                        
+
                         // Auto-sign chrome-extension origins (internal wallet operations)
                         const isChromeExtension = origin.startsWith('chrome-extension://');
-                        
+
                         if (isDAppRequest && !isChromeExtension) {
                             // DApp transaction request - show approval modal
                             const tabId = sender.tab?.id;
-                            
+
                             // Get DApp info from connections
                             const connections = await chrome.storage.local.get('dapp_connections') || {};
                             const dappConnections = connections.dapp_connections || {};
@@ -1040,14 +1040,14 @@ function handleMessage(
                                     icon: '',
                                 };
                             }
-                            
+
                             // Get selected account for transaction
                             const account = wallet.getSelectedAccount();
                             if (!account) {
                                 safeSendResponse({ success: false, error: 'No account selected' });
                                 break;
                             }
-                            
+
                             // Store pending transaction request
                             const requestId = `tx_${Date.now()}_${Math.random()}`;
                             await chrome.storage.local.set({
@@ -1061,7 +1061,7 @@ function handleMessage(
                                     tabId: tabId,
                                 }
                             });
-                            
+
                             // Check if notification window already exists
                             try {
                                 const windows = await chrome.windows.getAll({ populate: true });
@@ -1069,7 +1069,7 @@ function handleMessage(
                                     if (!win.tabs || win.tabs.length === 0) return false;
                                     return win.tabs.some(tab => tab.url === notificationUrl);
                                 });
-                                
+
                                 if (existingWindow && existingWindow.id) {
                                     // Update URL to show transaction request
                                     await chrome.tabs.update(existingWindow.tabs![0].id!, {
@@ -1083,13 +1083,13 @@ function handleMessage(
                             } catch (error) {
                                 console.warn('[SIGN_TRANSACTION] Could not check existing windows:', error);
                             }
-                            
+
                             // Create new notification window
                             const windowWidth = 400;
                             const windowHeight = 600;
                             const margin = 20;
                             const top = 100;
-                            
+
                             let left: number;
                             try {
                                 const displayInfo = await chrome.system.display.getInfo();
@@ -1099,7 +1099,7 @@ function handleMessage(
                             } catch (error) {
                                 left = 1920 - windowWidth - margin;
                             }
-                            
+
                             const window = await chrome.windows.create({
                                 url: `${notificationUrl}?type=transaction&requestId=${requestId}`,
                                 type: 'popup',
@@ -1109,15 +1109,15 @@ function handleMessage(
                                 top: top,
                                 focused: true,
                             });
-                            
+
                             if (window.id) {
                                 notificationWindowIds.add(window.id);
                             }
-                            
+
                             safeSendResponse({ success: true, pending: true, requestId });
                             break;
                         }
-                        
+
                         // Internal wallet operation or chrome-extension - sign directly without modal
                         const account = wallet.getSelectedAccount();
                         if (!account) {
@@ -1285,6 +1285,412 @@ function handleMessage(
                     }
                     break;
 
+                case 'CHECK_DELEGATION':
+                    try {
+                        const { address, chainId } = message;
+                        console.log('[CHECK_DELEGATION] Checking delegation for:', { address, chainId });
+
+                        const provider = await wallet.getProvider();
+                        let delegationStatus;
+
+                        if (chainId) {
+                            const { rpcService } = await import('../core/rpc-service.js');
+                            const rpcUrl = rpcService.getRPCUrl(chainId);
+                            console.log('[CHECK_DELEGATION] Using chain-specific provider:', { chainId, rpcUrl });
+                            const chainProvider = new ethers.JsonRpcProvider(rpcUrl);
+                            delegationStatus = await EIP7702.checkDelegation(address, chainProvider);
+                        } else {
+                            console.log('[CHECK_DELEGATION] Using default provider');
+                            delegationStatus = await EIP7702.checkDelegation(address, provider);
+                        }
+
+                        console.log('[CHECK_DELEGATION] Delegation status result:', delegationStatus);
+                        safeSendResponse({ success: true, delegationStatus });
+                    } catch (error: any) {
+                        console.error('[CHECK_DELEGATION] Error:', error);
+                        safeSendResponse({ success: false, error: error.message || 'Failed to check delegation' });
+                    }
+                    break;
+
+                case 'UPGRADE_TO_SMART_ACCOUNT':
+                    if (!wallet.isUnlocked()) {
+                        safeSendResponse({ success: false, error: 'Wallet is locked' });
+                        break;
+                    }
+                    try {
+                        const { address, chainId, contractAddress } = message;
+                        // Use provided contract address or default to MetaMask delegator
+                        const SMART_ACCOUNT_CONTRACT = contractAddress || '0x63c0c19a282a1b52b07dd5a65b58948a07dae32b';
+
+                        const account = wallet.getAccounts().find(
+                            acc => acc.address.toLowerCase() === address.toLowerCase()
+                        );
+                        if (!account) {
+                            safeSendResponse({ success: false, error: 'Account not found' });
+                            break;
+                        }
+
+                        // Get provider and nonce
+                        const { rpcService } = await import('../core/rpc-service.js');
+                        const targetChainId = chainId || wallet.getSelectedNetwork();
+                        const rpcUrl = rpcService.getRPCUrl(targetChainId);
+                        const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+                        // CRITICAL: Nonce calculation depends on who broadcasts the transaction
+                        // Reference: https://blog.biconomy.io/prep-deep-dive/#limitations-of-nicks%E2%80%99-eip-7702
+                        // Reference: https://docs.openzeppelin.com/contracts/5.x/eoa-delegation
+                        //
+                        // If RELAYER broadcasts: authorization_nonce = current nonce (7702-cleaner uses this)
+                        // If EOA broadcasts (our case): authorization_nonce = current nonce + 1
+                        //
+                        // Reason: EVM increments sender's nonce BEFORE processing authorization list
+                        // So when EOA is sender, we must use current + 1 to match the incremented nonce
+                        // Use account.address to ensure consistency
+                        const { getAddress } = await import('viem');
+                        const accountAddress = getAddress(account.address);
+                        const currentNonce = await provider.getTransactionCount(accountAddress, 'pending');
+                        let authorizationNonce = currentNonce + 1; // EOA broadcasts: must use current + 1
+                        let transactionNonce = currentNonce; // Transaction uses current nonce (before increment)
+
+                        console.log('[UPGRADE_TO_SMART_ACCOUNT] Nonce calculation (EOA self-execution):', {
+                            currentNonce,
+                            authorizationNonce,
+                            transactionNonce,
+                            accountAddress,
+                            messageAddress: address,
+                            chainId: targetChainId,
+                            note: 'EOA broadcasts transaction, so authorization nonce = current + 1 (EVM increments before validation)'
+                        });
+
+                        // Get fee data
+                        const feeData = await provider.getFeeData();
+                        const maxFeePerGas = feeData.maxFeePerGas || ethers.parseUnits('20', 'gwei');
+                        const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || ethers.parseUnits('2', 'gwei');
+                        const gasLimit = 100000n;
+
+                        // CRITICAL: Verify the account address matches the message address
+                        const accountAddressLower = accountAddress.toLowerCase();
+                        const messageAddress = getAddress(address).toLowerCase();
+
+                        console.log('[UPGRADE_TO_SMART_ACCOUNT] Address consistency check:', {
+                            accountAddress: accountAddressLower,
+                            messageAddress,
+                            match: accountAddressLower === messageAddress,
+                            accountAddressOriginal: account.address,
+                            messageAddressOriginal: address
+                        });
+
+                        if (accountAddressLower !== messageAddress) {
+                            console.error('[UPGRADE_TO_SMART_ACCOUNT] ERROR: Account address does not match message address!');
+                            safeSendResponse({ success: false, error: `Account address mismatch. Account: ${accountAddressLower}, Message: ${messageAddress}` });
+                            break;
+                        }
+
+                        // CRITICAL: Verify account was created correctly
+                        // When an account is created/imported, the private key should match the account address
+                        // If they don't match, it means the account data is corrupted
+                        const { privateKeyToAccount } = await import('viem/accounts');
+
+                        // Try to get private key - wallet.getPrivateKey normalizes to lowercase internally
+                        let privateKey = await wallet.getPrivateKey(account.address);
+                        if (!privateKey) {
+                            // Try alternative formats
+                            privateKey = await wallet.getPrivateKey(getAddress(account.address));
+                            if (!privateKey) {
+                                privateKey = await wallet.getPrivateKey(account.address.toLowerCase());
+                            }
+                        }
+
+                        if (!privateKey) {
+                            safeSendResponse({ success: false, error: 'Private key not found for this account' });
+                            break;
+                        }
+
+                        // CRITICAL: Verify the private key actually belongs to this account
+                        // This is a data integrity check - if it fails, the account data is corrupted
+                        const accountFromKey = privateKeyToAccount(privateKey as `0x${string}`);
+                        const addressFromKey = getAddress(accountFromKey.address).toLowerCase();
+                        const expectedAddress = accountAddressLower;
+
+                        console.log('[UPGRADE_TO_SMART_ACCOUNT] Private key verification:', {
+                            accountAddress: account.address,
+                            accountAddressNormalized: accountAddressLower,
+                            privateKeyRecoveredAddress: addressFromKey,
+                            match: addressFromKey === expectedAddress,
+                            privateKeyLength: privateKey.length,
+                            privateKeyPrefix: privateKey.slice(0, 10) + '...',
+                            note: 'If addresses do not match, the account was imported incorrectly or storage is corrupted'
+                        });
+
+                        if (addressFromKey !== expectedAddress) {
+                            // This is a critical error - the account data is corrupted
+                            // The private key stored for this account belongs to a different address
+                            // Try to auto-fix by updating the account address to match the private key
+                            console.warn('[UPGRADE_TO_SMART_ACCOUNT] Account data mismatch detected. Attempting auto-fix...');
+
+                            try {
+                                // Update account address to match the private key
+                                const oldAddress = account.address;
+                                account.address = addressFromKey;
+
+                                // Re-store private key under the correct address
+                                const normalizedNewAddress = addressFromKey.toLowerCase();
+                                await chrome.storage.local.set({
+                                    [`key_${normalizedNewAddress}`]: privateKey
+                                });
+
+                                // Remove old private key storage
+                                const normalizedOldAddress = oldAddress.toLowerCase();
+                                if (normalizedOldAddress !== normalizedNewAddress) {
+                                    await chrome.storage.local.remove(`key_${normalizedOldAddress}`);
+                                }
+
+                                // Save updated account state
+                                await wallet.saveState();
+
+                                console.log('[UPGRADE_TO_SMART_ACCOUNT] Auto-fixed account address:', {
+                                    oldAddress,
+                                    newAddress: addressFromKey,
+                                    note: 'Account address updated to match private key'
+                                });
+
+                                // Update the accountAddress variable to use the fixed address
+                                const fixedAccountAddress = getAddress(addressFromKey);
+                                const fixedAccountAddressLower = fixedAccountAddress.toLowerCase();
+
+                                // Re-verify after fix
+                                const recheckAccount = privateKeyToAccount(privateKey as `0x${string}`);
+                                const recheckAddress = getAddress(recheckAccount.address).toLowerCase();
+
+                                if (recheckAddress !== fixedAccountAddressLower) {
+                                    throw new Error('Auto-fix failed: Address still does not match after fix');
+                                }
+
+                                console.log('[UPGRADE_TO_SMART_ACCOUNT] Account data fixed successfully. Continuing with delegation...');
+
+                                // Update nonce calculation to use the fixed address
+                                const fixedCurrentNonce = await provider.getTransactionCount(fixedAccountAddress, 'pending');
+                                const fixedAuthorizationNonce = fixedCurrentNonce + 1;
+                                const fixedTransactionNonce = fixedCurrentNonce;
+
+                                console.log('[UPGRADE_TO_SMART_ACCOUNT] Using fixed address for nonce calculation:', {
+                                    fixedAccountAddress,
+                                    fixedCurrentNonce,
+                                    fixedAuthorizationNonce,
+                                    fixedTransactionNonce
+                                });
+
+                                // Continue with the fixed address
+                                // Update the authorization nonce
+                                authorizationNonce = fixedAuthorizationNonce;
+                                transactionNonce = fixedTransactionNonce;
+
+                            } catch (fixError: any) {
+                                // Auto-fix failed - return error
+                                const errorMsg = `CRITICAL: Account data corruption detected. The private key stored for account ${expectedAddress} actually belongs to address ${addressFromKey}. Auto-fix failed: ${fixError.message}`;
+                                console.error('[UPGRADE_TO_SMART_ACCOUNT]', errorMsg);
+                                console.error('[UPGRADE_TO_SMART_ACCOUNT] Diagnostic info:', {
+                                    accountObject: {
+                                        address: account.address,
+                                        name: account.name,
+                                        isChipAccount: account.isChipAccount,
+                                        isWatchOnly: account.isWatchOnly,
+                                        isFireflyAccount: account.isFireflyAccount
+                                    },
+                                    storageKeyUsed: `key_${account.address.toLowerCase()}`,
+                                    expectedAddress,
+                                    addressFromKey,
+                                    privateKeyLength: privateKey.length,
+                                    fixError: fixError.message
+                                });
+                                safeSendResponse({
+                                    success: false,
+                                    error: errorMsg + ` Please delete this account and re-import it with the correct private key for ${expectedAddress}.`
+                                });
+                                break;
+                            }
+                        }
+
+                        // Use the EXACT working approach from WORKING-EIP7702-PROTOTYPE.ts
+                        // Create wallet with provider
+                        const ethersWallet = new ethers.Wallet(privateKey, provider);
+
+                        console.log('[UPGRADE_TO_SMART_ACCOUNT] Creating authorization...');
+
+                        // Create authorization - Ethers.js handles signing internally
+                        const authorization = await ethersWallet.authorize({
+                            address: SMART_ACCOUNT_CONTRACT,
+                            chainId: targetChainId,
+                            nonce: authorizationNonce
+                        });
+
+                        console.log('[UPGRADE_TO_SMART_ACCOUNT] Authorization created:', {
+                            chainId: authorization.chainId,
+                            address: authorization.address,
+                            nonce: authorization.nonce
+                        });
+
+                        // Create type-4 transaction with authorization list
+                        // This is the EXACT approach that worked in the prototype
+                        const transaction = {
+                            type: 4,  // EIP-7702
+                            to: ethersWallet.address,  // Send to self (the EOA being delegated)
+                            value: 0,
+                            data: '0x',  // No calldata needed
+                            gasLimit: Number(gasLimit),
+                            maxFeePerGas,
+                            maxPriorityFeePerGas,
+                            chainId: targetChainId,
+                            nonce: transactionNonce,  // Transaction uses current nonce
+                            authorizationList: [authorization]  // Use authorization directly
+                        };
+
+                        console.log('[UPGRADE_TO_SMART_ACCOUNT] Broadcasting transaction...');
+
+                        // Let Ethers.js handle everything - signing and broadcasting
+                        const txResponse = await ethersWallet.sendTransaction(transaction);
+
+                        console.log('[UPGRADE_TO_SMART_ACCOUNT] Transaction broadcast:', txResponse.hash);
+
+                        // Respond immediately so UI can show toast and close modal
+                        safeSendResponse({ success: true, transactionHash: txResponse.hash });
+
+                        // Wait for confirmation in background (don't block UI)
+                        txResponse.wait().then(receipt => {
+                            console.log('[UPGRADE_TO_SMART_ACCOUNT] Transaction confirmed!', {
+                                hash: txResponse.hash,
+                                status: receipt?.status,
+                                blockNumber: receipt?.blockNumber
+                            });
+                        }).catch(err => {
+                            console.error('[UPGRADE_TO_SMART_ACCOUNT] Confirmation error:', err);
+                        });
+                    } catch (error: any) {
+                        console.error('[UPGRADE_TO_SMART_ACCOUNT] Error:', error);
+                        safeSendResponse({ success: false, error: error.message || 'Failed to upgrade to smart account' });
+                    }
+                    break;
+
+                case 'CLEAR_DELEGATION':
+                    if (!wallet.isUnlocked()) {
+                        safeSendResponse({ success: false, error: 'Wallet is locked' });
+                        break;
+                    }
+                    try {
+                        const { address, chainId } = message;
+
+                        const account = wallet.getAccounts().find(
+                            acc => acc.address.toLowerCase() === address.toLowerCase()
+                        );
+                        if (!account) {
+                            safeSendResponse({ success: false, error: 'Account not found' });
+                            break;
+                        }
+
+                        // Get provider and nonce
+                        const { rpcService } = await import('../core/rpc-service.js');
+                        const targetChainId = chainId || wallet.getSelectedNetwork();
+                        const rpcUrl = rpcService.getRPCUrl(targetChainId);
+                        const provider = new ethers.JsonRpcProvider(rpcUrl);
+                        // CRITICAL: Nonce calculation depends on who broadcasts the transaction
+                        // Reference: https://blog.biconomy.io/prep-deep-dive/#limitations-of-nicks%E2%80%99-eip-7702
+                        // Reference: https://docs.openzeppelin.com/contracts/5.x/eoa-delegation
+                        //
+                        // If RELAYER broadcasts: authorization_nonce = current nonce (7702-cleaner uses this)
+                        // If EOA broadcasts (our case): authorization_nonce = current nonce + 1
+                        //
+                        // Reason: EVM increments sender's nonce BEFORE processing authorization list
+                        // So when EOA is sender, we must use current + 1 to match the incremented nonce
+                        // CRITICAL: Use account.address (not message.address) to ensure consistency
+                        const currentNonce = await provider.getTransactionCount(account.address, 'pending');
+                        const authorizationNonce = currentNonce + 1; // EOA broadcasts: must use current + 1
+                        const transactionNonce = currentNonce; // Transaction uses current nonce (before increment)
+
+                        console.log('[CLEAR_DELEGATION] Nonce calculation (EOA self-execution):', {
+                            currentNonce,
+                            authorizationNonce,
+                            transactionNonce,
+                            accountAddress: account.address,
+                            messageAddress: address,
+                            chainId: targetChainId,
+                            note: 'EOA broadcasts transaction, so authorization nonce = current + 1 (EVM increments before validation)'
+                        });
+
+                        // Get fee data
+                        const feeData = await provider.getFeeData();
+                        const maxFeePerGas = feeData.maxFeePerGas || ethers.parseUnits('20', 'gwei');
+                        const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || ethers.parseUnits('2', 'gwei');
+                        const gasLimit = 100000n;
+
+                        // Get private key
+                        // CRITICAL: Use account.address to ensure we get the correct private key
+                        const privateKey = await wallet.getPrivateKey(account.address);
+                        if (!privateKey) {
+                            safeSendResponse({ success: false, error: 'Private key not found' });
+                            break;
+                        }
+
+                        // Use the EXACT working approach from test-clear-delegation.ts
+                        // Create wallet with provider
+                        const ethersWallet = new ethers.Wallet(privateKey, provider);
+
+                        console.log('[CLEAR_DELEGATION] Creating authorization to clear delegation (zero address)...');
+
+                        // Create authorization to clear (zero address) - Ethers.js handles signing internally
+                        const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+                        const clearAuthorization = await ethersWallet.authorize({
+                            address: ZERO_ADDRESS, // Zero address for clearing
+                            chainId: targetChainId,
+                            nonce: authorizationNonce
+                        });
+
+                        console.log('[CLEAR_DELEGATION] Authorization created:', {
+                            chainId: clearAuthorization.chainId,
+                            address: clearAuthorization.address,
+                            nonce: clearAuthorization.nonce
+                        });
+
+                        // Create type-4 transaction with authorization list
+                        // This is the EXACT approach that worked in the prototype
+                        const transaction = {
+                            type: 4,  // EIP-7702
+                            to: ethersWallet.address,  // Send to self
+                            value: 0,
+                            data: '0x',  // No calldata needed
+                            gasLimit: Number(gasLimit),
+                            maxFeePerGas,
+                            maxPriorityFeePerGas,
+                            chainId: targetChainId,
+                            nonce: transactionNonce,  // Transaction uses current nonce
+                            authorizationList: [clearAuthorization]  // Use authorization directly
+                        };
+
+                        console.log('[CLEAR_DELEGATION] Broadcasting transaction...');
+
+                        // Let Ethers.js handle everything - signing and broadcasting
+                        const txResponse = await ethersWallet.sendTransaction(transaction);
+
+                        console.log('[CLEAR_DELEGATION] Transaction broadcast:', txResponse.hash);
+
+                        // Respond immediately so UI can show toast and close modal
+                        safeSendResponse({ success: true, transactionHash: txResponse.hash });
+
+                        // Wait for confirmation in background (don't block UI)
+                        txResponse.wait().then(receipt => {
+                            console.log('[CLEAR_DELEGATION] Transaction confirmed!', {
+                                hash: txResponse.hash,
+                                status: receipt?.status,
+                                blockNumber: receipt?.blockNumber
+                            });
+                        }).catch(err => {
+                            console.error('[CLEAR_DELEGATION] Confirmation error:', err);
+                        });
+                    } catch (error: any) {
+                        console.error('[CLEAR_DELEGATION] Error:', error);
+                        safeSendResponse({ success: false, error: error.message || 'Failed to clear delegation' });
+                    }
+                    break;
+
                 case 'SEND_TRANSACTION':
                     // Sign and send transaction - used by Nexus SDK
                     if (!wallet.isUnlocked()) {
@@ -1303,7 +1709,7 @@ function handleMessage(
                         // Convert transaction params to proper format
                         const txParams = message.transaction;
                         const provider = await wallet.getProvider();
-                        
+
                         // Build transaction object in the format expected by wallet.signTransaction
                         const transaction: any = {
                             to: txParams.to,
@@ -1332,7 +1738,7 @@ function handleMessage(
                                 throw new Error('Private key not found');
                             }
                             const signerWallet = new ethers.Wallet(privateKey, provider);
-                            
+
                             // Populate transaction using signer (which has populateTransaction)
                             const populatedTx = await signerWallet.populateTransaction(transaction);
                             signedTx = await signerWallet.signTransaction(populatedTx);
@@ -1462,7 +1868,7 @@ function handleMessage(
                     try {
                         // Check if this is a DApp request (has sender.tab) vs internal wallet operation
                         const isDAppRequest = sender.tab && sender.tab.id;
-                        
+
                         // Get origin to check if it's chrome-extension (auto-sign internal requests)
                         let origin = sender.origin || sender.url || 'Unknown';
                         // Extract origin from URL if needed
@@ -1473,14 +1879,14 @@ function handleMessage(
                         } catch {
                             // If URL parsing fails, use as-is
                         }
-                        
+
                         // Auto-sign chrome-extension origins (internal wallet operations)
                         const isChromeExtension = origin.startsWith('chrome-extension://');
-                        
+
                         if (isDAppRequest && !isChromeExtension) {
                             // DApp signature request - show approval modal
                             const tabId = sender.tab?.id;
-                            
+
                             // Get DApp info from connections
                             const connections = await chrome.storage.local.get('dapp_connections') || {};
                             const dappConnections = connections.dapp_connections || {};
@@ -1496,7 +1902,7 @@ function handleMessage(
                                     icon: '',
                                 };
                             }
-                            
+
                             // Store pending signature request
                             const requestId = `sign_${Date.now()}_${Math.random()}`;
                             await chrome.storage.local.set({
@@ -1510,7 +1916,7 @@ function handleMessage(
                                     tabId: tabId,
                                 }
                             });
-                            
+
                             // Check if notification window already exists
                             try {
                                 const windows = await chrome.windows.getAll({ populate: true });
@@ -1518,7 +1924,7 @@ function handleMessage(
                                     if (!win.tabs || win.tabs.length === 0) return false;
                                     return win.tabs.some(tab => tab.url === notificationUrl);
                                 });
-                                
+
                                 if (existingWindow && existingWindow.id) {
                                     // Update URL to show signature request
                                     await chrome.tabs.update(existingWindow.tabs![0].id!, {
@@ -1532,13 +1938,13 @@ function handleMessage(
                             } catch (error) {
                                 console.warn('[SIGN_MESSAGE] Could not check existing windows:', error);
                             }
-                            
+
                             // Create new notification window
                             const windowWidth = 400;
                             const windowHeight = 600;
                             const margin = 20;
                             const top = 100;
-                            
+
                             let left: number;
                             try {
                                 const displayInfo = await chrome.system.display.getInfo();
@@ -1548,7 +1954,7 @@ function handleMessage(
                             } catch (error) {
                                 left = 1920 - windowWidth - margin;
                             }
-                            
+
                             const window = await chrome.windows.create({
                                 url: `${notificationUrl}?type=sign&requestId=${requestId}`,
                                 type: 'popup',
@@ -1558,11 +1964,11 @@ function handleMessage(
                                 top: top,
                                 focused: true,
                             });
-                            
+
                             if (window.id) {
                                 notificationWindowIds.add(window.id);
                             }
-                            
+
                             safeSendResponse({ success: true, pending: true, requestId });
                         } else {
                             // Internal wallet operation or chrome-extension - sign directly without modal
@@ -1582,7 +1988,7 @@ function handleMessage(
                     try {
                         // Check if this is a DApp request (has sender.tab) vs internal wallet operation
                         const isDAppRequest = sender.tab && sender.tab.id;
-                        
+
                         // Get origin to check if it's chrome-extension (auto-sign internal requests)
                         let origin = sender.origin || sender.url || 'Unknown';
                         // Extract origin from URL if needed
@@ -1593,14 +1999,14 @@ function handleMessage(
                         } catch {
                             // If URL parsing fails, use as-is
                         }
-                        
+
                         // Auto-sign chrome-extension origins (internal wallet operations)
                         const isChromeExtension = origin.startsWith('chrome-extension://');
-                        
+
                         if (isDAppRequest && !isChromeExtension) {
                             // DApp typed data signature request - show approval modal
                             const tabId = sender.tab?.id;
-                            
+
                             // Get DApp info from connections
                             const connections = await chrome.storage.local.get('dapp_connections') || {};
                             const dappConnections = connections.dapp_connections || {};
@@ -1616,7 +2022,7 @@ function handleMessage(
                                     icon: '',
                                 };
                             }
-                            
+
                             // Store pending signature request
                             const requestId = `sign_typed_${Date.now()}_${Math.random()}`;
                             await chrome.storage.local.set({
@@ -1631,7 +2037,7 @@ function handleMessage(
                                     isTypedData: true,
                                 }
                             });
-                            
+
                             // Check if notification window already exists
                             try {
                                 const windows = await chrome.windows.getAll({ populate: true });
@@ -1639,7 +2045,7 @@ function handleMessage(
                                     if (!win.tabs || win.tabs.length === 0) return false;
                                     return win.tabs.some(tab => tab.url === notificationUrl);
                                 });
-                                
+
                                 if (existingWindow && existingWindow.id) {
                                     // Update URL to show signature request
                                     await chrome.tabs.update(existingWindow.tabs![0].id!, {
@@ -1653,13 +2059,13 @@ function handleMessage(
                             } catch (error) {
                                 console.warn('[SIGN_TYPED_DATA] Could not check existing windows:', error);
                             }
-                            
+
                             // Create new notification window
                             const windowWidth = 400;
                             const windowHeight = 600;
                             const margin = 20;
                             const top = 100;
-                            
+
                             let left: number;
                             try {
                                 const displayInfo = await chrome.system.display.getInfo();
@@ -1669,7 +2075,7 @@ function handleMessage(
                             } catch (error) {
                                 left = 1920 - windowWidth - margin;
                             }
-                            
+
                             const window = await chrome.windows.create({
                                 url: `${notificationUrl}?type=sign&requestId=${requestId}`,
                                 type: 'popup',
@@ -1679,11 +2085,11 @@ function handleMessage(
                                 top: top,
                                 focused: true,
                             });
-                            
+
                             if (window.id) {
                                 notificationWindowIds.add(window.id);
                             }
-                            
+
                             safeSendResponse({ success: true, pending: true, requestId });
                         } else {
                             // Internal wallet operation or chrome-extension - sign directly without modal

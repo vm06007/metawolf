@@ -6,6 +6,7 @@ export function renderAccountSelectorModal(
     onSelectAccount: (account: any) => void,
     onClose: () => void,
     visible: boolean,
+    isFirstRender: boolean = true,
     onDeleteAccount?: (account: any) => void,
     onEditAccount?: (account: any) => void
 ): string {
@@ -154,7 +155,7 @@ export function renderAccountSelectorModal(
             z-index: 1000;
             display: flex;
             align-items: flex-end;
-            animation: fadeIn 0.2s;
+            ${isFirstRender ? 'animation: fadeIn 0.2s;' : ''}
         ">
             <div class="account-selector-modal" style="
                 width: 100%;
@@ -164,7 +165,7 @@ export function renderAccountSelectorModal(
                 padding: 20px 0 0 0;
                 display: flex;
                 flex-direction: column;
-                animation: slideUp 0.3s;
+                ${isFirstRender ? 'animation: slideUp 0.3s;' : ''}
             ">
                 <div style="
                     padding: 0 20px 16px 20px;

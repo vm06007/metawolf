@@ -2,11 +2,12 @@ import { ethers } from 'ethers';
 import type { Transaction, EIP5742Batch } from '../core/types.js';
 
 /**
- * EIP-5742: Transaction Batching
+ * EIP-5792: Transaction Batching
  * Allows batching multiple transactions into a single transaction
  * for improved efficiency and reduced gas costs
  */
-export class EIP5742 {
+export
+    class EIP5742 {
     /**
      * Create a batched transaction from multiple transactions
      */

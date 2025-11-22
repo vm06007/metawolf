@@ -233,6 +233,11 @@ export function renderAccountDetailModal(
                         </div>
                     </div>
                     ${!account.isWatchOnly ? `
+                        <div id="smart-account-upgrade-section" style="
+                            margin-bottom: 16px;
+                        ">
+                            <!-- Smart Account Upgrade component will be inserted here -->
+                        </div>
                         <div style="
                             background: var(--r-neutral-bg2);
                             border-radius: 12px;

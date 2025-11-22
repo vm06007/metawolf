@@ -21,28 +21,28 @@ if (!fs.existsSync(sdkPath)) {
 
 try {
     let content = fs.readFileSync(sdkPath, 'utf8');
-    
+
     // Check if already patched
     if (content.includes('// Patch for browser extensions')) {
         console.log('[Patch] SDK already patched');
         process.exit(0);
     }
-    
+
     // Apply patch: replace window.location.host with localhost for extensions
     const original = `        const scheme = window.location.protocol.slice(0, -1);
         const domain = window.location.host;
         const origin = window.location.origin;`;
-    
+
     const patched = `        const scheme = window.location.protocol.slice(0, -1);
         // Patch for browser extensions: use 'localhost' instead of extension ID
         // Extension IDs are not RFC 3986 compliant, causing SIWE validation to fail
         const rawDomain = window.location.host;
         // Detect browser extension: chrome-extension:// or extension ID (32 chars, no dots)
-        const isExtension = window.location.protocol === 'chrome-extension:' || 
+        const isExtension = window.location.protocol === 'chrome-extension:' ||
                            (rawDomain && rawDomain.length >= 20 && !rawDomain.includes('.') && !rawDomain.includes('localhost'));
         const domain = isExtension ? 'localhost' : rawDomain;
         const origin = isExtension ? 'https://localhost' : window.location.origin;`;
-    
+
     if (content.includes(original)) {
         content = content.replace(original, patched);
         fs.writeFileSync(sdkPath, content, 'utf8');

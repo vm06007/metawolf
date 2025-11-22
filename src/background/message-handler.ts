@@ -1,4 +1,3 @@
-import type { Transaction } from '../core/types.js';
 import { ethers } from 'ethers';
 
 /**
@@ -35,19 +34,19 @@ export async function handleSignMessage(
 
         // Create a wallet instance for signing
         const signerWallet = new ethers.Wallet(privateKey);
-        
+
         // Sign the message using ethers (handles EIP-191 message signing)
         // The message might be hex-encoded or a plain string
         let messageToSign: string | Uint8Array = message;
-        
+
         // If message starts with 0x, it's hex-encoded
         if (typeof message === 'string' && message.startsWith('0x')) {
             messageToSign = message;
         }
-        
+
         // Sign the message
         const signature = await signerWallet.signMessage(messageToSign);
-        
+
         return {
             success: true,
             signature: signature,
@@ -94,7 +93,7 @@ export async function handleSignTypedData(
 
         // Create a wallet instance for signing
         const signerWallet = new ethers.Wallet(privateKey);
-        
+
         // Extract typed data components
         const domain = typedData.domain;
         const types = typedData.types;
@@ -102,7 +101,7 @@ export async function handleSignTypedData(
 
         // Sign typed data using ethers (EIP-712)
         const signature = await signerWallet.signTypedData(domain, types, message);
-        
+
         return {
             success: true,
             signature: signature,
@@ -114,4 +113,3 @@ export async function handleSignTypedData(
         };
     }
 }
-

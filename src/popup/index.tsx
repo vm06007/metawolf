@@ -10,12 +10,12 @@ async function waitForBuffer(maxWait = 2000) {
     while (typeof (window as any).Buffer === 'undefined' && (Date.now() - startTime) < maxWait) {
         await new Promise(resolve => setTimeout(resolve, 50));
     }
-    
+
     if (typeof (window as any).Buffer === 'undefined') {
         console.error('[App] Buffer not available after waiting');
         return false;
     }
-    
+
     console.log('[App] Buffer is available, proceeding with initialization');
     return true;
 }
@@ -23,13 +23,13 @@ async function waitForBuffer(maxWait = 2000) {
 // Initialize app after polyfills are ready
 (async () => {
     const bufferReady = await waitForBuffer();
-    
+
     if (!bufferReady) {
         console.error('[App] Failed to load Buffer polyfill - app may not work correctly');
     }
-    
+
     const app = new PopupApp();
-    
+
     // Add safety timeout - always render after 2 seconds even if init hangs
     setTimeout(() => {
         if (app.state.loading) {
@@ -47,7 +47,7 @@ async function waitForBuffer(maxWait = 2000) {
             app.render();
         }
     }, 2000);
-    
+
     // Start initialization
     console.log('[App] Starting initialization...');
     app.init().catch((error) => {

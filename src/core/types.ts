@@ -35,6 +35,12 @@ export interface Account {
     fireflyInfo?: FireflyInfo; // Info for Firefly account
     // View-only/watch-only address
     isWatchOnly?: boolean; // True if this is a view-only address (no private key, cannot sign)
+    // EIP-7702 delegation status
+    delegationStatus?: {
+        isDelegated: boolean;
+        delegateAddress: string | null;
+        codeHash: string;
+    };
 }
 
 export interface Transaction {
