@@ -58,11 +58,12 @@ export function renderDashboardPanel(items: PanelItem[] = DEFAULT_PANEL_ITEMS, i
         const iconSvg = getIconSvg(item.icon);
         const viewBox = '0 0 24 24';
 
-        // Disable send button for watch-only accounts
-        const isDisabled = isWatchOnly && item.id === 'panel-send';
+        // Disable send, receive, swap, and bridge buttons for watch-only accounts
+        const disabledIds = ['panel-send', 'panel-receive', 'panel-swap', 'panel-bridge'];
+        const isDisabled = isWatchOnly && disabledIds.includes(item.id);
         const disabledClass = isDisabled ? 'disabled' : '';
         const disabledAttr = isDisabled ? 'disabled' : '';
-        const titleAttr = isDisabled ? 'title="Send is disabled for view-only accounts"' : '';
+        const titleAttr = isDisabled ? 'title="This action is disabled for view-only accounts"' : '';
 
         return `
             <button class="panel-item ${isHorizontal ? 'horizontal' : ''} ${disabledClass}" id="${item.id}" ${disabledAttr} ${titleAttr}>

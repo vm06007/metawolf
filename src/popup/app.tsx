@@ -1808,11 +1808,27 @@ export class PopupApp {
             this.render();
         });
         document.getElementById('panel-receive')?.addEventListener('click', () => {
+            // Prevent opening receive screen for watch-only accounts
+            if (this.state.selectedAccount?.isWatchOnly) {
+                return;
+            }
             this.state.showReceiveScreen = true;
             this.render();
         });
-        document.getElementById('panel-swap')?.addEventListener('click', () => console.log('Swap clicked'));
-        document.getElementById('panel-bridge')?.addEventListener('click', () => console.log('Bridge clicked'));
+        document.getElementById('panel-swap')?.addEventListener('click', () => {
+            // Prevent swap for watch-only accounts
+            if (this.state.selectedAccount?.isWatchOnly) {
+                return;
+            }
+            console.log('Swap clicked');
+        });
+        document.getElementById('panel-bridge')?.addEventListener('click', () => {
+            // Prevent bridge for watch-only accounts
+            if (this.state.selectedAccount?.isWatchOnly) {
+                return;
+            }
+            console.log('Bridge clicked');
+        });
         document.getElementById('panel-transactions')?.addEventListener('click', () => this.openTransactionsScreen());
         document.getElementById('panel-approvals')?.addEventListener('click', () => console.log('Approvals clicked'));
         document.getElementById('panel-settings')?.addEventListener('click', () => this.handleSettings());
