@@ -16,6 +16,11 @@ console.log('[Wolfy] Imports loaded');
 const wallet = new Wallet();
 let walletInitialized = false;
 
+// Notification URL for connection windows
+const notificationUrl = chrome.runtime.getURL('notification/index.html');
+const notificationWindowIds = new Set<number>();
+let isCreatingNotificationWindow = false; // Lock to prevent race conditions
+
 // Ensure wallet is initialized
 async function ensureWalletReady() {
     if (!walletInitialized) {
@@ -177,7 +182,6 @@ function handleMessage(
                 case 'CONNECT_DAPP':
                     try {
                         // Open notification window for connection approval
-                        const notificationUrl = chrome.runtime.getURL('notification/index.html');
                         const origin = message.origin || sender.origin || 'unknown';
                         const name = message.name || 'Unknown DApp';
                         const icon = message.icon || '';
@@ -185,52 +189,156 @@ function handleMessage(
                         // Detect other wallets (passed from content script)
                         const detectedProviders = message.providers || [];
 
-                        // Store pending connection request first
-                        await chrome.storage.local.set({
-                            pendingConnection: {
-                                origin,
-                                name,
-                                icon,
-                                providers: detectedProviders,
-                                tabId: sender.tab?.id,
-                            }
-                        });
+                        // Check if there's already a pending connection for this origin
+                        const storage = await chrome.storage.local.get(['pendingConnection', 'dapp_connections']);
+                        const pendingConnection = storage.pendingConnection;
+                        const dappConnections = storage.dapp_connections || {};
 
-                        // Get screen dimensions to position window on the right
-                        const windowWidth = 400;
-                        const windowHeight = 600;
-                        const margin = 20; // Margin from screen edge
-                        const top = 100; // Position from top
-
-                        let left: number;
-                        try {
-                            // Try to get actual screen dimensions
-                            const displayInfo = await chrome.system.display.getInfo();
-                            const primaryDisplay = displayInfo[0];
-                            const screenWidth = primaryDisplay.workArea.width;
-                            left = screenWidth - windowWidth - margin;
-                        } catch (error) {
-                            // Fallback: Use a reasonable default (assumes 1920px screen)
-                            // Position on right side with margin
-                            left = 1920 - windowWidth - margin;
+                        // If already connected, don't show popup
+                        if (dappConnections[origin]) {
+                            console.log('[CONNECT_DAPP] DApp already connected:', origin);
+                            safeSendResponse({
+                                success: true,
+                                pending: false,
+                                alreadyConnected: true,
+                            });
+                            break;
                         }
 
-                        // Open notification window on the right side
-                        await chrome.windows.create({
-                            url: notificationUrl,
-                            type: 'popup',
-                            width: windowWidth,
-                            height: windowHeight,
-                            left: left,
-                            top: top,
-                            focused: true,
-                        });
+                        // FIRST: Check if ANY notification window is already open (regardless of origin)
+                        // This prevents multiple modals from opening simultaneously
+                        try {
+                            const windows = await chrome.windows.getAll({ populate: true });
+                            const existingNotificationWindow = windows.find(win => {
+                                if (!win.tabs || win.tabs.length === 0) return false;
+                                return win.tabs.some(tab => tab.url === notificationUrl);
+                            });
 
-                        safeSendResponse({
-                            success: true,
-                            pending: true,
-                        });
+                            if (existingNotificationWindow && existingNotificationWindow.id) {
+                                // A notification window is already open - focus it and update pending connection
+                                console.log('[CONNECT_DAPP] Notification window already open, focusing it');
+                                
+                                // Update pending connection to this origin (in case it's a different dapp)
+                                await chrome.storage.local.set({
+                                    pendingConnection: {
+                                        origin,
+                                        name,
+                                        icon,
+                                        providers: detectedProviders,
+                                        tabId: sender.tab?.id,
+                                    }
+                                });
+                                
+                                await chrome.windows.update(existingNotificationWindow.id, { focused: true });
+                                // Ensure it's tracked
+                                notificationWindowIds.add(existingNotificationWindow.id);
+                                safeSendResponse({
+                                    success: true,
+                                    pending: true,
+                                    windowFocused: true,
+                                });
+                                break;
+                            }
+                        } catch (error) {
+                            // If we can't check windows, continue to create a new one
+                            console.warn('[CONNECT_DAPP] Could not check existing windows:', error);
+                        }
+
+                        // SECOND: Check if we're already creating a window (prevent race conditions)
+                        if (isCreatingNotificationWindow) {
+                            console.log('[CONNECT_DAPP] Window creation already in progress, waiting...');
+                            // Wait a bit and check again
+                            await new Promise(resolve => setTimeout(resolve, 100));
+                            
+                            // Re-check if window was created
+                            const windows = await chrome.windows.getAll({ populate: true });
+                            const existingWindow = windows.find(win => {
+                                if (!win.tabs || win.tabs.length === 0) return false;
+                                return win.tabs.some(tab => tab.url === notificationUrl);
+                            });
+                            
+                            if (existingWindow && existingWindow.id) {
+                                await chrome.storage.local.set({
+                                    pendingConnection: {
+                                        origin,
+                                        name,
+                                        icon,
+                                        providers: detectedProviders,
+                                        tabId: sender.tab?.id,
+                                    }
+                                });
+                                await chrome.windows.update(existingWindow.id, { focused: true });
+                                notificationWindowIds.add(existingWindow.id);
+                                safeSendResponse({
+                                    success: true,
+                                    pending: true,
+                                    windowFocused: true,
+                                });
+                                break;
+                            }
+                        }
+
+                        // Set lock to prevent concurrent window creation
+                        isCreatingNotificationWindow = true;
+
+                        try {
+                            // Store pending connection request
+                            await chrome.storage.local.set({
+                                pendingConnection: {
+                                    origin,
+                                    name,
+                                    icon,
+                                    providers: detectedProviders,
+                                    tabId: sender.tab?.id,
+                                }
+                            });
+
+                            // Get screen dimensions to position window on the right
+                            const windowWidth = 400;
+                            const windowHeight = 600;
+                            const margin = 20; // Margin from screen edge
+                            const top = 100; // Position from top
+
+                            let left: number;
+                            try {
+                                // Try to get actual screen dimensions
+                                const displayInfo = await chrome.system.display.getInfo();
+                                const primaryDisplay = displayInfo[0];
+                                const screenWidth = primaryDisplay.workArea.width;
+                                left = screenWidth - windowWidth - margin;
+                            } catch (error) {
+                                // Fallback: Use a reasonable default (assumes 1920px screen)
+                                // Position on right side with margin
+                                left = 1920 - windowWidth - margin;
+                            }
+
+                            // Open notification window on the right side
+                            const window = await chrome.windows.create({
+                                url: notificationUrl,
+                                type: 'popup',
+                                width: windowWidth,
+                                height: windowHeight,
+                                left: left,
+                                top: top,
+                                focused: true,
+                            });
+
+                            // Track this notification window
+                            if (window.id) {
+                                notificationWindowIds.add(window.id);
+                            }
+
+                            safeSendResponse({
+                                success: true,
+                                pending: true,
+                            });
+                        } finally {
+                            // Always release the lock
+                            isCreatingNotificationWindow = false;
+                        }
                     } catch (error: any) {
+                        // Release lock on error too
+                        isCreatingNotificationWindow = false;
                         console.error('[CONNECT_DAPP] Error:', error);
                         safeSendResponse({
                             success: false,
@@ -260,6 +368,17 @@ function handleMessage(
                                 dapp_connections: dappConnections,
                                 pendingConnection: null
                             });
+
+                            // Clean up notification window tracking
+                            // Find and remove the notification window ID
+                            const windows = await chrome.windows.getAll({ populate: true });
+                            const notificationWindow = windows.find(win => {
+                                if (!win.tabs || win.tabs.length === 0) return false;
+                                return win.tabs.some(tab => tab.url === notificationUrl);
+                            });
+                            if (notificationWindow?.id) {
+                                notificationWindowIds.delete(notificationWindow.id);
+                            }
                         }
 
                         safeSendResponse({ success: true });
@@ -272,8 +391,220 @@ function handleMessage(
                 case 'REJECT_CONNECTION':
                     try {
                         await chrome.storage.local.set({ pendingConnection: null });
+                        
+                        // Clean up notification window tracking
+                        const windows = await chrome.windows.getAll({ populate: true });
+                        const notificationWindow = windows.find(win => {
+                            if (!win.tabs || win.tabs.length === 0) return false;
+                            return win.tabs.some(tab => tab.url === notificationUrl);
+                        });
+                        if (notificationWindow?.id) {
+                            notificationWindowIds.delete(notificationWindow.id);
+                        }
+                        
                         safeSendResponse({ success: true });
                     } catch (error: any) {
+                        safeSendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'APPROVE_SIGNATURE':
+                    try {
+                        const requestId = message.requestId;
+                        const storage = await chrome.storage.local.get('pendingSignature');
+                        const pendingSignature = storage.pendingSignature;
+                        
+                        if (!pendingSignature || pendingSignature.id !== requestId) {
+                            safeSendResponse({ success: false, error: 'Signature request not found' });
+                            break;
+                        }
+                        
+                        // Sign the message
+                        let result;
+                        if (pendingSignature.isTypedData) {
+                            result = await handleSignTypedData(
+                                pendingSignature.address,
+                                pendingSignature.typedData,
+                                wallet
+                            );
+                        } else {
+                            result = await handleSignMessage(
+                                pendingSignature.message,
+                                pendingSignature.address,
+                                wallet
+                            );
+                        }
+                        
+                        // Clear pending signature
+                        await chrome.storage.local.set({ pendingSignature: null });
+                        
+                        // Send response to content script
+                        if (pendingSignature.tabId) {
+                            try {
+                                await chrome.tabs.sendMessage(pendingSignature.tabId, {
+                                    type: 'SIGNATURE_APPROVED',
+                                    requestId: requestId,
+                                    signature: result.signature,
+                                });
+                            } catch (error) {
+                                console.error('[APPROVE_SIGNATURE] Error sending to content script:', error);
+                            }
+                        }
+                        
+                        safeSendResponse({ success: true, signature: result.signature });
+                    } catch (error: any) {
+                        console.error('[APPROVE_SIGNATURE] Error:', error);
+                        safeSendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'REJECT_SIGNATURE':
+                    try {
+                        const requestId = message.requestId;
+                        const storage = await chrome.storage.local.get('pendingSignature');
+                        const pendingSignature = storage.pendingSignature;
+                        
+                        if (!pendingSignature || pendingSignature.id !== requestId) {
+                            safeSendResponse({ success: false, error: 'Signature request not found' });
+                            break;
+                        }
+                        
+                        // Clear pending signature
+                        await chrome.storage.local.set({ pendingSignature: null });
+                        
+                        // Send rejection to content script
+                        if (pendingSignature.tabId) {
+                            try {
+                                await chrome.tabs.sendMessage(pendingSignature.tabId, {
+                                    type: 'SIGNATURE_REJECTED',
+                                    requestId: requestId,
+                                });
+                            } catch (error) {
+                                console.error('[REJECT_SIGNATURE] Error sending to content script:', error);
+                            }
+                        }
+                        
+                        safeSendResponse({ success: true });
+                    } catch (error: any) {
+                        console.error('[REJECT_SIGNATURE] Error:', error);
+                        safeSendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'APPROVE_TRANSACTION':
+                    try {
+                        const requestId = message.requestId;
+                        const storage = await chrome.storage.local.get('pendingTransaction');
+                        const pendingTransaction = storage.pendingTransaction;
+                        
+                        if (!pendingTransaction || pendingTransaction.id !== requestId) {
+                            safeSendResponse({ success: false, error: 'Transaction request not found' });
+                            break;
+                        }
+                        
+                        // Get account
+                        const account = wallet.getAccounts().find(
+                            acc => acc.address.toLowerCase() === pendingTransaction.address.toLowerCase()
+                        );
+                        if (!account) {
+                            safeSendResponse({ success: false, error: 'Account not found' });
+                            break;
+                        }
+                        
+                        // Get provider and sign transaction
+                        const provider = await wallet.getProvider();
+                        // Use updated transaction from message if provided, otherwise use original
+                        const txParams = message.transaction || pendingTransaction.transaction;
+                        
+                        // Build transaction object
+                        const transaction: any = {
+                            to: txParams.to,
+                            value: txParams.value ? BigInt(txParams.value) : undefined,
+                            data: txParams.data || '0x',
+                            gasLimit: txParams.gasLimit ? BigInt(txParams.gasLimit) : undefined,
+                            gasPrice: txParams.gasPrice ? BigInt(txParams.gasPrice) : undefined,
+                            maxFeePerGas: txParams.maxFeePerGas ? BigInt(txParams.maxFeePerGas) : undefined,
+                            maxPriorityFeePerGas: txParams.maxPriorityFeePerGas ? BigInt(txParams.maxPriorityFeePerGas) : undefined,
+                            nonce: txParams.nonce,
+                            chainId: txParams.chainId,
+                            type: txParams.type,
+                        };
+                        
+                        // Sign the transaction
+                        let signedTx: string;
+                        if (account.isChipAccount && account.chipInfo) {
+                            // Chip account - sign with the chip
+                            const { HaloSigner } = await import('../halo/halo-signer.js');
+                            const haloSigner = new HaloSigner(account.address, account.chipInfo.slot, provider);
+                            signedTx = await haloSigner.signTransaction(transaction);
+                        } else {
+                            // Regular account - use ethers Wallet
+                            const privateKey = await wallet.getPrivateKey(account.address);
+                            if (!privateKey) {
+                                throw new Error('Private key not found');
+                            }
+                            const signerWallet = new ethers.Wallet(privateKey, provider);
+                            const populatedTx = await signerWallet.populateTransaction(transaction);
+                            signedTx = await signerWallet.signTransaction(populatedTx);
+                        }
+                        
+                        // Broadcast the transaction
+                        const txResponse = await provider.broadcastTransaction(signedTx);
+                        const tx = ethers.Transaction.from(signedTx);
+                        const txHash = tx.hash || (typeof txResponse === 'string' ? txResponse : txResponse?.hash);
+                        
+                        // Clear pending transaction
+                        await chrome.storage.local.set({ pendingTransaction: null });
+                        
+                        // Send response to content script
+                        if (pendingTransaction.tabId) {
+                            try {
+                                await chrome.tabs.sendMessage(pendingTransaction.tabId, {
+                                    type: 'TRANSACTION_APPROVED',
+                                    requestId: requestId,
+                                    transactionHash: txHash,
+                                });
+                            } catch (error) {
+                                console.error('[APPROVE_TRANSACTION] Error sending to content script:', error);
+                            }
+                        }
+                        
+                        safeSendResponse({ success: true, transactionHash: txHash });
+                    } catch (error: any) {
+                        console.error('[APPROVE_TRANSACTION] Error:', error);
+                        safeSendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'REJECT_TRANSACTION':
+                    try {
+                        const requestId = message.requestId;
+                        const storage = await chrome.storage.local.get('pendingTransaction');
+                        const pendingTransaction = storage.pendingTransaction;
+                        
+                        if (!pendingTransaction || pendingTransaction.id !== requestId) {
+                            safeSendResponse({ success: false, error: 'Transaction request not found' });
+                            break;
+                        }
+                        
+                        // Clear pending transaction
+                        await chrome.storage.local.set({ pendingTransaction: null });
+                        
+                        // Send rejection to content script
+                        if (pendingTransaction.tabId) {
+                            try {
+                                await chrome.tabs.sendMessage(pendingTransaction.tabId, {
+                                    type: 'TRANSACTION_REJECTED',
+                                    requestId: requestId,
+                                });
+                            } catch (error) {
+                                console.error('[REJECT_TRANSACTION] Error sending to content script:', error);
+                            }
+                        }
+                        
+                        safeSendResponse({ success: true });
+                    } catch (error: any) {
+                        console.error('[REJECT_TRANSACTION] Error:', error);
                         safeSendResponse({ success: false, error: error.message });
                     }
                     break;
@@ -420,6 +751,30 @@ function handleMessage(
                         safeSendResponse({
                             success: false,
                             error: error.message || 'Failed to create account from chip',
+                        });
+                    }
+                    break;
+
+                case 'CREATE_ACCOUNT_FROM_FIREFLY':
+                    try {
+                        if (!message.fireflyAddress || !message.deviceInfo) {
+                            safeSendResponse({
+                                success: false,
+                                error: 'Firefly address and device info required',
+                            });
+                            break;
+                        }
+                        const fireflyAccount = await wallet.createAccountFromFirefly(
+                            message.fireflyAddress,
+                            message.deviceInfo,
+                            message.name
+                        );
+                        safeSendResponse({ success: true, account: fireflyAccount });
+                    } catch (error: any) {
+                        console.error('[Wolfy] Error creating account from Firefly:', error);
+                        safeSendResponse({
+                            success: false,
+                            error: error.message || 'Failed to create account from Firefly',
                         });
                     }
                     break;
@@ -649,6 +1004,121 @@ function handleMessage(
                         break;
                     }
                     try {
+                        // Check if this is a DApp request (has sender.tab) vs internal wallet operation
+                        const isDAppRequest = sender.tab && sender.tab.id;
+                        
+                        // Get origin to check if it's chrome-extension (auto-sign internal requests)
+                        let origin = sender.origin || sender.url || 'Unknown';
+                        // Extract origin from URL if needed
+                        try {
+                            if (origin.startsWith('http://') || origin.startsWith('https://')) {
+                                origin = new URL(origin).origin;
+                            }
+                        } catch {
+                            // If URL parsing fails, use as-is
+                        }
+                        
+                        // Auto-sign chrome-extension origins (internal wallet operations)
+                        const isChromeExtension = origin.startsWith('chrome-extension://');
+                        
+                        if (isDAppRequest && !isChromeExtension) {
+                            // DApp transaction request - show approval modal
+                            const tabId = sender.tab?.id;
+                            
+                            // Get DApp info from connections
+                            const connections = await chrome.storage.local.get('dapp_connections') || {};
+                            const dappConnections = connections.dapp_connections || {};
+                            let dappInfo;
+                            try {
+                                dappInfo = dappConnections[origin] || {
+                                    name: origin !== 'Unknown' ? new URL(origin).hostname : 'Unknown DApp',
+                                    icon: '',
+                                };
+                            } catch {
+                                dappInfo = {
+                                    name: origin !== 'Unknown' ? origin : 'Unknown DApp',
+                                    icon: '',
+                                };
+                            }
+                            
+                            // Get selected account for transaction
+                            const account = wallet.getSelectedAccount();
+                            if (!account) {
+                                safeSendResponse({ success: false, error: 'No account selected' });
+                                break;
+                            }
+                            
+                            // Store pending transaction request
+                            const requestId = `tx_${Date.now()}_${Math.random()}`;
+                            await chrome.storage.local.set({
+                                pendingTransaction: {
+                                    id: requestId,
+                                    transaction: message.transaction,
+                                    address: account.address,
+                                    origin: origin,
+                                    dappName: dappInfo.name,
+                                    dappIcon: dappInfo.icon,
+                                    tabId: tabId,
+                                }
+                            });
+                            
+                            // Check if notification window already exists
+                            try {
+                                const windows = await chrome.windows.getAll({ populate: true });
+                                const existingWindow = windows.find(win => {
+                                    if (!win.tabs || win.tabs.length === 0) return false;
+                                    return win.tabs.some(tab => tab.url === notificationUrl);
+                                });
+                                
+                                if (existingWindow && existingWindow.id) {
+                                    // Update URL to show transaction request
+                                    await chrome.tabs.update(existingWindow.tabs![0].id!, {
+                                        url: `${notificationUrl}?type=transaction&requestId=${requestId}`
+                                    });
+                                    await chrome.windows.update(existingWindow.id, { focused: true });
+                                    notificationWindowIds.add(existingWindow.id);
+                                    safeSendResponse({ success: true, pending: true, requestId });
+                                    break;
+                                }
+                            } catch (error) {
+                                console.warn('[SIGN_TRANSACTION] Could not check existing windows:', error);
+                            }
+                            
+                            // Create new notification window
+                            const windowWidth = 400;
+                            const windowHeight = 600;
+                            const margin = 20;
+                            const top = 100;
+                            
+                            let left: number;
+                            try {
+                                const displayInfo = await chrome.system.display.getInfo();
+                                const primaryDisplay = displayInfo[0];
+                                const screenWidth = primaryDisplay.workArea.width;
+                                left = screenWidth - windowWidth - margin;
+                            } catch (error) {
+                                left = 1920 - windowWidth - margin;
+                            }
+                            
+                            const window = await chrome.windows.create({
+                                url: `${notificationUrl}?type=transaction&requestId=${requestId}`,
+                                type: 'popup',
+                                width: windowWidth,
+                                height: windowHeight,
+                                left: left,
+                                top: top,
+                                focused: true,
+                            });
+                            
+                            if (window.id) {
+                                notificationWindowIds.add(window.id);
+                            }
+                            
+                            safeSendResponse({ success: true, pending: true, requestId });
+                            break;
+                        }
+                        
+                        // Internal wallet operation or chrome-extension - sign directly without modal
                         const account = wallet.getSelectedAccount();
                         if (!account) {
                             safeSendResponse({ success: false, error: 'No account selected' });
@@ -815,6 +1285,75 @@ function handleMessage(
                     }
                     break;
 
+                case 'SEND_TRANSACTION':
+                    // Sign and send transaction - used by Nexus SDK
+                    if (!wallet.isUnlocked()) {
+                        safeSendResponse({ success: false, error: 'Wallet is locked' });
+                        break;
+                    }
+                    try {
+                        const account = wallet.getAccounts().find(
+                            acc => acc.address.toLowerCase() === (message.address || '').toLowerCase()
+                        );
+                        if (!account) {
+                            safeSendResponse({ success: false, error: 'Account not found' });
+                            break;
+                        }
+
+                        // Convert transaction params to proper format
+                        const txParams = message.transaction;
+                        const provider = await wallet.getProvider();
+                        
+                        // Build transaction object in the format expected by wallet.signTransaction
+                        const transaction: any = {
+                            to: txParams.to,
+                            value: txParams.value ? BigInt(txParams.value) : undefined,
+                            data: txParams.data || '0x',
+                            gasLimit: txParams.gasLimit ? BigInt(txParams.gasLimit) : undefined,
+                            gasPrice: txParams.gasPrice ? BigInt(txParams.gasPrice) : undefined,
+                            maxFeePerGas: txParams.maxFeePerGas ? BigInt(txParams.maxFeePerGas) : undefined,
+                            maxPriorityFeePerGas: txParams.maxPriorityFeePerGas ? BigInt(txParams.maxPriorityFeePerGas) : undefined,
+                            nonce: txParams.nonce,
+                            chainId: txParams.chainId,
+                            type: txParams.type,
+                        };
+
+                        // Sign the transaction
+                        let signedTx: string;
+                        if (account.isChipAccount && account.chipInfo) {
+                            // Chip account - sign with the chip
+                            const { HaloSigner } = await import('../halo/halo-signer.js');
+                            const haloSigner = new HaloSigner(account.address, account.chipInfo.slot, provider);
+                            signedTx = await haloSigner.signTransaction(transaction);
+                        } else {
+                            // Regular account - use ethers Wallet directly to avoid populateTransaction issue
+                            const privateKey = await wallet.getPrivateKey(account.address);
+                            if (!privateKey) {
+                                throw new Error('Private key not found');
+                            }
+                            const signerWallet = new ethers.Wallet(privateKey, provider);
+                            
+                            // Populate transaction using signer (which has populateTransaction)
+                            const populatedTx = await signerWallet.populateTransaction(transaction);
+                            signedTx = await signerWallet.signTransaction(populatedTx);
+                        }
+
+                        // Send the signed transaction to the network
+                        const txResponse = await provider.broadcastTransaction(signedTx);
+                        // Parse to get hash
+                        const tx = ethers.Transaction.from(signedTx);
+                        const txHash = tx.hash || (typeof txResponse === 'string' ? txResponse : txResponse?.hash);
+
+                        safeSendResponse({
+                            success: true,
+                            transactionHash: txHash,
+                        });
+                    } catch (error: any) {
+                        console.error('[SEND_TRANSACTION] Error:', error);
+                        safeSendResponse({ success: false, error: error.message || 'Failed to send transaction' });
+                    }
+                    break;
+
                 case 'HALO_SIGN':
                     if (!wallet.isUnlocked()) {
                         safeSendResponse({ success: false, error: 'Wallet is locked' });
@@ -921,8 +1460,115 @@ function handleMessage(
                         break;
                     }
                     try {
-                        const result = await handleSignMessage(message.message, message.address, wallet);
-                        safeSendResponse(result);
+                        // Check if this is a DApp request (has sender.tab) vs internal wallet operation
+                        const isDAppRequest = sender.tab && sender.tab.id;
+                        
+                        // Get origin to check if it's chrome-extension (auto-sign internal requests)
+                        let origin = sender.origin || sender.url || 'Unknown';
+                        // Extract origin from URL if needed
+                        try {
+                            if (origin.startsWith('http://') || origin.startsWith('https://')) {
+                                origin = new URL(origin).origin;
+                            }
+                        } catch {
+                            // If URL parsing fails, use as-is
+                        }
+                        
+                        // Auto-sign chrome-extension origins (internal wallet operations)
+                        const isChromeExtension = origin.startsWith('chrome-extension://');
+                        
+                        if (isDAppRequest && !isChromeExtension) {
+                            // DApp signature request - show approval modal
+                            const tabId = sender.tab?.id;
+                            
+                            // Get DApp info from connections
+                            const connections = await chrome.storage.local.get('dapp_connections') || {};
+                            const dappConnections = connections.dapp_connections || {};
+                            let dappInfo;
+                            try {
+                                dappInfo = dappConnections[origin] || {
+                                    name: origin !== 'Unknown' ? new URL(origin).hostname : 'Unknown DApp',
+                                    icon: '',
+                                };
+                            } catch {
+                                dappInfo = {
+                                    name: origin !== 'Unknown' ? origin : 'Unknown DApp',
+                                    icon: '',
+                                };
+                            }
+                            
+                            // Store pending signature request
+                            const requestId = `sign_${Date.now()}_${Math.random()}`;
+                            await chrome.storage.local.set({
+                                pendingSignature: {
+                                    id: requestId,
+                                    message: message.message,
+                                    address: message.address,
+                                    origin: origin,
+                                    dappName: dappInfo.name,
+                                    dappIcon: dappInfo.icon,
+                                    tabId: tabId,
+                                }
+                            });
+                            
+                            // Check if notification window already exists
+                            try {
+                                const windows = await chrome.windows.getAll({ populate: true });
+                                const existingWindow = windows.find(win => {
+                                    if (!win.tabs || win.tabs.length === 0) return false;
+                                    return win.tabs.some(tab => tab.url === notificationUrl);
+                                });
+                                
+                                if (existingWindow && existingWindow.id) {
+                                    // Update URL to show signature request
+                                    await chrome.tabs.update(existingWindow.tabs![0].id!, {
+                                        url: `${notificationUrl}?type=sign&requestId=${requestId}`
+                                    });
+                                    await chrome.windows.update(existingWindow.id, { focused: true });
+                                    notificationWindowIds.add(existingWindow.id);
+                                    safeSendResponse({ success: true, pending: true, requestId });
+                                    break;
+                                }
+                            } catch (error) {
+                                console.warn('[SIGN_MESSAGE] Could not check existing windows:', error);
+                            }
+                            
+                            // Create new notification window
+                            const windowWidth = 400;
+                            const windowHeight = 600;
+                            const margin = 20;
+                            const top = 100;
+                            
+                            let left: number;
+                            try {
+                                const displayInfo = await chrome.system.display.getInfo();
+                                const primaryDisplay = displayInfo[0];
+                                const screenWidth = primaryDisplay.workArea.width;
+                                left = screenWidth - windowWidth - margin;
+                            } catch (error) {
+                                left = 1920 - windowWidth - margin;
+                            }
+                            
+                            const window = await chrome.windows.create({
+                                url: `${notificationUrl}?type=sign&requestId=${requestId}`,
+                                type: 'popup',
+                                width: windowWidth,
+                                height: windowHeight,
+                                left: left,
+                                top: top,
+                                focused: true,
+                            });
+                            
+                            if (window.id) {
+                                notificationWindowIds.add(window.id);
+                            }
+                            
+                            safeSendResponse({ success: true, pending: true, requestId });
+                        } else {
+                            // Internal wallet operation or chrome-extension - sign directly without modal
+                            const result = await handleSignMessage(message.message, message.address, wallet);
+                            safeSendResponse(result);
+                        }
                     } catch (error: any) {
                         safeSendResponse({ success: false, error: error.message });
                     }
@@ -934,8 +1580,116 @@ function handleMessage(
                         break;
                     }
                     try {
-                        const result = await handleSignTypedData(message.address, message.typedData, wallet);
-                        safeSendResponse(result);
+                        // Check if this is a DApp request (has sender.tab) vs internal wallet operation
+                        const isDAppRequest = sender.tab && sender.tab.id;
+                        
+                        // Get origin to check if it's chrome-extension (auto-sign internal requests)
+                        let origin = sender.origin || sender.url || 'Unknown';
+                        // Extract origin from URL if needed
+                        try {
+                            if (origin.startsWith('http://') || origin.startsWith('https://')) {
+                                origin = new URL(origin).origin;
+                            }
+                        } catch {
+                            // If URL parsing fails, use as-is
+                        }
+                        
+                        // Auto-sign chrome-extension origins (internal wallet operations)
+                        const isChromeExtension = origin.startsWith('chrome-extension://');
+                        
+                        if (isDAppRequest && !isChromeExtension) {
+                            // DApp typed data signature request - show approval modal
+                            const tabId = sender.tab?.id;
+                            
+                            // Get DApp info from connections
+                            const connections = await chrome.storage.local.get('dapp_connections') || {};
+                            const dappConnections = connections.dapp_connections || {};
+                            let dappInfo;
+                            try {
+                                dappInfo = dappConnections[origin] || {
+                                    name: origin !== 'Unknown' ? new URL(origin).hostname : 'Unknown DApp',
+                                    icon: '',
+                                };
+                            } catch {
+                                dappInfo = {
+                                    name: origin !== 'Unknown' ? origin : 'Unknown DApp',
+                                    icon: '',
+                                };
+                            }
+                            
+                            // Store pending signature request
+                            const requestId = `sign_typed_${Date.now()}_${Math.random()}`;
+                            await chrome.storage.local.set({
+                                pendingSignature: {
+                                    id: requestId,
+                                    typedData: message.typedData,
+                                    address: message.address,
+                                    origin: origin,
+                                    dappName: dappInfo.name,
+                                    dappIcon: dappInfo.icon,
+                                    tabId: tabId,
+                                    isTypedData: true,
+                                }
+                            });
+                            
+                            // Check if notification window already exists
+                            try {
+                                const windows = await chrome.windows.getAll({ populate: true });
+                                const existingWindow = windows.find(win => {
+                                    if (!win.tabs || win.tabs.length === 0) return false;
+                                    return win.tabs.some(tab => tab.url === notificationUrl);
+                                });
+                                
+                                if (existingWindow && existingWindow.id) {
+                                    // Update URL to show signature request
+                                    await chrome.tabs.update(existingWindow.tabs![0].id!, {
+                                        url: `${notificationUrl}?type=sign&requestId=${requestId}`
+                                    });
+                                    await chrome.windows.update(existingWindow.id, { focused: true });
+                                    notificationWindowIds.add(existingWindow.id);
+                                    safeSendResponse({ success: true, pending: true, requestId });
+                                    break;
+                                }
+                            } catch (error) {
+                                console.warn('[SIGN_TYPED_DATA] Could not check existing windows:', error);
+                            }
+                            
+                            // Create new notification window
+                            const windowWidth = 400;
+                            const windowHeight = 600;
+                            const margin = 20;
+                            const top = 100;
+                            
+                            let left: number;
+                            try {
+                                const displayInfo = await chrome.system.display.getInfo();
+                                const primaryDisplay = displayInfo[0];
+                                const screenWidth = primaryDisplay.workArea.width;
+                                left = screenWidth - windowWidth - margin;
+                            } catch (error) {
+                                left = 1920 - windowWidth - margin;
+                            }
+                            
+                            const window = await chrome.windows.create({
+                                url: `${notificationUrl}?type=sign&requestId=${requestId}`,
+                                type: 'popup',
+                                width: windowWidth,
+                                height: windowHeight,
+                                left: left,
+                                top: top,
+                                focused: true,
+                            });
+                            
+                            if (window.id) {
+                                notificationWindowIds.add(window.id);
+                            }
+                            
+                            safeSendResponse({ success: true, pending: true, requestId });
+                        } else {
+                            // Internal wallet operation or chrome-extension - sign directly without modal
+                            const result = await handleSignTypedData(message.address, message.typedData, wallet);
+                            safeSendResponse(result);
+                        }
                     } catch (error: any) {
                         safeSendResponse({ success: false, error: error.message });
                     }
@@ -990,3 +1744,51 @@ function handleMessage(
 console.log('[Wolfy] Registering message listener...');
 chrome.runtime.onMessage.addListener(handleMessage);
 console.log('[Wolfy] Message listener registered');
+
+// Track notification windows to clean up pending connections when closed
+chrome.windows.onRemoved.addListener(async (windowId) => {
+    try {
+        // If this was a notification window, clean up pending connection/signature
+        if (notificationWindowIds.has(windowId)) {
+            notificationWindowIds.delete(windowId);
+            const storage = await chrome.storage.local.get(['pendingConnection', 'pendingSignature', 'pendingTransaction']);
+            if (storage.pendingConnection) {
+                console.log('[Wolfy] Notification window closed, cleaning up pending connection');
+                await chrome.storage.local.set({ pendingConnection: null });
+            }
+            if (storage.pendingSignature) {
+                console.log('[Wolfy] Notification window closed, cleaning up pending signature');
+                // Send rejection to content script
+                if (storage.pendingSignature.tabId) {
+                    try {
+                        await chrome.tabs.sendMessage(storage.pendingSignature.tabId, {
+                            type: 'SIGNATURE_REJECTED',
+                            requestId: storage.pendingSignature.id,
+                        });
+                    } catch (error) {
+                        // Tab might be closed, ignore
+                    }
+                }
+                await chrome.storage.local.set({ pendingSignature: null });
+            }
+            if (storage.pendingTransaction) {
+                console.log('[Wolfy] Notification window closed, cleaning up pending transaction');
+                // Send rejection to content script
+                if (storage.pendingTransaction.tabId) {
+                    try {
+                        await chrome.tabs.sendMessage(storage.pendingTransaction.tabId, {
+                            type: 'TRANSACTION_REJECTED',
+                            requestId: storage.pendingTransaction.id,
+                        });
+                    } catch (error) {
+                        // Tab might be closed, ignore
+                    }
+                }
+                await chrome.storage.local.set({ pendingTransaction: null });
+            }
+        }
+    } catch (error) {
+        // Ignore errors in cleanup
+        console.warn('[Wolfy] Error cleaning up notification window:', error);
+    }
+});

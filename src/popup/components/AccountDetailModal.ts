@@ -19,6 +19,8 @@ export function renderAccountDetailModal(
         ? 'HaLo Chip Account'
         : account.multisig
         ? `Multisig (${account.multisig.threshold}/${account.multisig.chips.length})`
+        : account.isFireflyAccount
+        ? 'Firefly Wallet'
         : account.haloLinked
         ? 'HaLo Linked'
         : 'Standard Account';
@@ -195,6 +197,14 @@ export function renderAccountDetailModal(
                                         <path d="M2 8L8 11L14 8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                                     </svg>
                                     <span>Multisig</span>
+                                ` : account.isFireflyAccount ? `
+                                    <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">
+                                        <path d="M8 2L2 5L8 8L14 5L8 2Z" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M2 11L8 14L14 11" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <path d="M2 8L8 11L14 8" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+                                        <circle cx="8" cy="8" r="2" stroke-width="1.5"/>
+                                    </svg>
+                                    <span>Firefly</span>
                                 ` : `
                                     <svg width="16" height="16" viewBox="0 0 16 16" fill="none" stroke="currentColor">
                                         <circle cx="8" cy="8" r="6" stroke-width="1.5"/>

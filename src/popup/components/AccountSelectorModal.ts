@@ -23,6 +23,8 @@ export function renderAccountSelectorModal(
             typeBadge = '<span style="font-size: 11px; color: var(--r-green-default);">🔒 Chip</span>';
         } else if (account.multisig) {
             typeBadge = `<span style="font-size: 11px; color: var(--r-blue-default);">🔐 Multisig (${account.multisig.threshold}/${account.multisig.chips.length})</span>`;
+        } else if (account.isFireflyAccount) {
+            typeBadge = '<span style="font-size: 11px; color: var(--r-orange-default, #FF6B35);">🔥 Firefly</span>';
         } else if (account.haloLinked) {
             typeBadge = '<span style="font-size: 11px; color: var(--r-green-default);">HaLo</span>';
         }

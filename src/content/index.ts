@@ -47,6 +47,20 @@
         origin: string;
     }> = new Map();
 
+    // Store pending signature requests to respond to them when approved
+    const pendingSignatures: Map<number, {
+        resolve: (signature: string) => void;
+        reject: (error: string) => void;
+        requestId: string;
+    }> = new Map();
+
+    // Store pending transaction requests to respond to them when approved
+    const pendingTransactions: Map<number, {
+        resolve: (transactionHash: string) => void;
+        reject: (error: string) => void;
+        requestId: string;
+    }> = new Map();
+
     // Listen for messages from background/notification
     chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
         console.log('[Wolfy Content] Received runtime message:', message.type);
@@ -73,6 +87,58 @@
             pendingConnections.forEach(({ reject }, id) => {
                 reject('User rejected connection');
                 pendingConnections.delete(id);
+            });
+            sendResponse({ success: true });
+        } else if (message.type === 'SIGNATURE_APPROVED') {
+            console.log('[Wolfy Content] SIGNATURE_APPROVED with signature:', message.signature?.substring(0, 20) + '...');
+            // Resolve pending signature request
+            let resolved = false;
+            pendingSignatures.forEach(({ resolve, requestId }, id) => {
+                if (requestId === message.requestId || !message.requestId) {
+                    console.log('[Wolfy Content] Resolving pending signature id:', id);
+                    resolve(message.signature);
+                    pendingSignatures.delete(id);
+                    resolved = true;
+                }
+            });
+            if (!resolved) {
+                console.warn('[Wolfy Content] SIGNATURE_APPROVED but no pending signature found');
+            }
+            sendResponse({ success: true });
+        } else if (message.type === 'SIGNATURE_REJECTED') {
+            console.log('[Wolfy Content] SIGNATURE_REJECTED');
+            // Reject pending signature request
+            pendingSignatures.forEach(({ reject, requestId }, id) => {
+                if (requestId === message.requestId || !message.requestId) {
+                    reject('User rejected signature');
+                    pendingSignatures.delete(id);
+                }
+            });
+            sendResponse({ success: true });
+        } else if (message.type === 'TRANSACTION_APPROVED') {
+            console.log('[Wolfy Content] TRANSACTION_APPROVED with hash:', message.transactionHash?.substring(0, 20) + '...');
+            // Resolve pending transaction request
+            let resolved = false;
+            pendingTransactions.forEach(({ resolve, requestId }, id) => {
+                if (requestId === message.requestId || !message.requestId) {
+                    console.log('[Wolfy Content] Resolving pending transaction id:', id);
+                    resolve(message.transactionHash);
+                    pendingTransactions.delete(id);
+                    resolved = true;
+                }
+            });
+            if (!resolved) {
+                console.warn('[Wolfy Content] TRANSACTION_APPROVED but no pending transaction found');
+            }
+            sendResponse({ success: true });
+        } else if (message.type === 'TRANSACTION_REJECTED') {
+            console.log('[Wolfy Content] TRANSACTION_REJECTED');
+            // Reject pending transaction request
+            pendingTransactions.forEach(({ reject, requestId }, id) => {
+                if (requestId === message.requestId || !message.requestId) {
+                    reject('User rejected transaction');
+                    pendingTransactions.delete(id);
+                }
             });
             sendResponse({ success: true });
         } else if (message.type === 'ACCOUNT_CHANGED') {
@@ -364,133 +430,26 @@
                                             if (!responseSent) {
                                                 sendResponseToInpage(false, undefined, 'Connection timeout');
                                             }
-                                        }, 300000);
-                                    } else {
-                                        // Normal response
-                                        window.postMessage(
-                                            {
-                                                type: 'WOLFY_REQUEST_RESPONSE',
-                                                id: event.data.id,
-                                                response: response,
-                                            },
-                                            '*'
-                                        );
-                                    }
-                                }
-                            );
-                        });
-                        return; // Handled above
-                    }
-
-                    // Map to internal message types for other methods
-                    let messageType = '';
-                    let payload: any = {};
-
-                    if (method === 'eth_sendTransaction') {
-                        messageType = 'SIGN_TRANSACTION';
-                        payload = {
-                            transaction: {
-                                to: params[0]?.to,
-                                value: params[0]?.value,
-                                data: params[0]?.data,
-                                gasLimit: params[0]?.gas,
-                                gasPrice: params[0]?.gasPrice,
-                                maxFeePerGas: params[0]?.maxFeePerGas,
-                                maxPriorityFeePerGas: params[0]?.maxPriorityFeePerGas,
-                                nonce: params[0]?.nonce
-                                    ? parseInt(params[0].nonce, 16)
-                                    : undefined,
-                            },
-                        };
-                    } else if (method === 'eth_signTransaction') {
-                        messageType = 'SIGN_TRANSACTION';
-                        payload = {
-                            transaction: {
-                                to: params[0]?.to,
-                                value: params[0]?.value,
-                                data: params[0]?.data,
-                                gasLimit: params[0]?.gas,
-                                gasPrice: params[0]?.gasPrice,
-                                maxFeePerGas: params[0]?.maxFeePerGas,
-                                maxPriorityFeePerGas: params[0]?.maxPriorityFeePerGas,
-                                nonce: params[0]?.nonce
-                                    ? parseInt(params[0].nonce, 16)
-                                    : undefined,
-                            },
-                        };
-                    } else if (method === 'personal_sign') {
-                        messageType = 'SIGN_MESSAGE';
-                        payload = {
-                            message: params[0],
-                            address: params[1],
-                        };
-                    } else if (method === 'eth_signTypedData_v4') {
-                        messageType = 'SIGN_TYPED_DATA';
-                        payload = {
-                            address: params[0],
-                            typedData: params[1],
-                        };
-                    } else if (method.startsWith('eth_') || method.startsWith('net_') || method.startsWith('web3_')) {
-                        // Generic RPC method - forward to background
-                        // Try to get chainId from the request or use default (1 for mainnet)
-                        let chainId = 1;
-                        if (method === 'eth_chainId') {
-                            // Will be handled by inpage script
-                        } else {
-                            // For other methods, we might need chainId from provider
-                            // For now, default to mainnet
-                        }
-                        messageType = 'RPC_REQUEST';
-                        payload = {
-                            method: method,
-                            params: params,
-                            chainId: chainId,
-                        };
-                    }
-
-                    if (messageType) {
-                        // Debug - only log non-RPC requests to reduce noise
-                        if (messageType !== 'RPC_REQUEST' || 
-                            (payload.method && !payload.method.startsWith('eth_call') && 
-                             !payload.method.startsWith('eth_getBlock') && 
-                             !payload.method.startsWith('eth_getTransaction') &&
-                             !payload.method.startsWith('eth_getLogs') &&
-                             !payload.method.startsWith('eth_getBalance'))) {
-                            console.log('[Wolfy Content] Sending to background:', messageType, payload);
-                        }
-
-                        chrome.runtime.sendMessage(
-                            { type: messageType, ...payload },
-                            (response) => {
-                                // Debug - only log non-RPC responses to reduce noise
-                                if (messageType !== 'RPC_REQUEST' || 
-                                    (payload.method && !payload.method.startsWith('eth_call') && 
-                                     !payload.method.startsWith('eth_getBlock') && 
-                                     !payload.method.startsWith('eth_getTransaction') &&
-                                     !payload.method.startsWith('eth_getLogs') &&
-                                     !payload.method.startsWith('eth_getBalance'))) {
-                                    console.log('[Wolfy Content] Received from background:', response);
-                                }
-
-                                // Forward response back to in-page script
-                                if (messageType === 'CONNECT_DAPP' && response?.pending) {
-                                    // Connection pending - wait for approval
+                                    }, 300000);
+                                } else if (messageType === 'SIGN_TRANSACTION' && response?.pending) {
+                                    // Transaction pending - wait for approval
                                     let responseSent = false; // Prevent duplicate responses
+                                    const requestId = response.requestId;
 
-                                    const sendResponseToInpage = (success: boolean, accounts?: string[], error?: string) => {
+                                    const sendResponseToInpage = (success: boolean, transactionHash?: string, error?: string) => {
                                         if (responseSent) return; // Already sent
                                         responseSent = true;
 
                                         // Clean up
-                                        pendingConnections.delete(event.data.id);
+                                        pendingTransactions.delete(event.data.id);
 
                                         window.postMessage(
                                             {
-                                                type: 'WOLFY_REQUEST_RESPONSE', // Fixed type - don't append multiple times
+                                                type: 'WOLFY_REQUEST_RESPONSE',
                                                 id: event.data.id,
                                                 response: {
                                                     success: success,
-                                                    accounts: accounts || [],
+                                                    transactionHash: transactionHash,
                                                     error: error,
                                                 },
                                             },
@@ -499,71 +458,47 @@
                                     };
 
                                     // Store the promise resolvers
-                                    pendingConnections.set(event.data.id, {
-                                        resolve: (accounts) => {
-                                            sendResponseToInpage(true, accounts);
+                                    pendingTransactions.set(event.data.id, {
+                                        resolve: (transactionHash) => {
+                                            sendResponseToInpage(true, transactionHash);
                                         },
                                         reject: (error) => {
                                             sendResponseToInpage(false, undefined, error);
                                         },
-                                        origin: payload.origin,
+                                        requestId: requestId,
                                     });
 
-                                    // Also poll as fallback (in case message listener doesn't work)
-                                    const checkApproval = setInterval(() => {
+                                    // Poll for transaction approval/rejection
+                                    const checkTransaction = setInterval(() => {
                                         if (responseSent) {
-                                            clearInterval(checkApproval);
+                                            clearInterval(checkTransaction);
                                             return;
                                         }
 
-                                        chrome.storage.local.get(['pendingConnection', 'dapp_connections'], (result) => {
-                                            const pendingConnection = result.pendingConnection;
-                                            const dappConnections = result.dapp_connections || {};
+                                        chrome.storage.local.get(['pendingTransaction'], (result) => {
+                                            const pendingTransaction = result.pendingTransaction;
 
-                                            // Check if connection was resolved
-                                            if (!pendingConnection || dappConnections[payload.origin]) {
-                                                clearInterval(checkApproval);
-
-                                                if (dappConnections[payload.origin]) {
-                                                    // Approved - get accounts
-                                                    chrome.runtime.sendMessage(
-                                                        { type: 'GET_ACCOUNTS', origin: payload.origin },
-                                                        (accountsResponse) => {
-                                                            if (accountsResponse && accountsResponse.success) {
-                                                                const accounts = accountsResponse.accounts || [];
-                                                                const accountAddresses = accounts.map((acc: any) => acc.address || acc);
-                                                                sendResponseToInpage(true, accountAddresses);
-                                                            } else {
-                                                                sendResponseToInpage(false, undefined, 'Failed to get accounts');
-                                                            }
-                                                        }
-                                                    );
-                                                } else {
-                                                    // Rejected or cancelled
-                                                    sendResponseToInpage(false, undefined, 'User rejected connection');
-                                                }
+                                            // Check if transaction was resolved (cleared from storage)
+                                            if (!pendingTransaction || pendingTransaction.id !== requestId) {
+                                                clearInterval(checkTransaction);
+                                                // Transaction was resolved - the message listener should have handled it
+                                                // But if not, we'll timeout
                                             }
                                         });
                                     }, 100);
 
                                     // Timeout after 5 minutes
                                     setTimeout(() => {
-                                        clearInterval(checkApproval);
+                                        clearInterval(checkTransaction);
                                         if (!responseSent) {
-                                            sendResponseToInpage(false, undefined, 'Connection timeout');
+                                            sendResponseToInpage(false, undefined, 'Transaction request timeout');
                                         }
                                     }, 300000);
                                 } else {
-                                    // Normal response - use fixed type to avoid loops
-                                    const responseType = event.data.type === 'WOLFY_REQUEST'
-                                        ? 'WOLFY_REQUEST_RESPONSE'
-                                        : (event.data.type.endsWith('_RESPONSE')
-                                            ? event.data.type
-                                            : event.data.type + '_RESPONSE');
-
+                                    // Normal response
                                     window.postMessage(
                                         {
-                                            type: responseType,
+                                            type: 'WOLFY_REQUEST_RESPONSE',
                                             id: event.data.id,
                                             response: response,
                                         },
@@ -572,44 +507,379 @@
                                 }
                             }
                         );
-                    } else {
-                        // Unknown method
-                        window.postMessage(
-                            {
-                                type: 'WOLFY_REQUEST_RESPONSE',
-                                id: event.data.id,
-                                response: {
-                                    success: false,
-                                    error: `Unknown method: ${method}`,
-                                },
-                            },
-                            '*'
-                        );
+                        return; // Handled above - return from chrome.storage.local.get callback
+                    });
+                    return; // Handled above - return from event handler
+                }
+
+                // Map to internal message types for other methods
+                let messageType = '';
+                let payload: any = {};
+
+                if (method === 'eth_sendTransaction') {
+                    messageType = 'SIGN_TRANSACTION';
+                    // Try to get chainId from provider or use default
+                    let chainId = 1;
+                    try {
+                        const provider = (window as any).ethereum;
+                        if (provider && provider.chainId) {
+                            chainId = typeof provider.chainId === 'string' 
+                                ? parseInt(provider.chainId, 16) 
+                                : provider.chainId;
+                        }
+                    } catch {
+                        // Use default
                     }
-                } else if (event.data.type.startsWith('WOLFY_') && event.data.type !== 'WOLFY_REQUEST_RESPONSE') {
-                    // Forward other WOLFY_ messages to background script (but NOT responses)
-                    // Only forward actual requests, not responses to avoid infinite loops
-                    if (!event.data.type.endsWith('_RESPONSE')) {
-                        chrome.runtime.sendMessage(
-                            event.data,
-                            (response) => {
-                                // Forward response back to in-page script
+                    payload = {
+                        transaction: {
+                            to: params[0]?.to,
+                            value: params[0]?.value,
+                            data: params[0]?.data,
+                            gasLimit: params[0]?.gas || params[0]?.gasLimit,
+                            gasPrice: params[0]?.gasPrice,
+                            maxFeePerGas: params[0]?.maxFeePerGas,
+                            maxPriorityFeePerGas: params[0]?.maxPriorityFeePerGas,
+                            nonce: params[0]?.nonce
+                                ? parseInt(params[0].nonce, 16)
+                                : undefined,
+                            chainId: chainId,
+                            type: params[0]?.type,
+                        },
+                    };
+                } else if (method === 'eth_signTransaction') {
+                    messageType = 'SIGN_TRANSACTION';
+                    payload = {
+                        transaction: {
+                            to: params[0]?.to,
+                            value: params[0]?.value,
+                            data: params[0]?.data,
+                            gasLimit: params[0]?.gas,
+                            gasPrice: params[0]?.gasPrice,
+                            maxFeePerGas: params[0]?.maxFeePerGas,
+                            maxPriorityFeePerGas: params[0]?.maxPriorityFeePerGas,
+                            nonce: params[0]?.nonce
+                                ? parseInt(params[0].nonce, 16)
+                                : undefined,
+                        },
+                    };
+                } else if (method === 'personal_sign') {
+                    messageType = 'SIGN_MESSAGE';
+                    payload = {
+                        message: params[0],
+                        address: params[1],
+                    };
+                } else if (method === 'eth_signTypedData_v4') {
+                    messageType = 'SIGN_TYPED_DATA';
+                    payload = {
+                        address: params[0],
+                        typedData: params[1],
+                    };
+                } else if (method.startsWith('eth_') || method.startsWith('net_') || method.startsWith('web3_')) {
+                    // Generic RPC method - forward to background
+                    // Try to get chainId from the request or use default (1 for mainnet)
+                    let chainId = 1;
+                    if (method === 'eth_chainId') {
+                        // Will be handled by inpage script
+                    } else {
+                        // For other methods, we might need chainId from provider
+                        // For now, default to mainnet
+                    }
+                    messageType = 'RPC_REQUEST';
+                    payload = {
+                        method: method,
+                        params: params,
+                        chainId: chainId,
+                    };
+                }
+
+                if (messageType) {
+                    // Debug - only log non-RPC requests to reduce noise
+                    if (messageType !== 'RPC_REQUEST' || 
+                        (payload.method && !payload.method.startsWith('eth_call') && 
+                         !payload.method.startsWith('eth_getBlock') && 
+                         !payload.method.startsWith('eth_getTransaction') &&
+                         !payload.method.startsWith('eth_getLogs') &&
+                         !payload.method.startsWith('eth_getBalance'))) {
+                        console.log('[Wolfy Content] Sending to background:', messageType, payload);
+                    }
+
+                    chrome.runtime.sendMessage(
+                        { type: messageType, ...payload },
+                        (response) => {
+                            // Debug - only log non-RPC responses to reduce noise
+                            if (messageType !== 'RPC_REQUEST' || 
+                                (payload.method && !payload.method.startsWith('eth_call') && 
+                                 !payload.method.startsWith('eth_getBlock') && 
+                                 !payload.method.startsWith('eth_getTransaction') &&
+                                 !payload.method.startsWith('eth_getLogs') &&
+                                 !payload.method.startsWith('eth_getBalance'))) {
+                                console.log('[Wolfy Content] Received from background:', response);
+                            }
+
+                            // Forward response back to in-page script
+                            if (messageType === 'CONNECT_DAPP' && response?.pending) {
+                                // Connection pending - wait for approval
+                                let responseSent = false; // Prevent duplicate responses
+
+                                const sendResponseToInpage = (success: boolean, accounts?: string[], error?: string) => {
+                                    if (responseSent) return; // Already sent
+                                    responseSent = true;
+
+                                    // Clean up
+                                    pendingConnections.delete(event.data.id);
+
+                                    window.postMessage(
+                                        {
+                                            type: 'WOLFY_REQUEST_RESPONSE', // Fixed type - don't append multiple times
+                                            id: event.data.id,
+                                            response: {
+                                                success: success,
+                                                accounts: accounts || [],
+                                                error: error,
+                                            },
+                                        },
+                                        '*'
+                                    );
+                                };
+
+                                // Store the promise resolvers
+                                pendingConnections.set(event.data.id, {
+                                    resolve: (accounts) => {
+                                        sendResponseToInpage(true, accounts);
+                                    },
+                                    reject: (error) => {
+                                        sendResponseToInpage(false, undefined, error);
+                                    },
+                                    origin: payload.origin,
+                                });
+
+                                // Also poll as fallback (in case message listener doesn't work)
+                                const checkApproval = setInterval(() => {
+                                    if (responseSent) {
+                                        clearInterval(checkApproval);
+                                        return;
+                                    }
+
+                                    chrome.storage.local.get(['pendingConnection', 'dapp_connections'], (result) => {
+                                        const pendingConnection = result.pendingConnection;
+                                        const dappConnections = result.dapp_connections || {};
+
+                                        // Check if connection was resolved
+                                        if (!pendingConnection || dappConnections[payload.origin]) {
+                                            clearInterval(checkApproval);
+
+                                            if (dappConnections[payload.origin]) {
+                                                // Approved - get accounts
+                                                chrome.runtime.sendMessage(
+                                                    { type: 'GET_ACCOUNTS', origin: payload.origin },
+                                                    (accountsResponse) => {
+                                                        if (accountsResponse && accountsResponse.success) {
+                                                            const accounts = accountsResponse.accounts || [];
+                                                            const accountAddresses = accounts.map((acc: any) => acc.address || acc);
+                                                            sendResponseToInpage(true, accountAddresses);
+                                                        } else {
+                                                            sendResponseToInpage(false, undefined, 'Failed to get accounts');
+                                                        }
+                                                    }
+                                                );
+                                            } else {
+                                                // Rejected or cancelled
+                                                sendResponseToInpage(false, undefined, 'User rejected connection');
+                                            }
+                                        }
+                                    });
+                                }, 100);
+
+                                // Timeout after 5 minutes
+                                setTimeout(() => {
+                                    clearInterval(checkApproval);
+                                    if (!responseSent) {
+                                        sendResponseToInpage(false, undefined, 'Connection timeout');
+                                    }
+                                }, 300000);
+                            } else if ((messageType === 'SIGN_MESSAGE' || messageType === 'SIGN_TYPED_DATA') && response?.pending) {
+                                // Signature pending - wait for approval
+                                let responseSent = false; // Prevent duplicate responses
+                                const requestId = response.requestId;
+
+                                const sendResponseToInpage = (success: boolean, signature?: string, error?: string) => {
+                                    if (responseSent) return; // Already sent
+                                    responseSent = true;
+
+                                    // Clean up
+                                    pendingSignatures.delete(event.data.id);
+
+                                    window.postMessage(
+                                        {
+                                            type: 'WOLFY_REQUEST_RESPONSE',
+                                            id: event.data.id,
+                                            response: {
+                                                success: success,
+                                                signature: signature,
+                                                error: error,
+                                            },
+                                        },
+                                        '*'
+                                    );
+                                };
+
+                                // Store the promise resolvers
+                                pendingSignatures.set(event.data.id, {
+                                    resolve: (signature) => {
+                                        sendResponseToInpage(true, signature);
+                                    },
+                                    reject: (error) => {
+                                        sendResponseToInpage(false, undefined, error);
+                                    },
+                                    requestId: requestId,
+                                });
+
+                                // Poll for signature approval/rejection
+                                const checkSignature = setInterval(() => {
+                                    if (responseSent) {
+                                        clearInterval(checkSignature);
+                                        return;
+                                    }
+
+                                    chrome.storage.local.get(['pendingSignature'], (result) => {
+                                        const pendingSignature = result.pendingSignature;
+
+                                        // Check if signature was resolved (cleared from storage)
+                                        if (!pendingSignature || pendingSignature.id !== requestId) {
+                                            clearInterval(checkSignature);
+                                            // Signature was resolved - the message listener should have handled it
+                                            // But if not, we'll timeout
+                                        }
+                                    });
+                                }, 100);
+
+                                // Timeout after 5 minutes
+                                setTimeout(() => {
+                                    clearInterval(checkSignature);
+                                    if (!responseSent) {
+                                        sendResponseToInpage(false, undefined, 'Signature request timeout');
+                                    }
+                                }, 300000);
+                            } else if (messageType === 'SIGN_TRANSACTION' && response?.pending) {
+                                // Transaction pending - wait for approval
+                                let responseSent = false; // Prevent duplicate responses
+                                const requestId = response.requestId;
+
+                                const sendResponseToInpage = (success: boolean, transactionHash?: string, error?: string) => {
+                                    if (responseSent) return; // Already sent
+                                    responseSent = true;
+
+                                    // Clean up
+                                    pendingTransactions.delete(event.data.id);
+
+                                    window.postMessage(
+                                        {
+                                            type: 'WOLFY_REQUEST_RESPONSE',
+                                            id: event.data.id,
+                                            response: {
+                                                success: success,
+                                                transactionHash: transactionHash,
+                                                error: error,
+                                            },
+                                        },
+                                        '*'
+                                    );
+                                };
+
+                                // Store the promise resolvers
+                                pendingTransactions.set(event.data.id, {
+                                    resolve: (transactionHash) => {
+                                        sendResponseToInpage(true, transactionHash);
+                                    },
+                                    reject: (error) => {
+                                        sendResponseToInpage(false, undefined, error);
+                                    },
+                                    requestId: requestId,
+                                });
+
+                                // Poll for transaction approval/rejection
+                                const checkTransaction = setInterval(() => {
+                                    if (responseSent) {
+                                        clearInterval(checkTransaction);
+                                        return;
+                                    }
+
+                                    chrome.storage.local.get(['pendingTransaction'], (result) => {
+                                        const pendingTransaction = result.pendingTransaction;
+
+                                        // Check if transaction was resolved (cleared from storage)
+                                        if (!pendingTransaction || pendingTransaction.id !== requestId) {
+                                            clearInterval(checkTransaction);
+                                            // Transaction was resolved - the message listener should have handled it
+                                            // But if not, we'll timeout
+                                        }
+                                    });
+                                }, 100);
+
+                                // Timeout after 5 minutes
+                                setTimeout(() => {
+                                    clearInterval(checkTransaction);
+                                    if (!responseSent) {
+                                        sendResponseToInpage(false, undefined, 'Transaction request timeout');
+                                    }
+                                }, 300000);
+                            } else {
+                                // Normal response - use fixed type to avoid loops
+                                const responseType = event.data.type === 'WOLFY_REQUEST'
+                                    ? 'WOLFY_REQUEST_RESPONSE'
+                                    : (event.data.type.endsWith('_RESPONSE')
+                                        ? event.data.type
+                                        : event.data.type + '_RESPONSE');
+
                                 window.postMessage(
                                     {
-                                        type: event.data.type + '_RESPONSE',
+                                        type: responseType,
                                         id: event.data.id,
                                         response: response,
                                     },
                                     '*'
                                 );
                             }
-                        );
-                    }
-                    // Silently ignore response messages to prevent loops
+                        }
+                    );
+                } else {
+                    // Unknown method
+                    window.postMessage(
+                        {
+                            type: 'WOLFY_REQUEST_RESPONSE',
+                            id: event.data.id,
+                            response: {
+                                success: false,
+                                error: `Unknown method: ${method}`,
+                            },
+                        },
+                        '*'
+                    );
                 }
+            } else if (event.data.type.startsWith('WOLFY_') && event.data.type !== 'WOLFY_REQUEST_RESPONSE') {
+                // Forward other WOLFY_ messages to background script (but NOT responses)
+                // Only forward actual requests, not responses to avoid infinite loops
+                if (!event.data.type.endsWith('_RESPONSE')) {
+                    chrome.runtime.sendMessage(
+                        event.data,
+                        (response) => {
+                            // Forward response back to in-page script
+                            window.postMessage(
+                                {
+                                    type: event.data.type + '_RESPONSE',
+                                    id: event.data.id,
+                                    response: response,
+                                },
+                                '*'
+                            );
+                        }
+                    );
+                }
+                // Silently ignore response messages to prevent loops
             }
-        },
-        false
-    );
+        }
+    },
+    false
+);
 })();
 

@@ -25,6 +25,12 @@ export const ADD_WALLET_OPTIONS: AddWalletOption[] = [
         description: 'Create account from HaLo chip (hardware wallet)',
     },
     {
+        id: 'add-firefly-wallet',
+        label: 'Add Firefly Wallet',
+        icon: 'firefly',
+        description: 'Connect and create account from Firefly hardware wallet',
+    },
+    {
         id: 'create-multisig',
         label: 'Create Multisig (2-3 Chips)',
         icon: 'multisig',
@@ -190,6 +196,14 @@ function getOptionIcon(iconType: string): string {
             <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
                 <path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
                 <circle cx="12" cy="7" r="4" stroke-width="2"/>
+            </svg>
+        `,
+        firefly: `
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor">
+                <path d="M12 2L2 7L12 12L22 7L12 2Z" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 17L12 22L22 17" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <path d="M2 12L12 17L22 12" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                <circle cx="12" cy="12" r="2" stroke-width="2"/>
             </svg>
         `,
     };

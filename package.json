@@ -15,12 +15,12 @@
         "build:popup": "bun run build:popup:html && bun run build:popup:js && bun run build:popup:expanded && bun run build:popup:polyfill",
         "build:popup:js": "bun build src/popup/index.tsx --outdir dist/popup --target browser --format esm",
         "build:popup:polyfill": "bun build src/popup/polyfill-loader.ts --outdir dist/popup --target browser --format esm --outfile polyfill-loader.js",
-        "build:popup:html": "mkdir -p dist/popup && cp src/popup/index.html dist/popup/index.html && cp src/popup/rabby-styles.css dist/popup/rabby-styles.css && cp src/popup/wolfy-logo.png dist/popup/wolfy-logo.png 2>/dev/null || true",
+        "build:popup:html": "mkdir -p dist/popup && cp src/popup/index.html dist/popup/index.html && cp src/popup/firefly-connect.html dist/popup/firefly-connect.html 2>/dev/null || true && cp src/popup/firefly-connect.js dist/popup/firefly-connect.js 2>/dev/null || true && cp src/popup/rabby-styles.css dist/popup/rabby-styles.css && cp src/popup/wolfy-logo.png dist/popup/wolfy-logo.png 2>/dev/null || true",
         "build:popup:expanded": "bun build src/popup/expanded.tsx --outdir dist/popup --target browser --format esm --outfile expanded.js && cp src/popup/expanded.html dist/popup/expanded.html",
         "build:notification": "bun run build:notification:html && bun run build:notification:js",
         "build:notification:html": "mkdir -p dist/notification && cp src/notification/index.html dist/notification/index.html && cp src/popup/rabby-styles.css dist/notification/rabby-styles.css",
         "build:notification:js": "bun build src/notification/index.tsx --outdir dist/notification --target browser --format esm",
-        "build:assets": "mkdir -p dist/icons && mkdir -p dist/popup/lib && bun run build:icons && cp manifest.json dist/ && cp -r icons/* dist/icons/ 2>/dev/null || true && cp src/popup/lib/libhalo.js dist/popup/lib/ 2>/dev/null || true",
+        "build:assets": "mkdir -p dist/icons && mkdir -p dist/popup/lib && bun run build:icons && cp manifest.json dist/ && cp -r icons/* dist/icons/ 2>/dev/null || true && cp src/popup/lib/libhalo.js dist/popup/lib/ 2>/dev/null || true && cp src/popup/lib/firefly.js dist/popup/lib/ 2>/dev/null || true",
         "build:icons": "sips -z 16 16 wolfy.svg.png --out icons/icon16.png 2>/dev/null || true && sips -z 32 32 wolfy.svg.png --out icons/icon32.png 2>/dev/null || true && sips -z 48 48 wolfy.svg.png --out icons/icon48.png 2>/dev/null || true && sips -z 128 128 wolfy.svg.png --out icons/icon128.png 2>/dev/null || true",
         "build:watch": "bun run --watch build:all"
     },
@@ -42,6 +42,8 @@
         "buffer": "^6.0.3",
         "ethers": "^6.0.0",
         "process": "^0.11.10",
+        "qrcode": "^1.5.4",
+        "qrcode.react": "^4.2.0",
         "viem": "^2.39.0"
     },
     "devDependencies": {

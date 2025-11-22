@@ -22,6 +22,8 @@ export function renderAccountSidebar(
             typeBadge = '<span class="account-type-badge chip">🔒 Chip</span>';
         } else if (account.multisig) {
             typeBadge = `<span class="account-type-badge multisig">🔐 Multisig (${account.multisig.threshold}/${account.multisig.chips.length})</span>`;
+        } else if (account.isFireflyAccount) {
+            typeBadge = '<span class="account-type-badge firefly">🔥 Firefly</span>';
         } else if (account.haloLinked) {
             typeBadge = '<span class="account-type-badge halo">HaLo</span>';
         }
@@ -52,7 +54,7 @@ export function renderAccountSidebar(
                 </div>
                 <div style="display: flex; align-items: center; gap: 4px; margin-left: auto;">
                     ${typeBadge ? `<div style="display: flex; align-items: center; margin-right: 4px;">${typeBadge}</div>` : ''}
-                    <div style="display: flex; align-items: center; gap: 4px;" 
+                    <div style="display: flex; align-items: center; gap: 4px;"
                          class="account-sidebar-actions">
                     ${onEditAccount ? `
                         <button class="account-sidebar-edit-btn"

@@ -14,6 +14,13 @@ export interface MultisigConfig {
     deploymentTxHash?: string; // Transaction hash of deployment
 }
 
+export interface FireflyInfo {
+    address: string;
+    model: string;
+    serialNumber: string;
+    connectedAt: number;
+}
+
 export interface Account {
     address: string; // For single chip: chip address. For multisig: smart account address
     name?: string;
@@ -23,6 +30,9 @@ export interface Account {
     isChipAccount?: boolean; // True if account is directly from chip
     chipInfo?: ChipInfo; // Info for single chip account
     multisig?: MultisigConfig; // Configuration for multisig account
+    // Firefly wallet fields
+    isFireflyAccount?: boolean; // True if account is from Firefly wallet
+    fireflyInfo?: FireflyInfo; // Info for Firefly account
     // View-only/watch-only address
     isWatchOnly?: boolean; // True if this is a view-only address (no private key, cannot sign)
 }

@@ -398,7 +398,8 @@ class WolfyProvider implements EthereumProvider {
 
             const handler = (response: any) => {
                 if (response.success) {
-                    resolve(response.txHash || response.signedTransaction || '0x');
+                    // Return transaction hash (eth_sendTransaction returns the hash)
+                    resolve(response.transactionHash || response.txHash || response.signedTransaction || '0x');
                 } else {
                     reject(new Error(response.error || 'Transaction failed'));
                 }

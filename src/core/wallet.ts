@@ -96,6 +96,45 @@ export class Wallet {
     }
 
     /**
+     * Create account from Firefly wallet (hardware wallet)
+     * Reads Firefly address and uses it as the account address
+     */
+    async createAccountFromFirefly(fireflyAddress: string, deviceInfo: any, name?: string): Promise<Account> {
+        try {
+            const account: Account = {
+                address: fireflyAddress.toLowerCase(),
+                name: name || `Firefly ${this.state.accounts.length + 1}`,
+                encrypted: false,
+                isFireflyAccount: true,
+                fireflyInfo: {
+                    address: fireflyAddress.toLowerCase(),
+                    model: deviceInfo.model,
+                    serialNumber: deviceInfo.serialNumber,
+                    connectedAt: deviceInfo.connectedAt || Date.now(),
+                },
+            };
+
+            // Check for duplicates
+            if (this.state.accounts.some(acc => acc.address.toLowerCase() === account.address.toLowerCase())) {
+                throw new Error('Firefly account already exists');
+            }
+
+            this.state.accounts.push(account);
+            if (!this.state.selectedAccount) {
+                this.state.selectedAccount = account.address;
+            }
+
+            // NO private key stored - Firefly device is the only way to sign
+            await this.saveState();
+
+            return account;
+        } catch (error: any) {
+            console.error('Error in createAccountFromFirefly:', error);
+            throw new Error(error.message || 'Failed to create account from Firefly');
+        }
+    }
+
+    /**
      * Create multisig account with multiple HaLo chips
      * NOTE: This creates the account structure but does NOT deploy the contract
      * The contract must be deployed separately using deployMultisig()
