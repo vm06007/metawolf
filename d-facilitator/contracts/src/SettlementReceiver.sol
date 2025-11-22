@@ -194,7 +194,5 @@ contract SettlementReceiver is IReceiverTemplate, Ownable {
         emit ExpectedWorkflowNameUpdated(oldName, _newWorkflowName);
     }
 
-    // TODO: Add events for settlement processing
-    // event SettlementProcessed(address indexed payer, address indexed payee, uint256 amount, bool success);
-}
+   }
 
