@@ -12633,7 +12633,7 @@ function toHex3(value3, opts = {}) {
   }
   if (typeof value3 === "boolean")
     return boolToHex3(value3, opts);
-  return bytesToHex5(value3, opts);
+  return bytesToHex6(value3, opts);
 }
 function boolToHex3(value3, opts = {}) {
   const hex2 = `0x${Number(value3)}`;
@@ -12643,7 +12643,7 @@ function boolToHex3(value3, opts = {}) {
   }
   return hex2;
 }
-function bytesToHex5(value3, opts = {}) {
+function bytesToHex6(value3, opts = {}) {
   let string = "";
   for (let i2 = 0;i2 < value3.length; i2++) {
     string += hexes5[value3[i2]];
@@ -12685,7 +12685,7 @@ function numberToHex3(value_, opts = {}) {
 }
 function stringToHex3(value_, opts = {}) {
   const value3 = encoder7.encode(value_);
-  return bytesToHex5(value3, opts);
+  return bytesToHex6(value3, opts);
 }
 var hexes5;
 var encoder7;
@@ -13993,7 +13993,7 @@ var init_cursor6 = __esm(() => {
 function bytesToBigInt3(bytes, opts = {}) {
   if (typeof opts.size !== "undefined")
     assertSize6(bytes, { size: opts.size });
-  const hex2 = bytesToHex5(bytes, opts);
+  const hex2 = bytesToHex6(bytes, opts);
   return hexToBigInt3(hex2, opts);
 }
 function bytesToBool3(bytes_, opts = {}) {
@@ -14009,7 +14009,7 @@ function bytesToBool3(bytes_, opts = {}) {
 function bytesToNumber3(bytes, opts = {}) {
   if (typeof opts.size !== "undefined")
     assertSize6(bytes, { size: opts.size });
-  const hex2 = bytesToHex5(bytes, opts);
+  const hex2 = bytesToHex6(bytes, opts);
   return hexToNumber4(hex2, opts);
 }
 function bytesToString3(bytes_, opts = {}) {
@@ -14032,7 +14032,7 @@ function decodeAbiParameters3(params, data) {
     throw new AbiDecodingZeroDataError3;
   if (size6(data) && size6(data) < 32)
     throw new AbiDecodingDataSizeTooSmallError3({
-      data: typeof data === "string" ? data : bytesToHex5(data),
+      data: typeof data === "string" ? data : bytesToHex6(data),
       params,
       size: size6(data)
     });
@@ -14073,7 +14073,7 @@ function decodeParameter4(cursor, param, { staticPosition }) {
 }
 function decodeAddress3(cursor) {
   const value3 = cursor.readBytes(32);
-  return [checksumAddress3(bytesToHex5(sliceBytes3(value3, -20))), 32];
+  return [checksumAddress3(bytesToHex6(sliceBytes3(value3, -20))), 32];
 }
 function decodeArray3(cursor, param, { length, staticPosition }) {
   if (!length) {
@@ -14136,9 +14136,9 @@ function decodeBytes3(cursor, param, { staticPosition }) {
     }
     const data = cursor.readBytes(length);
     cursor.setPosition(staticPosition + 32);
-    return [bytesToHex5(data), 32];
+    return [bytesToHex6(data), 32];
   }
-  const value3 = bytesToHex5(cursor.readBytes(Number.parseInt(size7, 10), 32));
+  const value3 = bytesToHex6(cursor.readBytes(Number.parseInt(size7, 10), 32));
   return [value3, 32];
 }
 function decodeNumber3(cursor, param) {
@@ -15654,7 +15654,7 @@ function hexToNumber5(hex2) {
     throw new Error("hex string expected, got " + typeof hex2);
   return hex2 === "" ? _0n8 : BigInt("0x" + hex2);
 }
-function bytesToHex6(bytes) {
+function bytesToHex7(bytes) {
   abytes4(bytes);
   if (hasHexBuiltin3)
     return bytes.toHex();
@@ -15695,11 +15695,11 @@ function hexToBytes7(hex2) {
   return array;
 }
 function bytesToNumberBE2(bytes) {
-  return hexToNumber5(bytesToHex6(bytes));
+  return hexToNumber5(bytesToHex7(bytes));
 }
 function bytesToNumberLE2(bytes) {
   abytes4(bytes);
-  return hexToNumber5(bytesToHex6(Uint8Array.from(bytes).reverse()));
+  return hexToNumber5(bytesToHex7(Uint8Array.from(bytes).reverse()));
 }
 function numberToBytesBE2(n, len2) {
   return hexToBytes7(n.toString(16).padStart(len2 * 2, "0"));
@@ -16387,7 +16387,7 @@ function validatePointOpts(curve) {
   return Object.freeze({ ...opts });
 }
 function numToSizedHex(num2, size7) {
-  return bytesToHex6(numberToBytesBE2(num2, size7));
+  return bytesToHex7(numberToBytesBE2(num2, size7));
 }
 function weierstrassPoints(opts) {
   const CURVE = validatePointOpts(opts);
@@ -16427,7 +16427,7 @@ function weierstrassPoints(opts) {
     const { allowedPrivateKeyLengths: lengths, nByteLength, wrapPrivateKey, n: N } = CURVE;
     if (lengths && typeof key !== "bigint") {
       if (isBytes4(key))
-        key = bytesToHex6(key);
+        key = bytesToHex7(key);
       if (typeof key !== "string" || !lengths.includes(key.length))
         throw new Error("invalid private key");
       key = key.padStart(nByteLength * 2, "0");
@@ -16725,7 +16725,7 @@ function weierstrassPoints(opts) {
     }
     toHex(isCompressed = true) {
       abool("isCompressed", isCompressed);
-      return bytesToHex6(this.toRawBytes(isCompressed));
+      return bytesToHex7(this.toRawBytes(isCompressed));
     }
   }
   Point.BASE = new Point(CURVE.Gx, CURVE.Gy, Fp.ONE);
@@ -17963,7 +17963,7 @@ function formatTransactionRequest2(request, _) {
     rpcRequest.blobVersionedHashes = request.blobVersionedHashes;
   if (typeof request.blobs !== "undefined") {
     if (typeof request.blobs[0] !== "string")
-      rpcRequest.blobs = request.blobs.map((x) => bytesToHex5(x));
+      rpcRequest.blobs = request.blobs.map((x) => bytesToHex6(x));
     else
       rpcRequest.blobs = request.blobs;
   }
@@ -50787,6 +50787,7 @@ function typeNameToUrl2(name) {
   return `type.googleapis.com/${name}`;
 }
 var file_google_protobuf_empty2 = /* @__PURE__ */ fileDesc2("Chtnb29nbGUvcHJvdG9idWYvZW1wdHkucHJvdG8SD2dvb2dsZS5wcm90b2J1ZiIHCgVFbXB0eUJ9ChNjb20uZ29vZ2xlLnByb3RvYnVmQgpFbXB0eVByb3RvUAFaLmdvb2dsZS5nb2xhbmcub3JnL3Byb3RvYnVmL3R5cGVzL2tub3duL2VtcHR5cGL4AQGiAgNHUEKqAh5Hb29nbGUuUHJvdG9idWYuV2VsbEtub3duVHlwZXNiBnByb3RvMw");
+var EmptySchema2 = /* @__PURE__ */ messageDesc2(file_google_protobuf_empty2, 0);
 var file_google_protobuf_struct2 = /* @__PURE__ */ fileDesc2("Chxnb29nbGUvcHJvdG9idWYvc3RydWN0LnByb3RvEg9nb29nbGUucHJvdG9idWYihAEKBlN0cnVjdBIzCgZmaWVsZHMYASADKAsyIy5nb29nbGUucHJvdG9idWYuU3RydWN0LkZpZWxkc0VudHJ5GkUKC0ZpZWxkc0VudHJ5EgsKA2tleRgBIAEoCRIlCgV2YWx1ZRgCIAEoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZToCOAEi6gEKBVZhbHVlEjAKCm51bGxfdmFsdWUYASABKA4yGi5nb29nbGUucHJvdG9idWYuTnVsbFZhbHVlSAASFgoMbnVtYmVyX3ZhbHVlGAIgASgBSAASFgoMc3RyaW5nX3ZhbHVlGAMgASgJSAASFAoKYm9vbF92YWx1ZRgEIAEoCEgAEi8KDHN0cnVjdF92YWx1ZRgFIAEoCzIXLmdvb2dsZS5wcm90b2J1Zi5TdHJ1Y3RIABIwCgpsaXN0X3ZhbHVlGAYgASgLMhouZ29vZ2xlLnByb3RvYnVmLkxpc3RWYWx1ZUgAQgYKBGtpbmQiMwoJTGlzdFZhbHVlEiYKBnZhbHVlcxgBIAMoCzIWLmdvb2dsZS5wcm90b2J1Zi5WYWx1ZSobCglOdWxsVmFsdWUSDgoKTlVMTF9WQUxVRRAAQn8KE2NvbS5nb29nbGUucHJvdG9idWZCC1N0cnVjdFByb3RvUAFaL2dvb2dsZS5nb2xhbmcub3JnL3Byb3RvYnVmL3R5cGVzL2tub3duL3N0cnVjdHBi+AEBogIDR1BCqgIeR29vZ2xlLlByb3RvYnVmLldlbGxLbm93blR5cGVzYgZwcm90bzM");
 var StructSchema2 = /* @__PURE__ */ messageDesc2(file_google_protobuf_struct2, 0);
 var ValueSchema3 = /* @__PURE__ */ messageDesc2(file_google_protobuf_struct2, 1);
@@ -51322,6 +51323,33 @@ var Mode2;
   Mode3[Mode3["NODE"] = 2] = "NODE";
 })(Mode2 || (Mode2 = {}));
 var file_tools_generator_v1alpha_cre_metadata2 = /* @__PURE__ */ fileDesc2("Cip0b29scy9nZW5lcmF0b3IvdjFhbHBoYS9jcmVfbWV0YWRhdGEucHJvdG8SF3Rvb2xzLmdlbmVyYXRvci52MWFscGhhIoQBCgtTdHJpbmdMYWJlbBJECghkZWZhdWx0cxgBIAMoCzIyLnRvb2xzLmdlbmVyYXRvci52MWFscGhhLlN0cmluZ0xhYmVsLkRlZmF1bHRzRW50cnkaLwoNRGVmYXVsdHNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIogBCgtVaW50NjRMYWJlbBJECghkZWZhdWx0cxgBIAMoCzIyLnRvb2xzLmdlbmVyYXRvci52MWFscGhhLlVpbnQ2NExhYmVsLkRlZmF1bHRzRW50cnkaMwoNRGVmYXVsdHNFbnRyeRILCgNrZXkYASABKAkSEQoFdmFsdWUYAiABKARCAjAAOgI4ASKEAQoLVWludDMyTGFiZWwSRAoIZGVmYXVsdHMYASADKAsyMi50b29scy5nZW5lcmF0b3IudjFhbHBoYS5VaW50MzJMYWJlbC5EZWZhdWx0c0VudHJ5Gi8KDURlZmF1bHRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgNOgI4ASKGAQoKSW50NjRMYWJlbBJDCghkZWZhdWx0cxgBIAMoCzIxLnRvb2xzLmdlbmVyYXRvci52MWFscGhhLkludDY0TGFiZWwuRGVmYXVsdHNFbnRyeRozCg1EZWZhdWx0c0VudHJ5EgsKA2tleRgBIAEoCRIRCgV2YWx1ZRgCIAEoA0ICMAA6AjgBIoIBCgpJbnQzMkxhYmVsEkMKCGRlZmF1bHRzGAEgAygLMjEudG9vbHMuZ2VuZXJhdG9yLnYxYWxwaGEuSW50MzJMYWJlbC5EZWZhdWx0c0VudHJ5Gi8KDURlZmF1bHRzRW50cnkSCwoDa2V5GAEgASgJEg0KBXZhbHVlGAIgASgFOgI4ASLBAgoFTGFiZWwSPAoMc3RyaW5nX2xhYmVsGAEgASgLMiQudG9vbHMuZ2VuZXJhdG9yLnYxYWxwaGEuU3RyaW5nTGFiZWxIABI8Cgx1aW50NjRfbGFiZWwYAiABKAsyJC50b29scy5nZW5lcmF0b3IudjFhbHBoYS5VaW50NjRMYWJlbEgAEjoKC2ludDY0X2xhYmVsGAMgASgLMiMudG9vbHMuZ2VuZXJhdG9yLnYxYWxwaGEuSW50NjRMYWJlbEgAEjwKDHVpbnQzMl9sYWJlbBgEIAEoCzIkLnRvb2xzLmdlbmVyYXRvci52MWFscGhhLlVpbnQzMkxhYmVsSAASOgoLaW50MzJfbGFiZWwYBSABKAsyIy50b29scy5nZW5lcmF0b3IudjFhbHBoYS5JbnQzMkxhYmVsSABCBgoEa2luZCLkAQoSQ2FwYWJpbGl0eU1ldGFkYXRhEh8KBG1vZGUYASABKA4yES5zZGsudjFhbHBoYS5Nb2RlEhUKDWNhcGFiaWxpdHlfaWQYAiABKAkSRwoGbGFiZWxzGAMgAygLMjcudG9vbHMuZ2VuZXJhdG9yLnYxYWxwaGEuQ2FwYWJpbGl0eU1ldGFkYXRhLkxhYmVsc0VudHJ5Gk0KC0xhYmVsc0VudHJ5EgsKA2tleRgBIAEoCRItCgV2YWx1ZRgCIAEoCzIeLnRvb2xzLmdlbmVyYXRvci52MWFscGhhLkxhYmVsOgI4ASI2ChhDYXBhYmlsaXR5TWV0aG9kTWV0YWRhdGESGgoSbWFwX3RvX3VudHlwZWRfYXBpGAEgASgIOm4KCmNhcGFiaWxpdHkSHy5nb29nbGUucHJvdG9idWYuU2VydmljZU9wdGlvbnMY0IYDIAEoCzIrLnRvb2xzLmdlbmVyYXRvci52MWFscGhhLkNhcGFiaWxpdHlNZXRhZGF0YVIKY2FwYWJpbGl0eTprCgZtZXRob2QSHi5nb29nbGUucHJvdG9idWYuTWV0aG9kT3B0aW9ucxjRhgMgASgLMjEudG9vbHMuZ2VuZXJhdG9yLnYxYWxwaGEuQ2FwYWJpbGl0eU1ldGhvZE1ldGFkYXRhUgZtZXRob2RCrwEKG2NvbS50b29scy5nZW5lcmF0b3IudjFhbHBoYUIQQ3JlTWV0YWRhdGFQcm90b1ABogIDVEdYqgIXVG9vbHMuR2VuZXJhdG9yLlYxYWxwaGHKAhhUb29sc1xHZW5lcmF0b3JfXFYxYWxwaGHiAiRUb29sc1xHZW5lcmF0b3JfXFYxYWxwaGFcR1BCTWV0YWRhdGHqAhlUb29sczo6R2VuZXJhdG9yOjpWMWFscGhhYgZwcm90bzM", [file_google_protobuf_descriptor2, file_sdk_v1alpha_sdk2]);
+var file_capabilities_blockchain_evm_v1alpha_client2 = /* @__PURE__ */ fileDesc2("CjBjYXBhYmlsaXRpZXMvYmxvY2tjaGFpbi9ldm0vdjFhbHBoYS9jbGllbnQucHJvdG8SI2NhcGFiaWxpdGllcy5ibG9ja2NoYWluLmV2bS52MWFscGhhIh0KC1RvcGljVmFsdWVzEg4KBnZhbHVlcxgBIAMoDCK4AQoXRmlsdGVyTG9nVHJpZ2dlclJlcXVlc3QSEQoJYWRkcmVzc2VzGAEgAygMEkAKBnRvcGljcxgCIAMoCzIwLmNhcGFiaWxpdGllcy5ibG9ja2NoYWluLmV2bS52MWFscGhhLlRvcGljVmFsdWVzEkgKCmNvbmZpZGVuY2UYAyABKA4yNC5jYXBhYmlsaXRpZXMuYmxvY2tjaGFpbi5ldm0udjFhbHBoYS5Db25maWRlbmNlTGV2ZWwiegoTQ2FsbENvbnRyYWN0UmVxdWVzdBI6CgRjYWxsGAEgASgLMiwuY2FwYWJpbGl0aWVzLmJsb2NrY2hhaW4uZXZtLnYxYWxwaGEuQ2FsbE1zZxInCgxibG9ja19udW1iZXIYAiABKAsyES52YWx1ZXMudjEuQmlnSW50IiEKEUNhbGxDb250cmFjdFJlcGx5EgwKBGRhdGEYASABKAwiWwoRRmlsdGVyTG9nc1JlcXVlc3QSRgoMZmlsdGVyX3F1ZXJ5GAEgASgLMjAuY2FwYWJpbGl0aWVzLmJsb2NrY2hhaW4uZXZtLnYxYWxwaGEuRmlsdGVyUXVlcnkiSQoPRmlsdGVyTG9nc1JlcGx5EjYKBGxvZ3MYASADKAsyKC5jYXBhYmlsaXRpZXMuYmxvY2tjaGFpbi5ldm0udjFhbHBoYS5Mb2cixwEKA0xvZxIPCgdhZGRyZXNzGAEgASgMEg4KBnRvcGljcxgCIAMoDBIPCgd0eF9oYXNoGAMgASgMEhIKCmJsb2NrX2hhc2gYBCABKAwSDAoEZGF0YRgFIAEoDBIRCglldmVudF9zaWcYBiABKAwSJwoMYmxvY2tfbnVtYmVyGAcgASgLMhEudmFsdWVzLnYxLkJpZ0ludBIQCgh0eF9pbmRleBgIIAEoDRINCgVpbmRleBgJIAEoDRIPCgdyZW1vdmVkGAogASgIIjEKB0NhbGxNc2cSDAoEZnJvbRgBIAEoDBIKCgJ0bxgCIAEoDBIMCgRkYXRhGAMgASgMIr0BCgtGaWx0ZXJRdWVyeRISCgpibG9ja19oYXNoGAEgASgMEiUKCmZyb21fYmxvY2sYAiABKAsyES52YWx1ZXMudjEuQmlnSW50EiMKCHRvX2Jsb2NrGAMgASgLMhEudmFsdWVzLnYxLkJpZ0ludBIRCglhZGRyZXNzZXMYBCADKAwSOwoGdG9waWNzGAUgAygLMisuY2FwYWJpbGl0aWVzLmJsb2NrY2hhaW4uZXZtLnYxYWxwaGEuVG9waWNzIhcKBlRvcGljcxINCgV0b3BpYxgBIAMoDCJMChBCYWxhbmNlQXRSZXF1ZXN0Eg8KB2FjY291bnQYASABKAwSJwoMYmxvY2tfbnVtYmVyGAIgASgLMhEudmFsdWVzLnYxLkJpZ0ludCI0Cg5CYWxhbmNlQXRSZXBseRIiCgdiYWxhbmNlGAEgASgLMhEudmFsdWVzLnYxLkJpZ0ludCJPChJFc3RpbWF0ZUdhc1JlcXVlc3QSOQoDbXNnGAEgASgLMiwuY2FwYWJpbGl0aWVzLmJsb2NrY2hhaW4uZXZtLnYxYWxwaGEuQ2FsbE1zZyIjChBFc3RpbWF0ZUdhc1JlcGx5Eg8KA2dhcxgBIAEoBEICMAAiKwobR2V0VHJhbnNhY3Rpb25CeUhhc2hSZXF1ZXN0EgwKBGhhc2gYASABKAwiYgoZR2V0VHJhbnNhY3Rpb25CeUhhc2hSZXBseRJFCgt0cmFuc2FjdGlvbhgBIAEoCzIwLmNhcGFiaWxpdGllcy5ibG9ja2NoYWluLmV2bS52MWFscGhhLlRyYW5zYWN0aW9uIqEBCgtUcmFuc2FjdGlvbhIRCgVub25jZRgBIAEoBEICMAASDwoDZ2FzGAIgASgEQgIwABIKCgJ0bxgDIAEoDBIMCgRkYXRhGAQgASgMEgwKBGhhc2gYBSABKAwSIAoFdmFsdWUYBiABKAsyES52YWx1ZXMudjEuQmlnSW50EiQKCWdhc19wcmljZRgHIAEoCzIRLnZhbHVlcy52MS5CaWdJbnQiLAocR2V0VHJhbnNhY3Rpb25SZWNlaXB0UmVxdWVzdBIMCgRoYXNoGAEgASgMIlsKGkdldFRyYW5zYWN0aW9uUmVjZWlwdFJlcGx5Ej0KB3JlY2VpcHQYASABKAsyLC5jYXBhYmlsaXRpZXMuYmxvY2tjaGFpbi5ldm0udjFhbHBoYS5SZWNlaXB0IpkCCgdSZWNlaXB0EhIKBnN0YXR1cxgBIAEoBEICMAASFAoIZ2FzX3VzZWQYAiABKARCAjAAEhQKCHR4X2luZGV4GAMgASgEQgIwABISCgpibG9ja19oYXNoGAQgASgMEjYKBGxvZ3MYBiADKAsyKC5jYXBhYmlsaXRpZXMuYmxvY2tjaGFpbi5ldm0udjFhbHBoYS5Mb2cSDwoHdHhfaGFzaBgHIAEoDBIuChNlZmZlY3RpdmVfZ2FzX3ByaWNlGAggASgLMhEudmFsdWVzLnYxLkJpZ0ludBInCgxibG9ja19udW1iZXIYCSABKAsyES52YWx1ZXMudjEuQmlnSW50EhgKEGNvbnRyYWN0X2FkZHJlc3MYCiABKAwiQAoVSGVhZGVyQnlOdW1iZXJSZXF1ZXN0EicKDGJsb2NrX251bWJlchgBIAEoCzIRLnZhbHVlcy52MS5CaWdJbnQiUgoTSGVhZGVyQnlOdW1iZXJSZXBseRI7CgZoZWFkZXIYASABKAsyKy5jYXBhYmlsaXRpZXMuYmxvY2tjaGFpbi5ldm0udjFhbHBoYS5IZWFkZXIiawoGSGVhZGVyEhUKCXRpbWVzdGFtcBgBIAEoBEICMAASJwoMYmxvY2tfbnVtYmVyGAIgASgLMhEudmFsdWVzLnYxLkJpZ0ludBIMCgRoYXNoGAMgASgMEhMKC3BhcmVudF9oYXNoGAQgASgMIlsKGlJlZ2lzdGVyTG9nVHJhY2tpbmdSZXF1ZXN0Ej0KBmZpbHRlchgBIAEoCzItLmNhcGFiaWxpdGllcy5ibG9ja2NoYWluLmV2bS52MWFscGhhLkxQRmlsdGVyIsIBCghMUEZpbHRlchIZCg1tYXhfbG9nc19rZXB0GAEgASgEQgIwABIaCg5yZXRlbnRpb25fdGltZRgCIAEoA0ICMAASGgoObG9nc19wZXJfYmxvY2sYAyABKARCAjAAEgwKBG5hbWUYBCABKAkSEQoJYWRkcmVzc2VzGAUgAygMEhIKCmV2ZW50X3NpZ3MYBiADKAwSDgoGdG9waWMyGAcgAygMEg4KBnRvcGljMxgIIAMoDBIOCgZ0b3BpYzQYCSADKAwiMwocVW5yZWdpc3RlckxvZ1RyYWNraW5nUmVxdWVzdBITCgtmaWx0ZXJfbmFtZRgBIAEoCSKrAQoSV3JpdGVSZXBvcnRSZXF1ZXN0EhAKCHJlY2VpdmVyGAEgASgMEisKBnJlcG9ydBgCIAEoCzIbLnNkay52MWFscGhhLlJlcG9ydFJlc3BvbnNlEkcKCmdhc19jb25maWcYAyABKAsyLi5jYXBhYmlsaXRpZXMuYmxvY2tjaGFpbi5ldm0udjFhbHBoYS5HYXNDb25maWdIAIgBAUINCgtfZ2FzX2NvbmZpZyIiCglHYXNDb25maWcSFQoJZ2FzX2xpbWl0GAEgASgEQgIwACKHAwoQV3JpdGVSZXBvcnRSZXBseRJACgl0eF9zdGF0dXMYASABKA4yLS5jYXBhYmlsaXRpZXMuYmxvY2tjaGFpbi5ldm0udjFhbHBoYS5UeFN0YXR1cxJ1CiJyZWNlaXZlcl9jb250cmFjdF9leGVjdXRpb25fc3RhdHVzGAIgASgOMkQuY2FwYWJpbGl0aWVzLmJsb2NrY2hhaW4uZXZtLnYxYWxwaGEuUmVjZWl2ZXJDb250cmFjdEV4ZWN1dGlvblN0YXR1c0gAiAEBEhQKB3R4X2hhc2gYAyABKAxIAYgBARIvCg90cmFuc2FjdGlvbl9mZWUYBCABKAsyES52YWx1ZXMudjEuQmlnSW50SAKIAQESGgoNZXJyb3JfbWVzc2FnZRgFIAEoCUgDiAEBQiUKI19yZWNlaXZlcl9jb250cmFjdF9leGVjdXRpb25fc3RhdHVzQgoKCF90eF9oYXNoQhIKEF90cmFuc2FjdGlvbl9mZWVCEAoOX2Vycm9yX21lc3NhZ2UqaQoPQ29uZmlkZW5jZUxldmVsEhkKFUNPTkZJREVOQ0VfTEVWRUxfU0FGRRAAEhsKF0NPTkZJREVOQ0VfTEVWRUxfTEFURVNUEAESHgoaQ09ORklERU5DRV9MRVZFTF9GSU5BTElaRUQQAiqCAQofUmVjZWl2ZXJDb250cmFjdEV4ZWN1dGlvblN0YXR1cxIuCipSRUNFSVZFUl9DT05UUkFDVF9FWEVDVVRJT05fU1RBVFVTX1NVQ0NFU1MQABIvCitSRUNFSVZFUl9DT05UUkFDVF9FWEVDVVRJT05fU1RBVFVTX1JFVkVSVEVEEAEqTgoIVHhTdGF0dXMSEwoPVFhfU1RBVFVTX0ZBVEFMEAASFgoSVFhfU1RBVFVTX1JFVkVSVEVEEAESFQoRVFhfU1RBVFVTX1NVQ0NFU1MQAjLXDwoGQ2xpZW50EoABCgxDYWxsQ29udHJhY3QSOC5jYXBhYmlsaXRpZXMuYmxvY2tjaGFpbi5ldm0udjFhbHBoYS5DYWxsQ29udHJhY3RSZXF1ZXN0GjYuY2FwYWJpbGl0aWVzLmJsb2NrY2hhaW4uZXZtLnYxYWxwaGEuQ2FsbENvbnRyYWN0UmVwbHkSegoKRmlsdGVyTG9ncxI2LmNhcGFiaWxpdGllcy5ibG9ja2NoYWluLmV2bS52MWFscGhhLkZpbHRlckxvZ3NSZXF1ZXN0GjQuY2FwYWJpbGl0aWVzLmJsb2NrY2hhaW4uZXZtLnYxYWxwaGEuRmlsdGVyTG9nc1JlcGx5EncKCUJhbGFuY2VBdBI1LmNhcGFiaWxpdGllcy5ibG9ja2NoYWluLmV2bS52MWFscGhhLkJhbGFuY2VBdFJlcXVlc3QaMy5jYXBhYmlsaXRpZXMuYmxvY2tjaGFpbi5ldm0udjFhbHBoYS5CYWxhbmNlQXRSZXBseRJ9CgtFc3RpbWF0ZUdhcxI3LmNhcGFiaWxpdGllcy5ibG9ja2NoYWluLmV2bS52MWFscGhhLkVzdGltYXRlR2FzUmVxdWVzdBo1LmNhcGFiaWxpdGllcy5ibG9ja2NoYWluLmV2bS52MWFscGhhLkVzdGltYXRlR2FzUmVwbHkSmAEKFEdldFRyYW5zYWN0aW9uQnlIYXNoEkAuY2FwYWJpbGl0aWVzLmJsb2NrY2hhaW4uZXZtLnYxYWxwaGEuR2V0VHJhbnNhY3Rpb25CeUhhc2hSZXF1ZXN0Gj4uY2FwYWJpbGl0aWVzLmJsb2NrY2hhaW4uZXZtLnYxYWxwaGEuR2V0VHJhbnNhY3Rpb25CeUhhc2hSZXBseRKbAQoVR2V0VHJhbnNhY3Rpb25SZWNlaXB0EkEuY2FwYWJpbGl0aWVzLmJsb2NrY2hhaW4uZXZtLnYxYWxwaGEuR2V0VHJhbnNhY3Rpb25SZWNlaXB0UmVxdWVzdBo/LmNhcGFiaWxpdGllcy5ibG9ja2NoYWluLmV2bS52MWFscGhhLkdldFRyYW5zYWN0aW9uUmVjZWlwdFJlcGx5EoYBCg5IZWFkZXJCeU51bWJlchI6LmNhcGFiaWxpdGllcy5ibG9ja2NoYWluLmV2bS52MWFscGhhLkhlYWRlckJ5TnVtYmVyUmVxdWVzdBo4LmNhcGFiaWxpdGllcy5ibG9ja2NoYWluLmV2bS52MWFscGhhLkhlYWRlckJ5TnVtYmVyUmVwbHkSbgoTUmVnaXN0ZXJMb2dUcmFja2luZxI/LmNhcGFiaWxpdGllcy5ibG9ja2NoYWluLmV2bS52MWFscGhhLlJlZ2lzdGVyTG9nVHJhY2tpbmdSZXF1ZXN0GhYuZ29vZ2xlLnByb3RvYnVmLkVtcHR5EnIKFVVucmVnaXN0ZXJMb2dUcmFja2luZxJBLmNhcGFiaWxpdGllcy5ibG9ja2NoYWluLmV2bS52MWFscGhhLlVucmVnaXN0ZXJMb2dUcmFja2luZ1JlcXVlc3QaFi5nb29nbGUucHJvdG9idWYuRW1wdHkSdgoKTG9nVHJpZ2dlchI8LmNhcGFiaWxpdGllcy5ibG9ja2NoYWluLmV2bS52MWFscGhhLkZpbHRlckxvZ1RyaWdnZXJSZXF1ZXN0GiguY2FwYWJpbGl0aWVzLmJsb2NrY2hhaW4uZXZtLnYxYWxwaGEuTG9nMAESfQoLV3JpdGVSZXBvcnQSNy5jYXBhYmlsaXRpZXMuYmxvY2tjaGFpbi5ldm0udjFhbHBoYS5Xcml0ZVJlcG9ydFJlcXVlc3QaNS5jYXBhYmlsaXRpZXMuYmxvY2tjaGFpbi5ldm0udjFhbHBoYS5Xcml0ZVJlcG9ydFJlcGx5GrgEgrUYswQIARIJZXZtQDEuMC4wGqMECg1DaGFpblNlbGVjdG9yEpEEEo4ECh0KEWF2YWxhbmNoZS1tYWlubmV0ENXnisDh1ZikWQojChZhdmFsYW5jaGUtdGVzdG5ldC1mdWppEJv5/JCi46j4zAEKLwojYmluYW5jZV9zbWFydF9jaGFpbi1tYWlubmV0LW9wYm5iLTEQia2P75PG17sGCjAKI2JpbmFuY2Vfc21hcnRfY2hhaW4tdGVzdG5ldC1vcGJuYi0xEI71hZHBg4+cuAEKHAoQZXRoZXJldW0tbWFpbm5ldBCV9vHkz7KmwkUKJwobZXRoZXJldW0tbWFpbm5ldC1hcmJpdHJ1bS0xEMTojc2Om6HXRAonChtldGhlcmV1bS1tYWlubmV0LW9wdGltaXNtLTEQuJWPw/f+0OkzCiUKGGV0aGVyZXVtLXRlc3RuZXQtc2Vwb2xpYRDZteTO/MnuoN4BCi8KI2V0aGVyZXVtLXRlc3RuZXQtc2Vwb2xpYS1hcmJpdHJ1bS0xEOrO7v/qtoSjMAosCh9ldGhlcmV1bS10ZXN0bmV0LXNlcG9saWEtYmFzZS0xELjKue/2kK7IjwEKLwojZXRoZXJldW0tdGVzdG5ldC1zZXBvbGlhLW9wdGltaXNtLTEQn4bFob7Yw8BIChsKD3BvbHlnb24tbWFpbm5ldBCxq+TwmpKGnTgKIQoUcG9seWdvbi10ZXN0bmV0LWFtb3kQzY/W3/HHkPrhAULlAQonY29tLmNhcGFiaWxpdGllcy5ibG9ja2NoYWluLmV2bS52MWFscGhhQgtDbGllbnRQcm90b1ABogIDQ0JFqgIjQ2FwYWJpbGl0aWVzLkJsb2NrY2hhaW4uRXZtLlYxYWxwaGHKAiNDYXBhYmlsaXRpZXNcQmxvY2tjaGFpblxFdm1cVjFhbHBoYeICL0NhcGFiaWxpdGllc1xCbG9ja2NoYWluXEV2bVxWMWFscGhhXEdQQk1ldGFkYXRh6gImQ2FwYWJpbGl0aWVzOjpCbG9ja2NoYWluOjpFdm06OlYxYWxwaGFiBnByb3RvMw", [
+  file_google_protobuf_empty2,
+  file_sdk_v1alpha_sdk2,
+  file_tools_generator_v1alpha_cre_metadata2,
+  file_values_v1_values2
+]);
+var FilterLogTriggerRequestSchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 1);
+var CallContractRequestSchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 2);
+var CallContractReplySchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 3);
+var FilterLogsRequestSchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 4);
+var FilterLogsReplySchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 5);
+var LogSchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 6);
+var BalanceAtRequestSchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 10);
+var BalanceAtReplySchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 11);
+var EstimateGasRequestSchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 12);
+var EstimateGasReplySchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 13);
+var GetTransactionByHashRequestSchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 14);
+var GetTransactionByHashReplySchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 15);
+var GetTransactionReceiptRequestSchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 17);
+var GetTransactionReceiptReplySchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 18);
+var HeaderByNumberRequestSchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 20);
+var HeaderByNumberReplySchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 21);
+var RegisterLogTrackingRequestSchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 23);
+var UnregisterLogTrackingRequestSchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 25);
+var WriteReportRequestSchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 26);
+var GasConfigSchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 27);
+var WriteReportReplySchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_blockchain_evm_v1alpha_client2, 28);
 var ConfidenceLevel2;
 (function(ConfidenceLevel3) {
   ConfidenceLevel3[ConfidenceLevel3["SAFE"] = 0] = "SAFE";
@@ -51339,6 +51367,320 @@ var TxStatus2;
   TxStatus3[TxStatus3["REVERTED"] = 1] = "REVERTED";
   TxStatus3[TxStatus3["SUCCESS"] = 2] = "SUCCESS";
 })(TxStatus2 || (TxStatus2 = {}));
+var hexToBytes5 = (hexStr) => {
+  if (!hexStr.startsWith("0x")) {
+    throw new Error(`Invalid hex string: ${hexStr}`);
+  }
+  if (!/^0x[0-9a-fA-F]*$/.test(hexStr)) {
+    throw new Error(`Invalid hex string: ${hexStr}`);
+  }
+  if ((hexStr.length - 2) % 2 !== 0) {
+    throw new Error(`Hex string must have an even number of characters: ${hexStr}`);
+  }
+  const hex2 = hexStr.slice(2);
+  const bytes = new Uint8Array(hex2.length / 2);
+  for (let i2 = 0;i2 < hex2.length; i2 += 2) {
+    bytes[i2 / 2] = Number.parseInt(hex2.slice(i2, i2 + 2), 16);
+  }
+  return bytes;
+};
+var bytesToHex5 = (bytes) => {
+  return `0x${Array.from(bytes).map((b) => b.toString(16).padStart(2, "0")).join("")}`;
+};
+var hexToBase642 = (hex2) => {
+  const cleanHex = hex2.startsWith("0x") ? hex2.slice(2) : hex2;
+  return Buffer.from(cleanHex, "hex").toString("base64");
+};
+function createWriteCreReportRequest2(input) {
+  return {
+    receiver: hexToBytes5(input.receiver),
+    report: input.report,
+    gasConfig: input.gasConfig !== undefined ? fromJson2(GasConfigSchema2, input.gasConfig) : undefined,
+    $report: true
+  };
+}
+function x_generatedCodeOnly_unwrap_WriteCreReportRequest2(input) {
+  return create3(WriteReportRequestSchema2, {
+    receiver: input.receiver,
+    report: input.report !== undefined ? input.report.x_generatedCodeOnly_unwrap() : undefined,
+    gasConfig: input.gasConfig
+  });
+}
+
+class ClientCapability3 {
+  chainSelector;
+  static CAPABILITY_ID = "evm@1.0.0";
+  static CAPABILITY_NAME = "evm";
+  static CAPABILITY_VERSION = "1.0.0";
+  static SUPPORTED_CHAINS = {
+    "avalanche-mainnet": 6433500567565415381n,
+    "avalanche-testnet-fuji": 14767482510784806043n,
+    "binance_smart_chain-mainnet-opbnb-1": 465944652040885897n,
+    "binance_smart_chain-testnet-opbnb-1": 13274425992935471758n,
+    "ethereum-mainnet": 5009297550715157269n,
+    "ethereum-mainnet-arbitrum-1": 4949039107694359620n,
+    "ethereum-mainnet-optimism-1": 3734403246176062136n,
+    "ethereum-testnet-sepolia": 16015286601757825753n,
+    "ethereum-testnet-sepolia-arbitrum-1": 3478487238524512106n,
+    "ethereum-testnet-sepolia-base-1": 10344971235874465080n,
+    "ethereum-testnet-sepolia-optimism-1": 5224473277236331295n,
+    "polygon-mainnet": 4051577828743386545n,
+    "polygon-testnet-amoy": 16281711391670634445n
+  };
+  constructor(chainSelector) {
+    this.chainSelector = chainSelector;
+  }
+  callContract(runtime2, input) {
+    let payload;
+    if (input.$typeName) {
+      payload = input;
+    } else {
+      payload = fromJson2(CallContractRequestSchema2, input);
+    }
+    const capabilityId = this.chainSelector ? `${ClientCapability3.CAPABILITY_NAME}:ChainSelector:${this.chainSelector}@${ClientCapability3.CAPABILITY_VERSION}` : ClientCapability3.CAPABILITY_ID;
+    const capabilityResponse = runtime2.callCapability({
+      capabilityId,
+      method: "CallContract",
+      payload,
+      inputSchema: CallContractRequestSchema2,
+      outputSchema: CallContractReplySchema2
+    });
+    return {
+      result: () => {
+        const result = capabilityResponse.result();
+        return result;
+      }
+    };
+  }
+  filterLogs(runtime2, input) {
+    let payload;
+    if (input.$typeName) {
+      payload = input;
+    } else {
+      payload = fromJson2(FilterLogsRequestSchema2, input);
+    }
+    const capabilityId = this.chainSelector ? `${ClientCapability3.CAPABILITY_NAME}:ChainSelector:${this.chainSelector}@${ClientCapability3.CAPABILITY_VERSION}` : ClientCapability3.CAPABILITY_ID;
+    const capabilityResponse = runtime2.callCapability({
+      capabilityId,
+      method: "FilterLogs",
+      payload,
+      inputSchema: FilterLogsRequestSchema2,
+      outputSchema: FilterLogsReplySchema2
+    });
+    return {
+      result: () => {
+        const result = capabilityResponse.result();
+        return result;
+      }
+    };
+  }
+  balanceAt(runtime2, input) {
+    let payload;
+    if (input.$typeName) {
+      payload = input;
+    } else {
+      payload = fromJson2(BalanceAtRequestSchema2, input);
+    }
+    const capabilityId = this.chainSelector ? `${ClientCapability3.CAPABILITY_NAME}:ChainSelector:${this.chainSelector}@${ClientCapability3.CAPABILITY_VERSION}` : ClientCapability3.CAPABILITY_ID;
+    const capabilityResponse = runtime2.callCapability({
+      capabilityId,
+      method: "BalanceAt",
+      payload,
+      inputSchema: BalanceAtRequestSchema2,
+      outputSchema: BalanceAtReplySchema2
+    });
+    return {
+      result: () => {
+        const result = capabilityResponse.result();
+        return result;
+      }
+    };
+  }
+  estimateGas(runtime2, input) {
+    let payload;
+    if (input.$typeName) {
+      payload = input;
+    } else {
+      payload = fromJson2(EstimateGasRequestSchema2, input);
+    }
+    const capabilityId = this.chainSelector ? `${ClientCapability3.CAPABILITY_NAME}:ChainSelector:${this.chainSelector}@${ClientCapability3.CAPABILITY_VERSION}` : ClientCapability3.CAPABILITY_ID;
+    const capabilityResponse = runtime2.callCapability({
+      capabilityId,
+      method: "EstimateGas",
+      payload,
+      inputSchema: EstimateGasRequestSchema2,
+      outputSchema: EstimateGasReplySchema2
+    });
+    return {
+      result: () => {
+        const result = capabilityResponse.result();
+        return result;
+      }
+    };
+  }
+  getTransactionByHash(runtime2, input) {
+    let payload;
+    if (input.$typeName) {
+      payload = input;
+    } else {
+      payload = fromJson2(GetTransactionByHashRequestSchema2, input);
+    }
+    const capabilityId = this.chainSelector ? `${ClientCapability3.CAPABILITY_NAME}:ChainSelector:${this.chainSelector}@${ClientCapability3.CAPABILITY_VERSION}` : ClientCapability3.CAPABILITY_ID;
+    const capabilityResponse = runtime2.callCapability({
+      capabilityId,
+      method: "GetTransactionByHash",
+      payload,
+      inputSchema: GetTransactionByHashRequestSchema2,
+      outputSchema: GetTransactionByHashReplySchema2
+    });
+    return {
+      result: () => {
+        const result = capabilityResponse.result();
+        return result;
+      }
+    };
+  }
+  getTransactionReceipt(runtime2, input) {
+    let payload;
+    if (input.$typeName) {
+      payload = input;
+    } else {
+      payload = fromJson2(GetTransactionReceiptRequestSchema2, input);
+    }
+    const capabilityId = this.chainSelector ? `${ClientCapability3.CAPABILITY_NAME}:ChainSelector:${this.chainSelector}@${ClientCapability3.CAPABILITY_VERSION}` : ClientCapability3.CAPABILITY_ID;
+    const capabilityResponse = runtime2.callCapability({
+      capabilityId,
+      method: "GetTransactionReceipt",
+      payload,
+      inputSchema: GetTransactionReceiptRequestSchema2,
+      outputSchema: GetTransactionReceiptReplySchema2
+    });
+    return {
+      result: () => {
+        const result = capabilityResponse.result();
+        return result;
+      }
+    };
+  }
+  headerByNumber(runtime2, input) {
+    let payload;
+    if (input.$typeName) {
+      payload = input;
+    } else {
+      payload = fromJson2(HeaderByNumberRequestSchema2, input);
+    }
+    const capabilityId = this.chainSelector ? `${ClientCapability3.CAPABILITY_NAME}:ChainSelector:${this.chainSelector}@${ClientCapability3.CAPABILITY_VERSION}` : ClientCapability3.CAPABILITY_ID;
+    const capabilityResponse = runtime2.callCapability({
+      capabilityId,
+      method: "HeaderByNumber",
+      payload,
+      inputSchema: HeaderByNumberRequestSchema2,
+      outputSchema: HeaderByNumberReplySchema2
+    });
+    return {
+      result: () => {
+        const result = capabilityResponse.result();
+        return result;
+      }
+    };
+  }
+  registerLogTracking(runtime2, input) {
+    let payload;
+    if (input.$typeName) {
+      payload = input;
+    } else {
+      payload = fromJson2(RegisterLogTrackingRequestSchema2, input);
+    }
+    const capabilityId = this.chainSelector ? `${ClientCapability3.CAPABILITY_NAME}:ChainSelector:${this.chainSelector}@${ClientCapability3.CAPABILITY_VERSION}` : ClientCapability3.CAPABILITY_ID;
+    const capabilityResponse = runtime2.callCapability({
+      capabilityId,
+      method: "RegisterLogTracking",
+      payload,
+      inputSchema: RegisterLogTrackingRequestSchema2,
+      outputSchema: EmptySchema2
+    });
+    return {
+      result: () => {
+        const result = capabilityResponse.result();
+        return result;
+      }
+    };
+  }
+  unregisterLogTracking(runtime2, input) {
+    let payload;
+    if (input.$typeName) {
+      payload = input;
+    } else {
+      payload = fromJson2(UnregisterLogTrackingRequestSchema2, input);
+    }
+    const capabilityId = this.chainSelector ? `${ClientCapability3.CAPABILITY_NAME}:ChainSelector:${this.chainSelector}@${ClientCapability3.CAPABILITY_VERSION}` : ClientCapability3.CAPABILITY_ID;
+    const capabilityResponse = runtime2.callCapability({
+      capabilityId,
+      method: "UnregisterLogTracking",
+      payload,
+      inputSchema: UnregisterLogTrackingRequestSchema2,
+      outputSchema: EmptySchema2
+    });
+    return {
+      result: () => {
+        const result = capabilityResponse.result();
+        return result;
+      }
+    };
+  }
+  logTrigger(config2) {
+    const capabilityId = this.chainSelector ? `${ClientCapability3.CAPABILITY_NAME}:ChainSelector:${this.chainSelector}@${ClientCapability3.CAPABILITY_VERSION}` : ClientCapability3.CAPABILITY_ID;
+    return new ClientLogTrigger2(config2, capabilityId, "LogTrigger");
+  }
+  writeReport(runtime2, input) {
+    let payload;
+    if (input.$report) {
+      payload = x_generatedCodeOnly_unwrap_WriteCreReportRequest2(input);
+    } else {
+      payload = x_generatedCodeOnly_unwrap_WriteCreReportRequest2(createWriteCreReportRequest2(input));
+    }
+    const capabilityId = this.chainSelector ? `${ClientCapability3.CAPABILITY_NAME}:ChainSelector:${this.chainSelector}@${ClientCapability3.CAPABILITY_VERSION}` : ClientCapability3.CAPABILITY_ID;
+    const capabilityResponse = runtime2.callCapability({
+      capabilityId,
+      method: "WriteReport",
+      payload,
+      inputSchema: WriteReportRequestSchema2,
+      outputSchema: WriteReportReplySchema2
+    });
+    return {
+      result: () => {
+        const result = capabilityResponse.result();
+        return result;
+      }
+    };
+  }
+}
+
+class ClientLogTrigger2 {
+  _capabilityId;
+  _method;
+  config;
+  constructor(config2, _capabilityId, _method) {
+    this._capabilityId = _capabilityId;
+    this._method = _method;
+    this.config = config2.$typeName ? config2 : fromJson2(FilterLogTriggerRequestSchema2, config2);
+  }
+  capabilityId() {
+    return this._capabilityId;
+  }
+  method() {
+    return this._method;
+  }
+  outputSchema() {
+    return LogSchema2;
+  }
+  configAsAny() {
+    return anyPack2(FilterLogTriggerRequestSchema2, this.config);
+  }
+  adapt(rawOutput) {
+    return rawOutput;
+  }
+}
 var file_capabilities_networking_http_v1alpha_client2 = /* @__PURE__ */ fileDesc2("CjFjYXBhYmlsaXRpZXMvbmV0d29ya2luZy9odHRwL3YxYWxwaGEvY2xpZW50LnByb3RvEiRjYXBhYmlsaXRpZXMubmV0d29ya2luZy5odHRwLnYxYWxwaGEiPAoNQ2FjaGVTZXR0aW5ncxIXCg9yZWFkX2Zyb21fY2FjaGUYASABKAgSEgoKbWF4X2FnZV9tcxgCIAEoBSKSAgoHUmVxdWVzdBILCgN1cmwYASABKAkSDgoGbWV0aG9kGAIgASgJEksKB2hlYWRlcnMYAyADKAsyOi5jYXBhYmlsaXRpZXMubmV0d29ya2luZy5odHRwLnYxYWxwaGEuUmVxdWVzdC5IZWFkZXJzRW50cnkSDAoEYm9keRgEIAEoDBISCgp0aW1lb3V0X21zGAUgASgFEksKDmNhY2hlX3NldHRpbmdzGAYgASgLMjMuY2FwYWJpbGl0aWVzLm5ldHdvcmtpbmcuaHR0cC52MWFscGhhLkNhY2hlU2V0dGluZ3MaLgoMSGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEiqwEKCFJlc3BvbnNlEhMKC3N0YXR1c19jb2RlGAEgASgNEkwKB2hlYWRlcnMYAiADKAsyOy5jYXBhYmlsaXRpZXMubmV0d29ya2luZy5odHRwLnYxYWxwaGEuUmVzcG9uc2UuSGVhZGVyc0VudHJ5EgwKBGJvZHkYAyABKAwaLgoMSGVhZGVyc0VudHJ5EgsKA2tleRgBIAEoCRINCgV2YWx1ZRgCIAEoCToCOAEymAEKBkNsaWVudBJsCgtTZW5kUmVxdWVzdBItLmNhcGFiaWxpdGllcy5uZXR3b3JraW5nLmh0dHAudjFhbHBoYS5SZXF1ZXN0Gi4uY2FwYWJpbGl0aWVzLm5ldHdvcmtpbmcuaHR0cC52MWFscGhhLlJlc3BvbnNlGiCCtRgcCAISGGh0dHAtYWN0aW9uc0AxLjAuMC1hbHBoYULqAQooY29tLmNhcGFiaWxpdGllcy5uZXR3b3JraW5nLmh0dHAudjFhbHBoYUILQ2xpZW50UHJvdG9QAaICA0NOSKoCJENhcGFiaWxpdGllcy5OZXR3b3JraW5nLkh0dHAuVjFhbHBoYcoCJENhcGFiaWxpdGllc1xOZXR3b3JraW5nXEh0dHBcVjFhbHBoYeICMENhcGFiaWxpdGllc1xOZXR3b3JraW5nXEh0dHBcVjFhbHBoYVxHUEJNZXRhZGF0YeoCJ0NhcGFiaWxpdGllczo6TmV0d29ya2luZzo6SHR0cDo6VjFhbHBoYWIGcHJvdG8z", [file_tools_generator_v1alpha_cre_metadata2]);
 var RequestSchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_networking_http_v1alpha_client2, 1);
 var ResponseSchema2 = /* @__PURE__ */ messageDesc2(file_capabilities_networking_http_v1alpha_client2, 2);
@@ -51355,7 +51697,7 @@ class SendRequester2 {
   }
 }
 
-class ClientCapability3 {
+class ClientCapability4 {
   static CAPABILITY_ID = "http-actions@1.0.0-alpha";
   static CAPABILITY_NAME = "http-actions";
   static CAPABILITY_VERSION = "1.0.0-alpha";
@@ -51374,7 +51716,7 @@ class ClientCapability3 {
     } else {
       payload = fromJson2(RequestSchema2, input);
     }
-    const capabilityId = ClientCapability3.CAPABILITY_ID;
+    const capabilityId = ClientCapability4.CAPABILITY_ID;
     const capabilityResponse = runtime2.callCapability({
       capabilityId,
       method: "SendRequest",
@@ -51397,15 +51739,106 @@ class ClientCapability3 {
     return runtime2.runInNodeMode(wrappedFn, consensusAggregation, unwrapOptions);
   }
 }
+var file_capabilities_networking_http_v1alpha_trigger2 = /* @__PURE__ */ fileDesc2("CjJjYXBhYmlsaXRpZXMvbmV0d29ya2luZy9odHRwL3YxYWxwaGEvdHJpZ2dlci5wcm90bxIkY2FwYWJpbGl0aWVzLm5ldHdvcmtpbmcuaHR0cC52MWFscGhhIlYKBkNvbmZpZxJMCg9hdXRob3JpemVkX2tleXMYASADKAsyMy5jYXBhYmlsaXRpZXMubmV0d29ya2luZy5odHRwLnYxYWxwaGEuQXV0aG9yaXplZEtleSJaCgdQYXlsb2FkEg0KBWlucHV0GAEgASgMEkAKA2tleRgCIAEoCzIzLmNhcGFiaWxpdGllcy5uZXR3b3JraW5nLmh0dHAudjFhbHBoYS5BdXRob3JpemVkS2V5ImAKDUF1dGhvcml6ZWRLZXkSOwoEdHlwZRgBIAEoDjItLmNhcGFiaWxpdGllcy5uZXR3b3JraW5nLmh0dHAudjFhbHBoYS5LZXlUeXBlEhIKCnB1YmxpY19rZXkYAiABKAkqOwoHS2V5VHlwZRIYChRLRVlfVFlQRV9VTlNQRUNJRklFRBAAEhYKEktFWV9UWVBFX0VDRFNBX0VWTRABMpIBCgRIVFRQEmgKB1RyaWdnZXISLC5jYXBhYmlsaXRpZXMubmV0d29ya2luZy5odHRwLnYxYWxwaGEuQ29uZmlnGi0uY2FwYWJpbGl0aWVzLm5ldHdvcmtpbmcuaHR0cC52MWFscGhhLlBheWxvYWQwARoggrUYHAgBEhhodHRwLXRyaWdnZXJAMS4wLjAtYWxwaGFC6wEKKGNvbS5jYXBhYmlsaXRpZXMubmV0d29ya2luZy5odHRwLnYxYWxwaGFCDFRyaWdnZXJQcm90b1ABogIDQ05IqgIkQ2FwYWJpbGl0aWVzLk5ldHdvcmtpbmcuSHR0cC5WMWFscGhhygIkQ2FwYWJpbGl0aWVzXE5ldHdvcmtpbmdcSHR0cFxWMWFscGhh4gIwQ2FwYWJpbGl0aWVzXE5ldHdvcmtpbmdcSHR0cFxWMWFscGhhXEdQQk1ldGFkYXRh6gInQ2FwYWJpbGl0aWVzOjpOZXR3b3JraW5nOjpIdHRwOjpWMWFscGhhYgZwcm90bzM", [file_tools_generator_v1alpha_cre_metadata2]);
+var ConfigSchema3 = /* @__PURE__ */ messageDesc2(file_capabilities_networking_http_v1alpha_trigger2, 0);
+var PayloadSchema3 = /* @__PURE__ */ messageDesc2(file_capabilities_networking_http_v1alpha_trigger2, 1);
 var KeyType2;
 (function(KeyType3) {
   KeyType3[KeyType3["UNSPECIFIED"] = 0] = "UNSPECIFIED";
   KeyType3[KeyType3["ECDSA_EVM"] = 1] = "ECDSA_EVM";
 })(KeyType2 || (KeyType2 = {}));
+
+class HTTPCapability2 {
+  static CAPABILITY_ID = "http-trigger@1.0.0-alpha";
+  static CAPABILITY_NAME = "http-trigger";
+  static CAPABILITY_VERSION = "1.0.0-alpha";
+  trigger(config2) {
+    const capabilityId = HTTPCapability2.CAPABILITY_ID;
+    return new HTTPTrigger2(config2, capabilityId, "Trigger");
+  }
+}
+
+class HTTPTrigger2 {
+  _capabilityId;
+  _method;
+  config;
+  constructor(config2, _capabilityId, _method) {
+    this._capabilityId = _capabilityId;
+    this._method = _method;
+    this.config = config2.$typeName ? config2 : fromJson2(ConfigSchema3, config2);
+  }
+  capabilityId() {
+    return this._capabilityId;
+  }
+  method() {
+    return this._method;
+  }
+  outputSchema() {
+    return PayloadSchema3;
+  }
+  configAsAny() {
+    return anyPack2(ConfigSchema3, this.config);
+  }
+  adapt(rawOutput) {
+    return rawOutput;
+  }
+}
+var file_capabilities_scheduler_cron_v1_trigger2 = /* @__PURE__ */ fileDesc2("CixjYXBhYmlsaXRpZXMvc2NoZWR1bGVyL2Nyb24vdjEvdHJpZ2dlci5wcm90bxIeY2FwYWJpbGl0aWVzLnNjaGVkdWxlci5jcm9uLnYxIhoKBkNvbmZpZxIQCghzY2hlZHVsZRgBIAEoCSJHCgdQYXlsb2FkEjwKGHNjaGVkdWxlZF9leGVjdXRpb25fdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiNQoNTGVnYWN5UGF5bG9hZBIgChhzY2hlZHVsZWRfZXhlY3V0aW9uX3RpbWUYASABKAk6AhgBMvUBCgRDcm9uElwKB1RyaWdnZXISJi5jYXBhYmlsaXRpZXMuc2NoZWR1bGVyLmNyb24udjEuQ29uZmlnGicuY2FwYWJpbGl0aWVzLnNjaGVkdWxlci5jcm9uLnYxLlBheWxvYWQwARJzCg1MZWdhY3lUcmlnZ2VyEiYuY2FwYWJpbGl0aWVzLnNjaGVkdWxlci5jcm9uLnYxLkNvbmZpZxotLmNhcGFiaWxpdGllcy5zY2hlZHVsZXIuY3Jvbi52MS5MZWdhY3lQYXlsb2FkIgmIAgGKtRgCCAEwARoagrUYFggBEhJjcm9uLXRyaWdnZXJAMS4wLjBCzQEKImNvbS5jYXBhYmlsaXRpZXMuc2NoZWR1bGVyLmNyb24udjFCDFRyaWdnZXJQcm90b1ABogIDQ1NDqgIeQ2FwYWJpbGl0aWVzLlNjaGVkdWxlci5Dcm9uLlYxygIeQ2FwYWJpbGl0aWVzXFNjaGVkdWxlclxDcm9uXFYx4gIqQ2FwYWJpbGl0aWVzXFNjaGVkdWxlclxDcm9uXFYxXEdQQk1ldGFkYXRh6gIhQ2FwYWJpbGl0aWVzOjpTY2hlZHVsZXI6OkNyb246OlYxYgZwcm90bzM", [file_google_protobuf_timestamp2, file_tools_generator_v1alpha_cre_metadata2]);
+var ConfigSchema4 = /* @__PURE__ */ messageDesc2(file_capabilities_scheduler_cron_v1_trigger2, 0);
+var PayloadSchema4 = /* @__PURE__ */ messageDesc2(file_capabilities_scheduler_cron_v1_trigger2, 1);
+
+class CronCapability2 {
+  static CAPABILITY_ID = "cron-trigger@1.0.0";
+  static CAPABILITY_NAME = "cron-trigger";
+  static CAPABILITY_VERSION = "1.0.0";
+  trigger(config2) {
+    const capabilityId = CronCapability2.CAPABILITY_ID;
+    return new CronTrigger2(config2, capabilityId, "Trigger");
+  }
+}
+
+class CronTrigger2 {
+  _capabilityId;
+  _method;
+  config;
+  constructor(config2, _capabilityId, _method) {
+    this._capabilityId = _capabilityId;
+    this._method = _method;
+    this.config = config2.$typeName ? config2 : fromJson2(ConfigSchema4, config2);
+  }
+  capabilityId() {
+    return this._capabilityId;
+  }
+  method() {
+    return this._method;
+  }
+  outputSchema() {
+    return PayloadSchema4;
+  }
+  configAsAny() {
+    return anyPack2(ConfigSchema4, this.config);
+  }
+  adapt(rawOutput) {
+    return rawOutput;
+  }
+}
 var prepareRuntime2 = () => {
   globalThis.Buffer = Buffer2;
 };
+var handler2 = (trigger, fn) => ({
+  trigger,
+  fn
+});
 prepareRuntime2();
+var cre3 = {
+  capabilities: {
+    CronCapability: CronCapability2,
+    HTTPCapability: HTTPCapability2,
+    HTTPClient: ClientCapability4,
+    EVMClient: ClientCapability3
+  },
+  handler: handler2
+};
 var LAST_FINALIZED_BLOCK_NUMBER2 = {
   absVal: Buffer.from([3]).toString("base64"),
   sign: "-1"
@@ -51414,6 +51847,11 @@ var LATEST_BLOCK_NUMBER2 = {
   absVal: Buffer.from([2]).toString("base64"),
   sign: "-1"
 };
+var encodeCallMsg = (payload) => ({
+  from: hexToBase642(payload.from),
+  to: hexToBase642(payload.to),
+  data: hexToBase642(payload.data)
+});
 function sendReport2(runtime2, report2, fn) {
   const rawReport = report2.x_generatedCodeOnly_unwrap();
   const request = fn(rawReport);
@@ -51424,7 +51862,7 @@ function sendRequesterSendReport2(report2, fn) {
   const request = fn(rawReport);
   return this.sendRequest(request);
 }
-ClientCapability3.prototype.sendReport = sendReport2;
+ClientCapability4.prototype.sendReport = sendReport2;
 SendRequester2.prototype.sendReport = sendRequesterSendReport2;
 var network248 = {
   chainId: "1",
@@ -60112,7 +60550,7 @@ function toRlp2(bytes, to = "hex") {
   const cursor = createCursor3(new Uint8Array(encodable.length));
   encodable.encode(cursor);
   if (to === "hex")
-    return bytesToHex5(cursor.bytes);
+    return bytesToHex6(cursor.bytes);
   return cursor.bytes;
 }
 function getEncodable2(bytes) {
@@ -60542,7 +60980,7 @@ function blobsToCommitments2(parameters) {
   const commitments = [];
   for (const blob of blobs)
     commitments.push(Uint8Array.from(kzg.blobToKzgCommitment(blob)));
-  return to === "bytes" ? commitments : commitments.map((x) => bytesToHex5(x));
+  return to === "bytes" ? commitments : commitments.map((x) => bytesToHex6(x));
 }
 init_toBytes3();
 init_toHex3();
@@ -60557,7 +60995,7 @@ function blobsToProofs2(parameters) {
     const commitment = commitments[i2];
     proofs.push(Uint8Array.from(kzg.computeBlobKzgProof(blob, commitment)));
   }
-  return to === "bytes" ? proofs : proofs.map((x) => bytesToHex5(x));
+  return to === "bytes" ? proofs : proofs.map((x) => bytesToHex6(x));
 }
 init_toHex3();
 init_sha22();
@@ -60576,7 +61014,7 @@ function commitmentToVersionedHash2(parameters) {
   const to = parameters.to ?? (typeof commitment === "string" ? "hex" : "bytes");
   const versionedHash = sha2566(commitment, "bytes");
   versionedHash.set([version82], 0);
-  return to === "bytes" ? versionedHash : bytesToHex5(versionedHash);
+  return to === "bytes" ? versionedHash : bytesToHex6(versionedHash);
 }
 function commitmentsToVersionedHashes2(parameters) {
   const { commitments, version: version82 } = parameters;
@@ -60669,7 +61107,7 @@ function toBlobs2(parameters) {
     }
     blobs.push(blob);
   }
-  return to === "bytes" ? blobs.map((x) => x.bytes) : blobs.map((x) => bytesToHex5(x.bytes));
+  return to === "bytes" ? blobs.map((x) => x.bytes) : blobs.map((x) => bytesToHex6(x.bytes));
 }
 function toBlobSidecars2(parameters) {
   const { data, kzg, to } = parameters;
@@ -62158,14 +62596,14 @@ function encodedLabelToLabelhash2(label) {
 function namehash2(name) {
   let result = new Uint8Array(32).fill(0);
   if (!name)
-    return bytesToHex5(result);
+    return bytesToHex6(result);
   const labels = name.split(".");
   for (let i2 = labels.length - 1;i2 >= 0; i2 -= 1) {
     const hashFromEncodedLabel = encodedLabelToLabelhash2(labels[i2]);
     const hashed = hashFromEncodedLabel ? toBytes4(hashFromEncodedLabel) : keccak2564(stringToBytes3(labels[i2]), "bytes");
     result = keccak2564(concat5([result, hashed]), "bytes");
   }
-  return bytesToHex5(result);
+  return bytesToHex6(result);
 }
 init_toBytes3();
 function encodeLabelhash2(hash4) {
@@ -62177,7 +62615,7 @@ init_keccak2563();
 function labelhash2(label) {
   const result = new Uint8Array(32).fill(0);
   if (!label)
-    return bytesToHex5(result);
+    return bytesToHex6(result);
   return encodedLabelToLabelhash2(label) || keccak2564(stringToBytes3(label));
 }
 function packetToBytes2(packet) {
@@ -63026,7 +63464,7 @@ function serializeTransactionEIP48442(transaction, signature) {
   let blobVersionedHashes = transaction.blobVersionedHashes;
   let sidecars = transaction.sidecars;
   if (transaction.blobs && (typeof blobVersionedHashes === "undefined" || typeof sidecars === "undefined")) {
-    const blobs2 = typeof transaction.blobs[0] === "string" ? transaction.blobs : transaction.blobs.map((x) => bytesToHex5(x));
+    const blobs2 = typeof transaction.blobs[0] === "string" ? transaction.blobs : transaction.blobs.map((x) => bytesToHex6(x));
     const kzg = transaction.kzg;
     const commitments2 = blobsToCommitments2({
       blobs: blobs2,
@@ -63481,7 +63919,7 @@ function toPrefixedMessage2(message_) {
       return stringToHex3(message_);
     if (typeof message_.raw === "string")
       return message_.raw;
-    return bytesToHex5(message_.raw);
+    return bytesToHex6(message_.raw);
   })();
   const prefix = stringToHex3(`${presignMessagePrefix2}${size6(message)}`);
   return concat5([prefix, message]);
@@ -66329,7 +66767,7 @@ async function verifyHash2(client, parameters) {
       return signature2;
     if (typeof signature2 === "object" && "r" in signature2 && "s" in signature2)
       return serializeSignature2(signature2);
-    return bytesToHex5(signature2);
+    return bytesToHex6(signature2);
   })();
   try {
     if (exports_SignatureErc8010.validate(signature))
@@ -67741,6 +68179,7 @@ function http2(url, config3 = {}) {
     });
   };
 }
+init_decodeFunctionResult2();
 init_encodeFunctionData2();
 init_getAddress3();
 init_fromHex3();
@@ -74073,23 +74512,36 @@ async function verifyPayment(runtime3, paymentPayload, paymentRequirements, x402
     const exactEvmPayload = paymentPayload.payload;
     const payerAddress = exactEvmPayload.authorization.from;
     const signature = exactEvmPayload.signature;
+    const networkInfo = getNetworkInfo(paymentRequirements.network);
+    runtime3.log(`Network mapping: "${paymentRequirements.network}" -> chainSelectorName="${networkInfo.chainSelectorName}", isTestnet=${networkInfo.isTestnet}`);
+    const creNetwork = getNetwork3({
+      chainFamily: "evm",
+      chainSelectorName: networkInfo.chainSelectorName,
+      isTestnet: networkInfo.isTestnet
+    });
+    if (!creNetwork) {
+      runtime3.log(`ERROR: Failed to get CRE network`);
+      runtime3.log(`  Input network: "${paymentRequirements.network}"`);
+      runtime3.log(`  Mapped to chainSelectorName: "${networkInfo.chainSelectorName}"`);
+      runtime3.log(`  isTestnet: ${networkInfo.isTestnet}`);
+      runtime3.log(`  chainFamily: "evm"`);
+      runtime3.log(`NOTE: The network must be configured in project.yaml with an RPC endpoint`);
+      runtime3.log(`NOTE: Check that the chainSelectorName matches CRE SDK's expected format`);
+      return {
+        isValid: false,
+        invalidReason: "invalid_network",
+        payer: payerAddress,
+        errorMessage: `Network not found: ${networkInfo.chainSelectorName} (from "${paymentRequirements.network}"). Ensure it's configured in project.yaml.`
+      };
+    }
+    runtime3.log(`✓ CRE Network found`);
+    runtime3.log(`  Name: ${creNetwork.name || "N/A"}`);
+    runtime3.log(`  Chain Selector: ${creNetwork.chainSelector.selector}`);
+    runtime3.log(`  Chain Family: ${creNetwork.chainType || "evm"}`);
     const signatureLength = signature.startsWith("0x") ? signature.length - 2 : signature.length;
     const isSmartWallet = signatureLength > 130;
     if (isSmartWallet) {
       runtime3.log("Detected smart wallet signature, checking deployment...");
-      const networkInfo2 = getNetworkInfo(paymentRequirements.network);
-      const network496 = getNetwork3({
-        chainFamily: "evm",
-        chainSelectorName: networkInfo2.chainSelectorName,
-        isTestnet: networkInfo2.isTestnet
-      });
-      if (!network496) {
-        return {
-          isValid: false,
-          invalidReason: "invalid_network",
-          payer: payerAddress
-        };
-      }
       runtime3.log("Smart wallet detected - deployment check skipped (CRE read not yet supported)");
     }
     const SCHEME = "exact";
@@ -74100,25 +74552,28 @@ async function verifyPayment(runtime3, paymentPayload, paymentRequirements, x402
         payer: payerAddress
       };
     }
-    const networkInfo = getNetworkInfo(paymentRequirements.network);
-    const network495 = getNetwork3({
-      chainFamily: "evm",
-      chainSelectorName: networkInfo.chainSelectorName,
-      isTestnet: networkInfo.isTestnet
-    });
-    if (!network495) {
-      return {
-        isValid: false,
-        invalidReason: "invalid_network",
-        payer: payerAddress
-      };
-    }
     const chainId = getNetworkId(paymentRequirements.network);
     const erc20Address = paymentRequirements.asset;
     let name;
     let version9;
     try {
       const usdcConfig = getUsdcChainConfigForChain2(chainId);
+      if (usdcConfig?.usdcAddress) {
+        const expectedUsdcAddress = getAddress2(usdcConfig.usdcAddress);
+        const providedTokenAddress = getAddress2(erc20Address);
+        if (expectedUsdcAddress !== providedTokenAddress) {
+          runtime3.log(`Token address mismatch: expected ${expectedUsdcAddress}, got ${providedTokenAddress}`);
+          return {
+            isValid: false,
+            invalidReason: "invalid_exact_evm_payload_token_address_mismatch",
+            payer: payerAddress,
+            errorMessage: `Token address ${providedTokenAddress} does not match expected USDC address ${expectedUsdcAddress} for chain ${chainId}`
+          };
+        }
+        runtime3.log(`✓ Token address verified: ${providedTokenAddress} matches expected USDC address for chain ${chainId}`);
+      } else {
+        runtime3.log(`WARNING: USDC config not found for chain ${chainId} - skipping address validation`);
+      }
       const nameFromExtra = paymentRequirements.extra?.name;
       const nameFromConfig = usdcConfig?.usdcName;
       name = nameFromExtra ?? nameFromConfig ?? "";
@@ -74202,8 +74657,111 @@ async function verifyPayment(runtime3, paymentPayload, paymentRequirements, x402
         payer: payerAddress
       };
     }
-    runtime3.log("Balance check skipped (CRE read not yet supported)");
-    runtime3.log("WARNING: Balance verification is not performed - this should be enabled when CRE adds read support");
+    if (creNetwork) {
+      try {
+        runtime3.log(`Checking if nonce has been used...`);
+        const evmClient = new cre3.capabilities.EVMClient(creNetwork.chainSelector.selector);
+        const authorizationStateAbi = parseAbi3([
+          "function authorizationState(address owner, bytes32 nonce) view returns (bool)"
+        ]);
+        const nonceCheckData = encodeFunctionData2({
+          abi: authorizationStateAbi,
+          functionName: "authorizationState",
+          args: [payerAddress, exactEvmPayload.authorization.nonce]
+        });
+        const nonceCheckCall = evmClient.callContract(runtime3, {
+          call: encodeCallMsg({
+            from: zeroAddress2,
+            to: tokenAddress,
+            data: nonceCheckData
+          }),
+          blockNumber: LAST_FINALIZED_BLOCK_NUMBER2
+        }).result();
+        const nonceUsed = decodeFunctionResult2({
+          abi: authorizationStateAbi,
+          functionName: "authorizationState",
+          data: bytesToHex5(nonceCheckCall.data)
+        });
+        if (nonceUsed) {
+          runtime3.log(`Nonce has already been used`);
+          return {
+            isValid: false,
+            invalidReason: "invalid_exact_evm_payload_nonce_already_used",
+            payer: payerAddress,
+            errorMessage: "Authorization nonce has already been used"
+          };
+        }
+        runtime3.log(`✓ Nonce check passed: nonce has not been used`);
+      } catch (error) {
+        runtime3.log(`WARNING: Nonce check failed: ${error instanceof Error ? error.message : String(error)}`);
+        runtime3.log(`Continuing verification - nonce check skipped`);
+      }
+    }
+    runtime3.log("Checking payer ERC20 balance...");
+    const tokenAddress = paymentRequirements.asset;
+    const requiredAmount = BigInt(paymentRequirements.maxAmountRequired);
+    if (tokenAddress === zeroAddress2 || tokenAddress.toLowerCase() === "0x0000000000000000000000000000000000000000") {
+      return {
+        isValid: false,
+        invalidReason: "invalid_asset",
+        payer: payerAddress,
+        errorMessage: "Native token payments are not supported. Only ERC20 tokens are supported."
+      };
+    }
+    let balance;
+    if (!creNetwork) {
+      runtime3.log(`ERROR: CRE network not available for balance check`);
+      return {
+        isValid: false,
+        invalidReason: "invalid_network",
+        payer: payerAddress,
+        errorMessage: "Network not available for balance check"
+      };
+    }
+    try {
+      runtime3.log(`Checking ERC20 balance for token: ${tokenAddress}`);
+      const evmClient = new cre3.capabilities.EVMClient(creNetwork.chainSelector.selector);
+      const erc20Abi = parseAbi3([
+        "function balanceOf(address owner) view returns (uint256)"
+      ]);
+      const callData = encodeFunctionData2({
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        args: [payerAddress]
+      });
+      const contractCall = evmClient.callContract(runtime3, {
+        call: encodeCallMsg({
+          from: zeroAddress2,
+          to: tokenAddress,
+          data: callData
+        }),
+        blockNumber: LAST_FINALIZED_BLOCK_NUMBER2
+      }).result();
+      const decodedResult = decodeFunctionResult2({
+        abi: erc20Abi,
+        functionName: "balanceOf",
+        data: bytesToHex5(contractCall.data)
+      });
+      balance = decodedResult;
+      runtime3.log(`Payer ERC20 balance: ${balance.toString()}, Required: ${requiredAmount.toString()}`);
+    } catch (error) {
+      runtime3.log(`Balance check error: ${error instanceof Error ? error.message : String(error)}`);
+      return {
+        isValid: false,
+        invalidReason: "balance_check_failed",
+        payer: payerAddress,
+        errorMessage: `Failed to check balance: ${error instanceof Error ? error.message : String(error)}`
+      };
+    }
+    if (balance < requiredAmount) {
+      return {
+        isValid: false,
+        invalidReason: "insufficient_funds",
+        payer: payerAddress,
+        errorMessage: `Insufficient balance: ${balance.toString()} < ${requiredAmount.toString()}`
+      };
+    }
+    runtime3.log(`✓ Balance check passed: ${balance.toString()} >= ${requiredAmount.toString()}`);
     if (BigInt(exactEvmPayload.authorization.value) < BigInt(paymentRequirements.maxAmountRequired)) {
       return {
         isValid: false,
@@ -74514,37 +75072,61 @@ var onHttpTrigger = async (runtime3, payload) => {
 === API Call: POST /settle ===`);
     runtime3.log(`Timestamp: ${new Date().toISOString()}`);
     const body = decodeJson(payload.input);
-    const paymentRequirements = PaymentRequirementsSchema.parse(body.paymentRequirements);
-    const paymentPayload = PaymentPayloadSchema.parse(body.paymentPayload);
+    if (body.x402Version !== undefined && body.x402Version !== 1) {
+      runtime3.log(`Warning: Unsupported x402Version: ${body.x402Version}, expected 1`);
+    }
+    let paymentRequirements;
+    const paymentRequirementsResult = PaymentRequirementsSchema.safeParse(body.paymentRequirements);
+    if (!paymentRequirementsResult.success) {
+      const errors3 = paymentRequirementsResult.error.errors;
+      const isOnlyResourceUrlError = errors3.length === 1 && errors3[0].path.length === 1 && errors3[0].path[0] === "resource" && errors3[0].code === "invalid_string";
+      if (isOnlyResourceUrlError) {
+        runtime3.log(`Warning: Resource URL validation failed, but URL appears valid: "${body.paymentRequirements.resource}"`);
+        runtime3.log(`Using payment requirements without strict URL validation`);
+        paymentRequirements = body.paymentRequirements;
+      } else {
+        const errorMessage = JSON.stringify(errors3, null, 2);
+        runtime3.log(`Schema validation error: ${errorMessage}`);
+        return JSON.stringify({
+          isValid: false,
+          error: "Validation error",
+          errorMessage,
+          invalidReason: errorMessage
+        });
+      }
+    } else {
+      paymentRequirements = paymentRequirementsResult.data;
+    }
+    const paymentPayloadResult = PaymentPayloadSchema.safeParse(body.paymentPayload);
+    if (!paymentPayloadResult.success) {
+      const errorMessage = JSON.stringify(paymentPayloadResult.error.errors, null, 2);
+      runtime3.log(`Error: ${errorMessage}`);
+      return JSON.stringify({
+        isValid: false,
+        error: "Validation error",
+        errorMessage,
+        invalidReason: errorMessage
+      });
+    }
+    const paymentPayload = paymentPayloadResult.data;
+    if (!paymentPayload.x402Version) {
+      throw new Error("paymentPayload must include x402Version");
+    }
     runtime3.log(`Network: ${paymentRequirements.network}`);
     let signer;
     if (SupportedEVMNetworks.includes(paymentRequirements.network)) {
-      const secret = runtime3.getSecret({ id: "EVM_PRIVATE_KEY" }).result();
-      const evmPrivateKey = secret.value || "";
+      let evmPrivateKey;
+      try {
+        const secret = runtime3.getSecret({ id: "EVM_PRIVATE_KEY" }).result();
+        console.log(secret);
+        evmPrivateKey = secret.value || "";
+      } catch (secretError) {
+        runtime3.log(`Warning: Could not read EVM_PRIVATE_KEY from secrets: ${secretError instanceof Error ? secretError.message : String(secretError)}`);
+      }
       if (!evmPrivateKey) {
-        throw new Error("EVM_PRIVATE_KEY secret is required but not found");
+        throw new Error("EVM_PRIVATE_KEY is required. Set it in .env file (CRE_ETH_PRIVATE_KEY or EVM_PRIVATE_KEY) or via CRE secrets (EVM_PRIVATE_KEY)");
       }
       signer = await createSigner2(paymentRequirements.network, evmPrivateKey);
-      if ("account" in signer && signer.account) {
-        const address = signer.account.address;
-        runtime3.log(`Facilitator address: ${address}`);
-        if ("authorization" in paymentPayload.payload) {
-          const auth = paymentPayload.payload.authorization;
-          runtime3.log(`Payment from: ${auth.from}`);
-          runtime3.log(`Payment to: ${auth.to}`);
-          runtime3.log(`Payment amount: ${auth.value}`);
-          try {
-            const ethBalance = await signer.getBalance({ address });
-            runtime3.log(`Facilitator ETH balance: ${ethBalance.toString()} wei`);
-            const payerEthBalance = await signer.getBalance({
-              address: auth.from
-            });
-            runtime3.log(`Payer ETH balance: ${payerEthBalance.toString()} wei`);
-          } catch (balanceError) {
-            runtime3.log(`Warning: Could not fetch balances: ${balanceError instanceof Error ? balanceError.message : String(balanceError)}`);
-          }
-        }
-      }
     } else {
       throw new Error("Invalid network - only EVM networks are currently supported");
     }
@@ -74556,10 +75138,12 @@ var onHttpTrigger = async (runtime3, payload) => {
     return JSON.stringify(response);
   } catch (error) {
     runtime3.log(`Error: ${error instanceof Error ? error.message : String(error)}`);
-    const errorResponse = { error: "Invalid request" };
-    if (error instanceof Error) {
-      errorResponse.error = `Invalid request: ${error.message}`;
-    }
+    const errorResponse = {
+      isValid: false,
+      error: "Settlement error",
+      errorMessage: error instanceof Error ? error.message : String(error),
+      invalidReason: error instanceof Error ? error.message : String(error)
+    };
     return JSON.stringify(errorResponse);
   }
 };

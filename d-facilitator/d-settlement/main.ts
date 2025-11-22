@@ -452,54 +452,21 @@ const onHttpTrigger = async (runtime: Runtime<Config>, payload: HTTPPayload): Pr
       // Priority: 1. Environment variable (for local dev/simulation), 2. CRE secrets (for production)
       let evmPrivateKey: string | undefined;
       
-      // Try to read from environment variable first (supports .env files)
-      if (typeof process !== 'undefined' && process.env) {
-        evmPrivateKey = process.env.CRE_ETH_PRIVATE_KEY || process.env.EVM_PRIVATE_KEY;
-      }
-      
-      // Fallback to CRE secrets if environment variable not found
-      if (!evmPrivateKey) {
         try {
+      
           const secret = runtime.getSecret({ id: 'EVM_PRIVATE_KEY' }).result();
+          console.log(secret);
           evmPrivateKey = secret.value || '';
         } catch (secretError) {
           runtime.log(`Warning: Could not read EVM_PRIVATE_KEY from secrets: ${secretError instanceof Error ? secretError.message : String(secretError)}`);
         }
-      }
+      // }
       
       if (!evmPrivateKey) {
         throw new Error("EVM_PRIVATE_KEY is required. Set it in .env file (CRE_ETH_PRIVATE_KEY or EVM_PRIVATE_KEY) or via CRE secrets (EVM_PRIVATE_KEY)");
       }
       
       signer = await createSigner(paymentRequirements.network, evmPrivateKey);
-
-      // Log balances for debugging
-      if ('account' in signer && signer.account) {
-        const address = signer.account.address;
-        runtime.log(`Facilitator address: ${address}`);
-        
-        // Check if it's an EVM payload (has authorization field)
-        if ('authorization' in paymentPayload.payload) {
-          const auth = paymentPayload.payload.authorization;
-          runtime.log(`Payment from: ${auth.from}`);
-          runtime.log(`Payment to: ${auth.to}`);
-          runtime.log(`Payment amount: ${auth.value}`);
-
-          // Check ETH balance
-          try {
-            const ethBalance = await signer.getBalance({ address });
-            runtime.log(`Facilitator ETH balance: ${ethBalance.toString()} wei`);
-
-            // Check payer's ETH balance
-            const payerEthBalance = await signer.getBalance({ 
-              address: auth.from as `0x${string}` 
-            });
-            runtime.log(`Payer ETH balance: ${payerEthBalance.toString()} wei`);
-          } catch (balanceError) {
-            runtime.log(`Warning: Could not fetch balances: ${balanceError instanceof Error ? balanceError.message : String(balanceError)}`);
-          }
-        }
-      }
     } else {
       // TODO: Uncomment when CRE supports Solana (SVM)
       // } else if (SupportedSVMNetworks.includes(paymentRequirements.network)) {
