@@ -1,4 +1,3 @@
-import type { Transaction } from '../core/types.js';
 import { ethers } from 'ethers';
 
 /**

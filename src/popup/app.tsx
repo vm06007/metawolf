@@ -3,7 +3,7 @@ import { HaloService } from './services/halo-service';
 import { FireflyService } from './services/firefly-service';
 import { formatAddress, getDisplayName } from './utils/account';
 import { renderDashboardHeader } from './components/DashboardHeader';
-import { renderDashboardPanel, DEFAULT_PANEL_ITEMS } from './components/DashboardPanel';
+import { renderDashboardPanel, DEFAULT_PANEL_ITEMS, getPanelItems } from './components/DashboardPanel';
 import { renderLockScreen } from './components/LockScreen';
 import { renderAccountSelectorModal } from './components/AccountSelectorModal';
 import { renderAccountDetailModal } from './components/AccountDetailModal';
@@ -832,14 +832,81 @@ export class PopupApp {
             return;
         }
 
-        // If no password is set and no accounts, show welcome screen
-        if (!this.state.hasPassword && this.state.accounts.length === 0) {
+        // If no password is set and no accounts, show welcome screen (unless forms are showing)
+        if (!this.state.hasPassword && this.state.accounts.length === 0 && !this.state.showCreateAccountForm && !this.state.showImportAccountForm) {
+            // Wallet should be considered unlocked for welcome screen (no password to unlock)
+            this.state.unlocked = true;
             app.innerHTML = renderLockScreen(
                 false,
                 '',
                 undefined
             );
-            this.attachLockScreenListeners();
+            // Use requestAnimationFrame and setTimeout to ensure DOM is fully ready
+            requestAnimationFrame(() => {
+                setTimeout(() => {
+                    this.attachLockScreenListeners();
+                }, 50);
+            });
+            return;
+        }
+
+        // If forms are showing on welcome screen, render a minimal background with the forms
+        if (!this.state.hasPassword && this.state.accounts.length === 0 && (this.state.showCreateAccountForm || this.state.showImportAccountForm)) {
+            // Wallet should be considered unlocked for welcome screen
+            this.state.unlocked = true;
+            app.innerHTML = `
+                <div style="
+                    position: fixed;
+                    top: 0;
+                    left: 0;
+                    right: 0;
+                    bottom: 0;
+                    background: var(--r-neutral-bg1);
+                    z-index: 1;
+                "></div>
+                ${renderCreateAccountForm(
+                    (name) => this.handleCreateAccountConfirm(name),
+                    () => this.hideCreateAccountForm(),
+                    this.state.showCreateAccountForm
+                )}
+                ${renderImportAccountForm(
+                    (privateKey, name) => this.handleImportAccountConfirm(privateKey, name),
+                    () => this.hideImportAccountForm(),
+                    this.state.showImportAccountForm
+                )}
+            `;
+            // Attach form listeners
+            setTimeout(() => {
+                // Create account form
+                document.getElementById('create-account-overlay')?.addEventListener('click', (e) => {
+                    if (e.target === e.currentTarget) {
+                        this.hideCreateAccountForm();
+                    }
+                });
+                document.getElementById('create-account-cancel')?.addEventListener('click', () => this.hideCreateAccountForm());
+                document.getElementById('create-account-confirm')?.addEventListener('click', () => {
+                    const nameInput = document.getElementById('create-account-name') as HTMLInputElement;
+                    const name = nameInput?.value.trim() || undefined;
+                    this.handleCreateAccountConfirm(name);
+                });
+
+                // Import account form
+                document.getElementById('import-account-overlay')?.addEventListener('click', (e) => {
+                    if (e.target === e.currentTarget) {
+                        this.hideImportAccountForm();
+                    }
+                });
+                document.getElementById('import-account-cancel')?.addEventListener('click', () => this.hideImportAccountForm());
+                document.getElementById('import-account-confirm')?.addEventListener('click', () => {
+                    const privateKeyInput = document.getElementById('import-account-private-key') as HTMLTextAreaElement;
+                    const nameInput = document.getElementById('import-account-name') as HTMLInputElement;
+                    const privateKey = privateKeyInput?.value.trim();
+                    const name = nameInput?.value.trim() || undefined;
+                    if (privateKey) {
+                        this.handleImportAccountConfirm(privateKey, name);
+                    }
+                });
+            }, 50);
             return;
         }
 
@@ -972,7 +1039,7 @@ export class PopupApp {
                 historicalData: this.state.historicalBalanceData,
                 historicalLoading: this.state.historicalBalanceLoading,
             })}
-                            ${renderDashboardPanel(DEFAULT_PANEL_ITEMS, true, this.state.selectedAccount?.isWatchOnly || false)}
+                            ${renderDashboardPanel(getPanelItems(true), true, this.state.selectedAccount?.isWatchOnly || false)}
                             <div class="transaction-section">
                                 ${renderTransactionList(this.getTransactionsForAccount(selectedAccount), selectedAccount)}
                             </div>
@@ -1074,7 +1141,7 @@ export class PopupApp {
             ${renderDelegationModal(
                 this.state.delegationModalIsUpgrade,
                 this.state.delegationModalIsUpgrade
-                    ? (this.state.delegationContractAddress || '0x63c0c19a282a1b52b07dd5a65b58948a07dae32b')
+                    ? (this.state.delegationContractAddress || this.getDefaultDelegatorAddress(this.state.selectedNetwork))
                     : '0x0000000000000000000000000000000000000000',
                 () => this.handleApproveDelegation(),
                 () => this.hideDelegationModal(),
@@ -1114,7 +1181,7 @@ export class PopupApp {
                 historicalData: this.state.historicalBalanceData,
                 historicalLoading: this.state.historicalBalanceLoading,
             })}
-                    ${renderDashboardPanel(DEFAULT_PANEL_ITEMS, false, this.state.selectedAccount?.isWatchOnly || false)}
+                    ${renderDashboardPanel(getPanelItems(false), false, this.state.selectedAccount?.isWatchOnly || false)}
                     <div style="padding: 0 16px 4px 16px;">
                         ${renderEthPricePanel(this.state.ethPriceData, this.state.ethPriceLoading)}
                     </div>
@@ -1277,11 +1344,35 @@ export class PopupApp {
     }
 
     private attachLockScreenListeners() {
+        // Remove any existing listeners by cloning and replacing elements
         const unlockBtn = document.getElementById('unlock-btn');
         const passwordInput = document.getElementById('password-input') as HTMLInputElement;
         const createFirstBtn = document.getElementById('create-first-btn');
         const importFirstBtn = document.getElementById('import-first-btn');
         const forgotPasswordLink = document.getElementById('forgot-password-link');
+
+        // Debug: Log button availability
+        console.log('[attachLockScreenListeners] Buttons found:', {
+            createFirstBtn: !!createFirstBtn,
+            importFirstBtn: !!importFirstBtn,
+            unlocked: this.state.unlocked,
+            hasPassword: this.state.hasPassword,
+            accountsCount: this.state.accounts.length
+        });
+
+        // Clone buttons to remove old event listeners
+        if (createFirstBtn) {
+            const newCreateBtn = createFirstBtn.cloneNode(true) as HTMLButtonElement;
+            createFirstBtn.parentNode?.replaceChild(newCreateBtn, createFirstBtn);
+        }
+        if (importFirstBtn) {
+            const newImportBtn = importFirstBtn.cloneNode(true) as HTMLButtonElement;
+            importFirstBtn.parentNode?.replaceChild(newImportBtn, importFirstBtn);
+        }
+
+        // Get fresh references after cloning
+        const freshCreateBtn = document.getElementById('create-first-btn');
+        const freshImportBtn = document.getElementById('import-first-btn');
 
         unlockBtn?.addEventListener('click', async () => {
             const password = passwordInput?.value || '';
@@ -1342,16 +1433,22 @@ export class PopupApp {
             }
         });
 
-        createFirstBtn?.addEventListener('click', () => {
-            // Show create account form - password will be set when account is created
+        freshCreateBtn?.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[attachLockScreenListeners] Create button clicked');
+            // Show create account form directly - password will be set when account is created
             this.state.unlocked = true; // Allow creating first account
-            this.showAddWalletModal();
+            this.showCreateAccountForm();
         });
 
-        importFirstBtn?.addEventListener('click', () => {
-            // Show import account form - password will be set when account is imported
+        freshImportBtn?.addEventListener('click', (e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            console.log('[attachLockScreenListeners] Import button clicked');
+            // Show import account form directly - password will be set when account is imported
             this.state.unlocked = true; // Allow importing first account
-            this.showAddWalletModal();
+            this.showImportAccountForm();
         });
 
         forgotPasswordLink?.addEventListener('click', (e) => {
@@ -1719,6 +1816,10 @@ export class PopupApp {
         document.getElementById('panel-transactions')?.addEventListener('click', () => this.openTransactionsScreen());
         document.getElementById('panel-approvals')?.addEventListener('click', () => console.log('Approvals clicked'));
         document.getElementById('panel-settings')?.addEventListener('click', () => this.handleSettings());
+        document.getElementById('panel-x402')?.addEventListener('click', () => {
+            // TODO: Implement x402 functionality
+            console.log('x402 clicked');
+        });
         document.getElementById('panel-nft')?.addEventListener('click', () => console.log('NFT clicked'));
         document.getElementById('panel-eip7702')?.addEventListener('click', (e) => {
             e.preventDefault();
@@ -3387,6 +3488,15 @@ export class PopupApp {
                 console.log('[handleSelectNetwork] Re-checking delegation on new network:', chainId);
                 this.checkDelegationStatus(this.state.accountToEdit.address);
             }
+            
+            // Update delegation modal if it's open to reflect new network
+            if (this.state.showDelegationModal) {
+                // For Zircuit, reset to Zircuit delegator address
+                if (chainId === 48900 && this.state.delegationModalIsUpgrade) {
+                    this.state.delegationContractAddress = this.getDefaultDelegatorAddress(48900);
+                }
+                this.updateDelegationModal();
+            }
 
             this.showSuccessMessage('Network switched successfully');
         } catch (error: any) {
@@ -3941,7 +4051,7 @@ export class PopupApp {
         const modalHTML = renderDelegationModal(
             this.state.delegationModalIsUpgrade,
             this.state.delegationModalIsUpgrade
-                ? (this.state.delegationContractAddress || '0x63c0c19a282a1b52b07dd5a65b58948a07dae32b')
+                ? (this.state.delegationContractAddress || this.getDefaultDelegatorAddress(this.state.selectedNetwork))
                 : '0x0000000000000000000000000000000000000000',
             () => this.handleApproveDelegation(),
             () => this.hideDelegationModal(),
@@ -4090,6 +4200,18 @@ export class PopupApp {
     }
 
     /**
+     * Get default delegator address for a chain
+     */
+    private getDefaultDelegatorAddress(chainId: number): string {
+        // Zircuit Mainnet - only one option
+        if (chainId === 48900) {
+            return '0xFDcEdae8367942f22813AB078aA3569fabDe943F';
+        }
+        // Default for other chains
+        return '0x63c0c19a282a1b52b07dd5a65b58948a07dae32b';
+    }
+
+    /**
      * Attach listeners for the smart account upgrade/reset buttons
      */
     private attachDelegationListeners() {
@@ -4130,6 +4252,10 @@ export class PopupApp {
         this.state.delegationModalFirstRender = !modalExists;
         // Reset button state when opening modal
         this.state.delegationButtonToConfirm = false;
+        // For Zircuit, always reset to the Zircuit delegator address
+        if (isUpgrade && this.state.selectedNetwork === 48900) {
+            this.state.delegationContractAddress = this.getDefaultDelegatorAddress(48900);
+        }
         // Update only the delegation modal, not the entire app
         this.updateDelegationModal();
         // Mark that we've rendered once
@@ -4205,7 +4331,7 @@ export class PopupApp {
             let contractAddress = '0x0000000000000000000000000000000000000000';
             if (this.state.delegationModalIsUpgrade) {
                 const delegatorInput = document.getElementById('delegator-address-input') as HTMLInputElement;
-                contractAddress = delegatorInput?.value || this.state.delegationContractAddress || '0x63c0c19a282a1b52b07dd5a65b58948a07dae32b';
+                contractAddress = delegatorInput?.value || this.state.delegationContractAddress || this.getDefaultDelegatorAddress(this.state.selectedNetwork);
 
                 // Validate address format
                 if (!contractAddress.startsWith('0x') || contractAddress.length !== 42) {
@@ -4273,15 +4399,27 @@ export class PopupApp {
 
             // Initialize readonly state based on current selection
             if (delegatorSelect && delegatorInput && this.state.delegationModalIsUpgrade) {
-                const selectedValue = delegatorSelect.value;
-                if (selectedValue !== 'custom') {
+                // For Zircuit, always use the Zircuit delegator and make everything readonly
+                if (this.state.selectedNetwork === 48900) {
+                    const zircuitAddress = this.getDefaultDelegatorAddress(48900);
+                    delegatorSelect.value = zircuitAddress;
+                    delegatorSelect.disabled = true;
+                    delegatorInput.value = zircuitAddress;
                     delegatorInput.readOnly = true;
                     delegatorInput.style.background = 'var(--r-neutral-bg1)';
                     delegatorInput.style.cursor = 'not-allowed';
+                    this.state.delegationContractAddress = zircuitAddress;
                 } else {
-                    delegatorInput.readOnly = false;
-                    delegatorInput.style.background = 'var(--r-neutral-bg2)';
-                    delegatorInput.style.cursor = 'text';
+                    const selectedValue = delegatorSelect.value;
+                    if (selectedValue !== 'custom') {
+                        delegatorInput.readOnly = true;
+                        delegatorInput.style.background = 'var(--r-neutral-bg1)';
+                        delegatorInput.style.cursor = 'not-allowed';
+                    } else {
+                        delegatorInput.readOnly = false;
+                        delegatorInput.style.background = 'var(--r-neutral-bg2)';
+                        delegatorInput.style.cursor = 'text';
+                    }
                 }
             }
 
@@ -4325,8 +4463,8 @@ export class PopupApp {
                 this.hideDelegationModal();
             });
 
-            // Handle delegator selection dropdown
-            if (delegatorSelect && this.state.delegationModalIsUpgrade) {
+            // Handle delegator selection dropdown (only for non-Zircuit chains)
+            if (delegatorSelect && this.state.delegationModalIsUpgrade && this.state.selectedNetwork !== 48900) {
                 delegatorSelect.addEventListener('change', (e) => {
                     const selectedValue = (e.target as HTMLSelectElement).value;
                     if (selectedValue !== 'custom') {
@@ -4346,7 +4484,8 @@ export class PopupApp {
                                 42161: 'arbiscan.io',
                                 8453: 'basescan.org',
                                 137: 'polygonscan.com',
-                                56: 'bscscan.com'
+                                56: 'bscscan.com',
+                                48900: 'explorer.zircuit.com'
                             };
                             const domain = chainMap[this.state.selectedNetwork] || 'etherscan.io';
                             etherscanLink.href = `https://${domain}/address/${selectedValue}#code`;
@@ -4361,6 +4500,20 @@ export class PopupApp {
                         delegatorInput.focus();
                     }
                 });
+            }
+            
+            // For Zircuit, ensure input is always readonly and set to Zircuit address
+            if (this.state.delegationModalIsUpgrade && this.state.selectedNetwork === 48900 && delegatorInput) {
+                const zircuitAddress = this.getDefaultDelegatorAddress(48900);
+                delegatorInput.value = zircuitAddress;
+                delegatorInput.readOnly = true;
+                delegatorInput.style.background = 'var(--r-neutral-bg1)';
+                delegatorInput.style.cursor = 'not-allowed';
+                this.state.delegationContractAddress = zircuitAddress;
+                // Update Etherscan link
+                if (etherscanLink) {
+                    etherscanLink.href = `https://explorer.zircuit.com/address/${zircuitAddress}#code`;
+                }
             }
 
             // Handle custom address input (only when not readonly)

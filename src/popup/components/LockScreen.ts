@@ -10,6 +10,7 @@ export function renderLockScreen(
             min-height: 100vh;
             background: transparent;
             position: relative;
+            overflow: hidden;
         ">
             <div style="
                 flex: 1;
@@ -188,7 +189,7 @@ export function renderLockScreen(
                     bottom: 0;
                     left: 0;
                     right: 0;
-                    width: 100vw;
+                    width: 100%;
                     padding: 24px;
                     background: var(--r-neutral-bg1);
                     border-top: 1px solid var(--r-neutral-line);
@@ -197,10 +198,12 @@ export function renderLockScreen(
                     gap: 12px;
                     box-sizing: border-box;
                     margin: 0;
+                    z-index: 10;
                 ">
                     <button
                         id="create-first-btn"
                         class="button button-primary"
+                        type="button"
                         style="
                             width: 100%;
                             padding: 14px;
@@ -214,13 +217,18 @@ export function renderLockScreen(
                             color: white;
                             box-sizing: border-box;
                             margin: 0;
+                            pointer-events: auto;
+                            z-index: 11;
+                            position: relative;
                         "
                         onmouseenter="this.style.background='var(--r-blue-light1)'"
                         onmouseleave="this.style.background='var(--r-blue-default)'"
+                        onclick="console.log('Create button clicked from inline handler')"
                     >Create New Wallet</button>
                     <button
                         id="import-first-btn"
                         class="button button-secondary"
+                        type="button"
                         style="
                             width: 100%;
                             padding: 14px;
@@ -234,9 +242,13 @@ export function renderLockScreen(
                             color: var(--r-neutral-title1);
                             box-sizing: border-box;
                             margin: 0;
+                            pointer-events: auto;
+                            z-index: 11;
+                            position: relative;
                         "
                         onmouseenter="this.style.background='var(--r-neutral-bg2)'"
                         onmouseleave="this.style.background='var(--r-neutral-bg1)'"
+                        onclick="console.log('Import button clicked from inline handler')"
                     >Import Wallet</button>
                 </div>
             ` : ''}

@@ -1,5 +1,5 @@
-// Predefined EIP-7702 delegator contracts
-const PREDEFINED_DELEGATORS = [
+// Predefined EIP-7702 delegator contracts by chain
+const DEFAULT_DELEGATORS: Array<{ name: string; address: string }> = [
     {
         name: 'MetaMask: EIP-7702 Delegator',
         address: '0x63c0c19a282a1b52b07dd5a65b58948a07dae32b'
@@ -9,6 +9,21 @@ const PREDEFINED_DELEGATORS = [
         address: '0x5A7FC11397E9a8AD41BF10bf13F22B0a63f96f6d'
     }
 ];
+
+const PREDEFINED_DELEGATORS: Record<number, Array<{ name: string; address: string }>> = {
+    // Zircuit Mainnet - only one option
+    48900: [
+        {
+            name: 'Zircuit: EIP-7702 Delegator',
+            address: '0xFDcEdae8367942f22813AB078aA3569fabDe943F'
+        }
+    ]
+};
+
+// Get delegators for a specific chain
+function getDelegatorsForChain(chainId: number): Array<{ name: string; address: string }> {
+    return PREDEFINED_DELEGATORS[chainId] || DEFAULT_DELEGATORS;
+}
 
 export function renderDelegationModal(
     isUpgrade: boolean,
@@ -24,17 +39,22 @@ export function renderDelegationModal(
     if (!visible) return '';
 
     const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
-    const defaultAddress = isUpgrade ? PREDEFINED_DELEGATORS[0].address : ZERO_ADDRESS;
+    const delegatorsForChain = getDelegatorsForChain(chainId);
+    const defaultAddress = isUpgrade ? delegatorsForChain[0].address : ZERO_ADDRESS;
     const action = isUpgrade ? 'Upgrade' : 'Reset';
     const actionDescription = isUpgrade
         ? 'This will delegate your account to the smart account, enabling advanced features.'
         : 'This will clear the delegation, removing the smart account functionality from your account.';
 
+    // For Zircuit, force the use of the only available delegator
+    const isZircuit = chainId === 48900;
+    const effectiveTargetAddress = isZircuit && isUpgrade ? defaultAddress : (targetAddress || defaultAddress);
+
     // Get the name for the current address if it's a predefined one
-    const currentDelegator = PREDEFINED_DELEGATORS.find(d =>
-        d.address.toLowerCase() === (targetAddress || defaultAddress).toLowerCase()
+    const currentDelegator = delegatorsForChain.find(d =>
+        d.address.toLowerCase() === effectiveTargetAddress.toLowerCase()
     );
-    const contractAddress = targetAddress || defaultAddress;
+    const contractAddress = effectiveTargetAddress;
     const contractName = currentDelegator?.name || 'Custom Address';
     const isCustomAddress = !currentDelegator;
 
@@ -48,7 +68,8 @@ export function renderDelegationModal(
             42161: 'arbiscan.io',
             8453: 'basescan.org',
             137: 'polygonscan.com',
-            56: 'bscscan.com'
+            56: 'bscscan.com',
+            48900: 'explorer.zircuit.com'
         };
         const domain = chainMap[chainId] || 'etherscan.io';
         return `https://${domain}/address/${address}#code`;
@@ -145,12 +166,13 @@ export function renderDelegationModal(
                                     font-size: 14px;
                                     color: var(--r-neutral-title1);
                                     background: var(--r-neutral-bg1);
-                                    cursor: pointer;
+                                    cursor: ${isZircuit ? 'not-allowed' : 'pointer'};
                                     transition: all 0.2s;
                                     box-sizing: border-box;
-                                " onfocus="this.style.borderColor='var(--r-blue-default)'" onblur="this.style.borderColor='var(--r-neutral-line)'">
-                                    <option value="custom" ${isCustomAddress ? 'selected' : ''}>Custom Address</option>
-                                    ${PREDEFINED_DELEGATORS.map(delegator => `
+                                    ${isZircuit ? 'pointer-events: none; opacity: 0.7;' : ''}
+                                " onfocus="this.style.borderColor='var(--r-blue-default)'" onblur="this.style.borderColor='var(--r-neutral-line)'" ${isZircuit ? 'disabled' : ''}>
+                                    ${!isZircuit ? `<option value="custom" ${isCustomAddress ? 'selected' : ''}>Custom Address</option>` : ''}
+                                    ${delegatorsForChain.map(delegator => `
                                         <option value="${delegator.address}" ${delegator.address.toLowerCase() === contractAddress.toLowerCase() ? 'selected' : ''}>
                                             ${delegator.name}
                                         </option>
@@ -168,19 +190,19 @@ export function renderDelegationModal(
                                 id="delegator-address-input"
                                 value="${contractAddress}"
                                 placeholder="0x..."
-                                ${!isCustomAddress ? 'readonly' : ''}
+                                ${!isCustomAddress || isZircuit ? 'readonly' : ''}
                                 style="
                                     flex: 1;
                                     font-family: monospace;
                                     font-size: 13px;
                                     color: var(--r-neutral-title1);
-                                    background: ${isCustomAddress ? 'var(--r-neutral-bg2)' : 'var(--r-neutral-bg1)'};
+                                    background: ${isCustomAddress && !isZircuit ? 'var(--r-neutral-bg2)' : 'var(--r-neutral-bg1)'};
                                     padding: 10px 12px;
                                     border: 1px solid var(--r-neutral-line);
                                     border-radius: 8px;
                                     transition: all 0.2s;
                                     box-sizing: border-box;
-                                    cursor: ${isCustomAddress ? 'text' : 'not-allowed'};
+                                    cursor: ${isCustomAddress && !isZircuit ? 'text' : 'not-allowed'};
                                 "
                                 onfocus="if (!this.readOnly) { this.style.borderColor='var(--r-blue-default)'; this.style.background='var(--r-neutral-bg1)'; }"
                                 onblur="if (!this.readOnly) { this.style.borderColor='var(--r-neutral-line)'; this.style.background='var(--r-neutral-bg2)'; }"
