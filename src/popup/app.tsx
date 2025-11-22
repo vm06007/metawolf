@@ -1,5 +1,6 @@
 import { WalletService } from './services/wallet-service';
 import { HaloService } from './services/halo-service';
+import { FireflyService } from './services/firefly-service';
 import { formatAddress, getDisplayName } from './utils/account';
 import { renderDashboardHeader } from './components/DashboardHeader';
 import { renderDashboardPanel, DEFAULT_PANEL_ITEMS } from './components/DashboardPanel';
@@ -16,14 +17,18 @@ import { renderCreateAccountForm } from './components/CreateAccountForm';
 import { renderImportAccountForm } from './components/ImportAccountForm';
 import { renderCreateMultisigForm } from './components/CreateMultisigForm';
 import { renderHaloChipNameForm } from './components/HaloChipNameForm';
+import { renderFireflyNameForm } from './components/FireflyNameForm';
 import { renderSecurityConfirmModal } from './components/SecurityConfirmModal';
 import { renderDeleteAccountModal } from './components/DeleteAccountModal';
 import { renderSettingsMenu } from './components/SettingsMenu';
 import { renderEthPricePanel, EthPriceData } from './components/EthPricePanel';
 import { renderPrivateKeyModal } from './components/PrivateKeyModal';
 import { renderUnifiedBalancePanel } from './components/UnifiedBalancePanel';
+import { renderReceiveScreen, initReceiveScreenQRCode } from './components/ReceiveScreen';
+import { renderSendScreen } from './components/SendScreen';
 import { ethPriceService } from './services/eth-price-service';
 import { unifiedBalanceService, UnifiedBalanceData } from './services/unified-balance-service';
+import { transferService } from './services/transfer-service';
 import { createEIP1193Provider } from './services/eip1193-provider';
 import { ethers } from 'ethers';
 
@@ -43,6 +48,7 @@ interface AppState {
     showImportAccountForm: boolean;
     showCreateMultisigForm: boolean;
     showHaloChipNameForm: boolean;
+    showFireflyNameForm: boolean;
     showSecurityConfirm: boolean;
     pendingHaloLink?: { deleteKey: boolean };
     connectedDApp: ConnectedDApp | null;
@@ -71,6 +77,10 @@ interface AppState {
     privateKeyModalFirstRender: boolean;
     unifiedBalanceData: UnifiedBalanceData | null;
     unifiedBalanceLoading: boolean;
+    showReceiveScreen: boolean;
+    receiveScreenHideBalance: boolean;
+    showSendScreen: boolean;
+    sendScreenHideBalance: boolean;
 }
 
 export class PopupApp {
@@ -90,6 +100,7 @@ export class PopupApp {
         showImportAccountForm: false,
         showCreateMultisigForm: false,
         showHaloChipNameForm: false,
+        showFireflyNameForm: false,
         showSecurityConfirm: false,
         pendingHaloLink: undefined,
         connectedDApp: null,
@@ -114,14 +125,20 @@ export class PopupApp {
         privateKeyModalFirstRender: true,
         unifiedBalanceData: null,
         unifiedBalanceLoading: false,
+        showReceiveScreen: false,
+        receiveScreenHideBalance: false,
+        showSendScreen: false,
+        sendScreenHideBalance: false,
     };
 
     private walletService: WalletService;
     private haloService: HaloService;
+    private fireflyService: FireflyService;
 
     constructor() {
         this.walletService = new WalletService();
         this.haloService = new HaloService();
+        this.fireflyService = new FireflyService();
     }
 
     async init() {
@@ -260,6 +277,12 @@ export class PopupApp {
             // This may fail in browser extension context due to domain validation
             // We handle the error and show a user-friendly message
             await unifiedBalanceService.initialize(eip1193Provider, 'mainnet');
+
+            // Set SDK for transfer service
+            const sdk = (unifiedBalanceService as any).sdk;
+            if (sdk) {
+                transferService.setSDK(sdk);
+            }
 
             // Fetch unified balances
             await this.loadUnifiedBalances();
@@ -462,6 +485,67 @@ export class PopupApp {
             return;
         }
 
+        // Show send screen if requested
+        if (this.state.showSendScreen && this.state.selectedAccount) {
+            const selectedAccount = this.state.selectedAccount;
+            const displayName = getDisplayName(selectedAccount);
+            const assets = this.state.unifiedBalanceData?.assets || [];
+            app.innerHTML = renderSendScreen({
+                accountName: displayName,
+                balance: this.state.balance || '0.00',
+                assets: assets,
+                hideBalance: this.state.sendScreenHideBalance,
+                onBack: () => {
+                    this.state.showSendScreen = false;
+                    this.render();
+                },
+                onSend: async (params) => {
+                    await this.handleSendTransfer(params);
+                },
+                onToggleVisibility: () => {
+                    this.state.sendScreenHideBalance = !this.state.sendScreenHideBalance;
+                    this.render();
+                },
+            });
+            // Wait for DOM to be ready before attaching listeners
+            setTimeout(() => {
+                this.attachSendScreenListeners();
+            }, 100);
+            return;
+        }
+
+        // Show receive screen if requested
+        if (this.state.showReceiveScreen && this.state.selectedAccount) {
+            const selectedAccount = this.state.selectedAccount;
+            const displayName = getDisplayName(selectedAccount);
+            app.innerHTML = renderReceiveScreen({
+                address: selectedAccount.address,
+                accountName: displayName,
+                balance: this.state.balance || '0.00',
+                chainName: 'Ethereum', // TODO: Get from selected network
+                hideBalance: this.state.receiveScreenHideBalance,
+                onBack: () => {
+                    this.state.showReceiveScreen = false;
+                    this.render();
+                },
+                onCopyAddress: () => {
+                    this.handleCopyAddress();
+                },
+                onToggleVisibility: () => {
+                    this.state.receiveScreenHideBalance = !this.state.receiveScreenHideBalance;
+                    this.render();
+                },
+            });
+            this.attachReceiveScreenListeners();
+            // Initialize QR code after a short delay to ensure DOM is ready
+            setTimeout(() => {
+                initReceiveScreenQRCode(selectedAccount.address).catch((error) => {
+                    console.error('[PopupApp] Failed to initialize QR code:', error);
+                });
+            }, 100);
+            return;
+        }
+
         // Render Rabby-style dashboard
         const selectedAccount = this.state.selectedAccount;
         const displayName = selectedAccount ? getDisplayName(selectedAccount) : 'Account';
@@ -546,6 +630,12 @@ export class PopupApp {
                 () => this.hideHaloChipNameForm(),
                 this.state.showHaloChipNameForm,
                 'Add HaLo Chip Account'
+            )}
+                ${renderFireflyNameForm(
+                (name) => this.handleFireflyNameConfirm(name),
+                () => this.hideFireflyNameForm(),
+                this.state.showFireflyNameForm,
+                'Add Firefly Wallet'
             )}
                 ${renderSecurityConfirmModal(
                 (deleteKey) => this.handleSecurityConfirm(deleteKey),
@@ -671,11 +761,17 @@ export class PopupApp {
                 () => this.hideCreateMultisigForm(),
                 this.state.showCreateMultisigForm
             )}
-            ${renderHaloChipNameForm(
+                ${renderHaloChipNameForm(
                 (name) => this.handleHaloChipNameConfirm(name),
                 () => this.hideHaloChipNameForm(),
                 this.state.showHaloChipNameForm,
                 'Add HaLo Chip Account'
+            )}
+            ${renderFireflyNameForm(
+                (name) => this.handleFireflyNameConfirm(name),
+                () => this.hideFireflyNameForm(),
+                this.state.showFireflyNameForm,
+                'Add Firefly Wallet'
             )}
             ${renderSecurityConfirmModal(
                 (deleteKey) => this.handleSecurityConfirm(deleteKey),
@@ -1040,6 +1136,19 @@ export class PopupApp {
             this.handleHaloChipNameConfirm(name);
         });
 
+        // Firefly name form
+        document.getElementById('firefly-name-overlay')?.addEventListener('click', (e) => {
+            if (e.target === e.currentTarget) {
+                this.hideFireflyNameForm();
+            }
+        });
+        document.getElementById('firefly-cancel')?.addEventListener('click', () => this.hideFireflyNameForm());
+        document.getElementById('firefly-confirm')?.addEventListener('click', () => {
+            const nameInput = document.getElementById('firefly-name') as HTMLInputElement;
+            const name = nameInput?.value.trim() || undefined;
+            this.handleFireflyNameConfirm(name);
+        });
+
         // Security confirm modal
         document.getElementById('security-confirm-overlay')?.addEventListener('click', (e) => {
             if (e.target === e.currentTarget) {
@@ -1161,8 +1270,14 @@ export class PopupApp {
         });
 
         // Panel items
-        document.getElementById('panel-send')?.addEventListener('click', () => console.log('Send clicked'));
-        document.getElementById('panel-receive')?.addEventListener('click', () => console.log('Receive clicked'));
+        document.getElementById('panel-send')?.addEventListener('click', () => {
+            this.state.showSendScreen = true;
+            this.render();
+        });
+        document.getElementById('panel-receive')?.addEventListener('click', () => {
+            this.state.showReceiveScreen = true;
+            this.render();
+        });
         document.getElementById('panel-swap')?.addEventListener('click', () => console.log('Swap clicked'));
         document.getElementById('panel-bridge')?.addEventListener('click', () => console.log('Bridge clicked'));
         document.getElementById('panel-transactions')?.addEventListener('click', () => console.log('Transactions clicked'));
@@ -1170,6 +1285,559 @@ export class PopupApp {
         document.getElementById('panel-settings')?.addEventListener('click', () => this.handleSettings());
         document.getElementById('panel-nft')?.addEventListener('click', () => console.log('NFT clicked'));
         document.getElementById('panel-ecology')?.addEventListener('click', () => console.log('Ecology clicked'));
+    }
+
+    private attachReceiveScreenListeners() {
+        document.getElementById('receive-back-btn')?.addEventListener('click', () => {
+            this.state.showReceiveScreen = false;
+            this.render();
+        });
+
+        document.getElementById('receive-copy-btn')?.addEventListener('click', () => {
+            if (this.state.selectedAccount) {
+                this.handleCopyAddress();
+                // Show a brief success message
+                const btn = document.getElementById('receive-copy-btn');
+                if (btn) {
+                    const originalText = btn.innerHTML;
+                    btn.innerHTML = `
+                        <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                            <path d="M13.3333 4L6 11.3333L2.66667 8" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+                        </svg>
+                        Copied!
+                    `;
+                    setTimeout(() => {
+                        btn.innerHTML = originalText;
+                    }, 2000);
+                }
+            }
+        });
+
+        // Toggle visibility (mask balance with ***)
+        document.getElementById('receive-toggle-visibility-btn')?.addEventListener('click', () => {
+            this.state.receiveScreenHideBalance = !this.state.receiveScreenHideBalance;
+            this.render();
+        });
+    }
+
+    private attachSendScreenListeners() {
+        console.log('[SendScreen] Attaching listeners...');
+
+        // Initialize send screen state with defaults
+        const defaultToken = 'ETH';
+        const defaultChainId = 1; // Ethereum mainnet
+
+        const sendScreenState: any = {
+            selectedToken: defaultToken,
+            selectedChainId: defaultChainId,
+        };
+
+        // Back button
+        const backBtn = document.getElementById('send-back-btn');
+        if (backBtn) {
+            backBtn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.state.showSendScreen = false;
+                this.render();
+            };
+            console.log('[SendScreen] Back button attached');
+        } else {
+            console.warn('[SendScreen] Back button not found');
+        }
+
+        // Toggle visibility
+        const toggleBtn = document.getElementById('send-toggle-visibility-btn');
+        if (toggleBtn) {
+            toggleBtn.onclick = (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                this.state.sendScreenHideBalance = !this.state.sendScreenHideBalance;
+                this.render();
+            };
+        }
+
+        // Token selector - open modal
+        const tokenSelector = document.getElementById('send-token-selector');
+        const tokenModal = document.getElementById('send-token-modal-overlay');
+        const tokenDisplay = document.getElementById('send-token-display');
+        const tokenModalClose = document.getElementById('send-token-modal-close');
+
+        if (tokenSelector && tokenModal) {
+            tokenSelector.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('[SendScreen] Token selector clicked - opening modal');
+                tokenModal.style.display = 'flex';
+            });
+        }
+
+        // Close token modal
+        if (tokenModalClose) {
+            tokenModalClose.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (tokenModal) {
+                    tokenModal.style.display = 'none';
+                }
+            });
+        }
+
+        // Close token modal when clicking overlay
+        if (tokenModal) {
+            tokenModal.addEventListener('click', (e) => {
+                if (e.target === tokenModal) {
+                    tokenModal.style.display = 'none';
+                }
+            });
+        }
+
+        // Token selection - attach listeners after a short delay to ensure DOM is ready
+        setTimeout(() => {
+            const tokenOptions = document.querySelectorAll('.send-token-option');
+            console.log('[SendScreen] Found token options:', tokenOptions.length);
+            tokenOptions.forEach((option) => {
+                option.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const token = (option as HTMLElement).getAttribute('data-token');
+                    console.log('[SendScreen] Token option clicked:', token);
+                    if (token) {
+                        sendScreenState.selectedToken = token;
+                        const asset = this.state.unifiedBalanceData?.assets.find(a => a.symbol === token);
+                        const tokenIcon = asset?.icon || (token === 'ETH' ? 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png' : null);
+                        const tokenBalance = asset ? parseFloat(asset.balance) : 0;
+
+                        if (tokenDisplay) {
+                            tokenDisplay.innerHTML = `
+                                ${tokenIcon ? `
+                                    <img src="${tokenIcon}" alt="${token}" class="send-token-display-icon">
+                                ` : `
+                                    <div class="send-token-display-icon-fallback">${token.charAt(0)}</div>
+                                `}
+                                <span class="send-token-display-symbol">${token}</span>
+                            `;
+                        }
+                        // Update balance display
+                        const amountBalance = document.getElementById('send-amount-balance');
+                        if (amountBalance) {
+                            amountBalance.textContent = `Balance: ${tokenBalance.toFixed(6)} ${token}`;
+                        }
+                        // Close modal
+                        if (tokenModal) {
+                            tokenModal.style.display = 'none';
+                        }
+                        this.updateSendButtonState(sendScreenState);
+                    }
+                });
+            });
+        }, 100);
+
+        // Chain selector - open modal
+        const chainSelector = document.getElementById('send-chain-selector');
+        const chainModal = document.getElementById('send-chain-modal-overlay');
+        const chainDisplay = document.getElementById('send-chain-display');
+        const chainModalClose = document.getElementById('send-chain-modal-close');
+
+        if (chainSelector && chainModal) {
+            chainSelector.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                console.log('[SendScreen] Chain selector clicked - opening modal');
+                chainModal.style.display = 'flex';
+            });
+        }
+
+        // Close chain modal
+        if (chainModalClose) {
+            chainModalClose.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (chainModal) {
+                    chainModal.style.display = 'none';
+                }
+            });
+        }
+
+        // Close chain modal when clicking overlay
+        if (chainModal) {
+            chainModal.addEventListener('click', (e) => {
+                if (e.target === chainModal) {
+                    chainModal.style.display = 'none';
+                }
+            });
+        }
+
+        // Chain selection - attach listeners after a short delay
+        setTimeout(() => {
+            const chainOptions = document.querySelectorAll('.send-chain-option');
+            console.log('[SendScreen] Found chain options:', chainOptions.length);
+            chainOptions.forEach((option) => {
+                option.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    const chainId = (option as HTMLElement).getAttribute('data-chain-id');
+                    console.log('[SendScreen] Chain option clicked:', chainId);
+                    if (chainId) {
+                        sendScreenState.selectedChainId = parseInt(chainId);
+                        const chainName = (option as HTMLElement).querySelector('.send-chain-option-name')?.textContent || '';
+                        const chainIcon = (option as HTMLElement).querySelector('.send-chain-option-icon')?.getAttribute('src') || '';
+                        if (chainDisplay) {
+                            chainDisplay.innerHTML = `
+                                ${chainIcon ? `
+                                    <img src="${chainIcon}" alt="${chainName}" class="send-chain-display-icon">
+                                ` : `
+                                    <div class="send-chain-display-icon-fallback">${chainName.charAt(0)}</div>
+                                `}
+                                <span class="send-chain-display-name">${chainName}</span>
+                            `;
+                        }
+                        // Close modal
+                        if (chainModal) {
+                            chainModal.style.display = 'none';
+                        }
+                        this.updateSendButtonState(sendScreenState);
+                    }
+                });
+            });
+        }, 100);
+
+        // Amount input
+        const amountInput = document.getElementById('send-amount-input') as HTMLInputElement;
+        const amountBalance = document.getElementById('send-amount-balance');
+        const amountMaxBtn = document.getElementById('send-amount-max');
+
+        if (amountInput) {
+            amountInput.disabled = false;
+            amountInput.readOnly = false;
+            amountInput.addEventListener('input', () => {
+                this.updateSendButtonState(sendScreenState);
+            });
+            console.log('[SendScreen] Amount input attached');
+        } else {
+            console.warn('[SendScreen] Amount input not found');
+        }
+
+        // Max button
+        if (amountMaxBtn) {
+            (amountMaxBtn as HTMLButtonElement).disabled = false;
+            amountMaxBtn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (sendScreenState.selectedToken && amountInput) {
+                    const asset = this.state.unifiedBalanceData?.assets.find(a => a.symbol === sendScreenState.selectedToken);
+                    const balance = asset ? parseFloat(asset.balance) : 0;
+                    amountInput.value = balance.toString();
+                    this.updateSendButtonState(sendScreenState);
+                }
+            });
+        }
+
+        // Recipient input validation
+        const recipientInput = document.getElementById('send-recipient-input') as HTMLInputElement;
+        const recipientError = document.getElementById('send-recipient-error');
+
+        if (recipientInput) {
+            recipientInput.disabled = false;
+            recipientInput.readOnly = false;
+            recipientInput.addEventListener('input', () => {
+                const address = recipientInput.value.trim();
+                if (address && recipientError) {
+                    if (ethers.isAddress(address)) {
+                        recipientError.style.display = 'none';
+                    } else {
+                        recipientError.textContent = 'Invalid address';
+                        recipientError.style.display = 'block';
+                    }
+                } else if (recipientError) {
+                    recipientError.style.display = 'none';
+                }
+                this.updateSendButtonState(sendScreenState);
+            });
+            console.log('[SendScreen] Recipient input attached');
+        } else {
+            console.warn('[SendScreen] Recipient input not found');
+        }
+
+        // Store references for submit handler
+        (this as any)._sendScreenState = sendScreenState;
+
+        // Initialize with default values
+        setTimeout(() => {
+            this.updateSendButtonState(sendScreenState);
+        }, 200);
+
+        // Submit button
+        const submitBtn = document.getElementById('send-submit-btn');
+        if (submitBtn) {
+            submitBtn.addEventListener('click', async (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                await this.handleSendSubmit();
+            }, false);
+        }
+    }
+
+    private updateSendButtonState(state?: any) {
+        const sendState = state || (this as any)._sendScreenState;
+        if (!sendState) return;
+
+        const submitBtn = document.getElementById('send-submit-btn');
+        const amountInput = document.getElementById('send-amount-input') as HTMLInputElement;
+        const recipientInput = document.getElementById('send-recipient-input') as HTMLInputElement;
+
+        const hasToken = !!sendState.selectedToken;
+        const hasChain = !!sendState.selectedChainId;
+        const hasAmount = amountInput?.value && parseFloat(amountInput.value) > 0;
+        const hasRecipient = recipientInput?.value && ethers.isAddress(recipientInput.value.trim());
+
+        if (submitBtn) {
+            (submitBtn as HTMLButtonElement).disabled = !(hasToken && hasChain && hasAmount && hasRecipient);
+        }
+    }
+
+    private async handleSendSubmit() {
+        const state = (this as any)._sendScreenState;
+        if (!state) return;
+
+        const amountInput = document.getElementById('send-amount-input') as HTMLInputElement;
+        const recipientInput = document.getElementById('send-recipient-input') as HTMLInputElement;
+        const errorMessage = document.getElementById('send-error-message');
+        const submitBtn = document.getElementById('send-submit-btn');
+
+        if (!state.selectedToken || !state.selectedChainId || !amountInput?.value || !recipientInput?.value) {
+            return;
+        }
+
+        const amount = amountInput.value.trim();
+        const recipient = recipientInput.value.trim() as `0x${string}`;
+
+        if (!ethers.isAddress(recipient)) {
+            if (errorMessage) {
+                errorMessage.textContent = 'Invalid recipient address';
+                errorMessage.style.display = 'block';
+            }
+            return;
+        }
+
+        if (parseFloat(amount) <= 0) {
+            if (errorMessage) {
+                errorMessage.textContent = 'Amount must be greater than 0';
+                errorMessage.style.display = 'block';
+            }
+            return;
+        }
+
+        // Disable button and show loading
+        if (submitBtn) {
+            (submitBtn as HTMLButtonElement).disabled = true;
+            submitBtn.textContent = 'Sending...';
+        }
+        if (errorMessage) {
+            errorMessage.style.display = 'none';
+        }
+
+        try {
+            await this.handleSendTransfer({
+                token: state.selectedToken,
+                amount: amount,
+                recipient: recipient,
+                chainId: state.selectedChainId,
+            });
+        } catch (error: any) {
+            if (errorMessage) {
+                errorMessage.textContent = error.message || 'Transfer failed';
+                errorMessage.style.display = 'block';
+            }
+            if (submitBtn) {
+                (submitBtn as HTMLButtonElement).disabled = false;
+                submitBtn.textContent = 'Send';
+            }
+        }
+    }
+
+    private async handleSendTransfer(params: {
+        token: string;
+        amount: string;
+        recipient: string;
+        chainId: number;
+        sourceChains?: number[];
+    }): Promise<void> {
+        try {
+            // Check if this is a native token (ETH) or ERC20 token
+            const isNative = params.token.toUpperCase() === 'ETH' ||
+                params.token.toUpperCase() === 'MATIC' ||
+                params.token.toUpperCase() === 'BNB' ||
+                params.token.toUpperCase() === 'AVAX';
+
+            if (isNative) {
+                // Use Nexus SDK for native token transfers (cross-chain support)
+                const result = await transferService.transfer({
+                    token: params.token,
+                    amount: params.amount,
+                    chainId: params.chainId,
+                    recipient: params.recipient as `0x${string}`,
+                    sourceChains: params.sourceChains,
+                });
+
+                if (result.success) {
+                    this.showSuccessMessage('Transfer successful!', result.transactionHash, params.chainId);
+                    await this.loadUnifiedBalances();
+                    this.state.showSendScreen = false;
+                    this.render();
+                } else {
+                    throw new Error(result.error || 'Transfer failed');
+                }
+            } else {
+                // ERC20 token transfer - call token contract directly
+                const result = await this.handleERC20Transfer({
+                    token: params.token,
+                    amount: params.amount,
+                    recipient: params.recipient,
+                    chainId: params.chainId,
+                });
+
+                if (result.success) {
+                    this.showSuccessMessage('Transfer successful!', result.transactionHash, params.chainId);
+                    await this.loadUnifiedBalances();
+                    this.state.showSendScreen = false;
+                    this.render();
+                } else {
+                    throw new Error(result.error || 'Transfer failed');
+                }
+            }
+        } catch (error: any) {
+            console.error('[PopupApp] Transfer error:', error);
+            throw error;
+        }
+    }
+
+    private async handleERC20Transfer(params: {
+        token: string;
+        amount: string;
+        recipient: string;
+        chainId: number;
+    }): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
+        try {
+            // Get token info from unified balance
+            const asset = this.state.unifiedBalanceData?.assets.find(a => a.symbol === params.token);
+            if (!asset) {
+                throw new Error(`Token ${params.token} not found in balance`);
+            }
+
+            // Get token contract address
+            // Try to get from asset, or use a known address mapping
+            let tokenContractAddress: string | null = null;
+
+            // Check if asset has contractAddress property
+            if ((asset as any).contractAddress) {
+                tokenContractAddress = (asset as any).contractAddress;
+            } else if ((asset as any).address) {
+                tokenContractAddress = (asset as any).address;
+            } else {
+                // Import and use the helper function
+                const { getTokenContractAddress } = await import('./utils/erc20');
+                tokenContractAddress = getTokenContractAddress(params.token, params.chainId);
+            }
+
+            if (!tokenContractAddress) {
+                throw new Error(`Token contract address not found for ${params.token} on chain ${params.chainId}`);
+            }
+
+            // Get token decimals (default to 18)
+            const decimals = (asset as any).decimals || 18;
+
+            // Convert amount to token's smallest unit
+            const amountBigInt = ethers.parseUnits(params.amount, decimals);
+
+            // Encode ERC20 transfer function call
+            const { encodeERC20Transfer } = await import('./utils/erc20');
+            const data = encodeERC20Transfer(params.recipient, amountBigInt);
+
+            // Get selected account
+            const selectedAccount = await this.walletService.getSelectedAccount();
+            if (!selectedAccount) {
+                throw new Error('No account selected');
+            }
+
+            // Get provider - create it from the network
+            const networks = await this.walletService.getNetworks();
+            const network = networks.find(n => n.chainId === params.chainId) || networks[0];
+            if (!network || !network.rpcUrl) {
+                throw new Error(`Network not found for chainId ${params.chainId}`);
+            }
+            const provider = new ethers.JsonRpcProvider(network.rpcUrl);
+
+            // Build transaction
+            const transaction = {
+                to: tokenContractAddress,
+                value: '0x0', // No ETH sent for ERC20 transfers
+                data: data,
+                chainId: params.chainId,
+            };
+
+            // Estimate gas
+            let gasLimit: bigint;
+            try {
+                const estimatedGas = await provider.estimateGas({
+                    ...transaction,
+                    from: selectedAccount.address,
+                });
+                // Add 20% buffer
+                gasLimit = (estimatedGas * BigInt(120)) / BigInt(100);
+            } catch (error) {
+                console.warn('[handleERC20Transfer] Gas estimation failed, using default:', error);
+                // Default gas limit for ERC20 transfer is usually around 65,000
+                gasLimit = BigInt(65000);
+            }
+
+            // Get gas price
+            const feeData = await provider.getFeeData();
+            const maxFeePerGas = feeData.maxFeePerGas || feeData.gasPrice;
+            const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined;
+
+            // Build final transaction
+            const finalTransaction: any = {
+                ...transaction,
+                gasLimit: gasLimit,
+                maxFeePerGas: maxFeePerGas,
+                maxPriorityFeePerGas: maxPriorityFeePerGas,
+            };
+
+            // Sign and send transaction via background script
+            const response = await chrome.runtime.sendMessage({
+                type: 'SEND_TRANSACTION',
+                transaction: {
+                    to: finalTransaction.to,
+                    value: finalTransaction.value,
+                    data: finalTransaction.data,
+                    gasLimit: finalTransaction.gasLimit.toString(),
+                    maxFeePerGas: finalTransaction.maxFeePerGas?.toString(),
+                    maxPriorityFeePerGas: finalTransaction.maxPriorityFeePerGas?.toString(),
+                    chainId: finalTransaction.chainId,
+                },
+                address: selectedAccount.address,
+            });
+
+            if (chrome.runtime.lastError) {
+                throw new Error(chrome.runtime.lastError.message);
+            }
+
+            if (response?.success && response?.transactionHash) {
+                return {
+                    success: true,
+                    transactionHash: response.transactionHash,
+                };
+            } else {
+                throw new Error(response?.error || 'Transaction failed');
+            }
+        } catch (error: any) {
+            console.error('[PopupApp] ERC20 transfer error:', error);
+            return {
+                success: false,
+                error: error.message || 'ERC20 transfer failed',
+            };
+        }
     }
 
     private async handleCreateAccountConfirm(name?: string) {
@@ -1216,7 +1884,7 @@ export class PopupApp {
         }
     }
 
-    private showSuccessMessage(message: string) {
+    private showSuccessMessage(message: string, transactionHash?: string, chainId?: number) {
         // TODO: Replace with proper toast/notification component
         const notification = document.createElement('div');
         notification.style.cssText = `
@@ -1230,9 +1898,54 @@ export class PopupApp {
             z-index: 10000;
             box-shadow: 0 4px 12px rgba(0,0,0,0.15);
         `;
-        notification.textContent = message;
+
+        if (transactionHash) {
+            // Truncate hash: first 4 and last 4 characters (e.g., "0x12...abcd")
+            const truncatedHash = transactionHash.length > 8
+                ? `${transactionHash.slice(0, 4)}...${transactionHash.slice(-4)}`
+                : transactionHash;
+
+            // Determine chain ID for Etherscan URL (use provided chainId or default to mainnet)
+            const txChainId = chainId || this.state.selectedAccount?.chainId || 1;
+            const etherscanUrl = this.getEtherscanUrl(txChainId, transactionHash);
+
+            // Create simple text with clickable hash, matching the style of other success messages
+            const hashLink = document.createElement('a');
+            hashLink.href = etherscanUrl;
+            hashLink.target = '_blank';
+            hashLink.rel = 'noopener noreferrer';
+            hashLink.style.cssText = `
+                color: white;
+                text-decoration: underline;
+                cursor: pointer;
+            `;
+            hashLink.textContent = truncatedHash;
+
+            notification.textContent = `${message} `;
+            notification.appendChild(hashLink);
+        } else {
+            notification.textContent = message;
+        }
+
         document.body.appendChild(notification);
         setTimeout(() => notification.remove(), 3000);
+    }
+
+    private getEtherscanUrl(chainId: number, txHash: string): string {
+        // Map chain IDs to block explorers
+        const explorers: Record<number, string> = {
+            1: 'https://etherscan.io/tx', // Ethereum Mainnet
+            11155111: 'https://sepolia.etherscan.io/tx', // Sepolia
+            5: 'https://goerli.etherscan.io/tx', // Goerli
+            137: 'https://polygonscan.com/tx', // Polygon
+            42161: 'https://arbiscan.io/tx', // Arbitrum
+            10: 'https://optimistic.etherscan.io/tx', // Optimism
+            56: 'https://bscscan.com/tx', // BSC
+            43114: 'https://snowtrace.io/tx', // Avalanche
+        };
+
+        const baseUrl = explorers[chainId] || explorers[1]; // Default to Etherscan
+        return `${baseUrl}/${txHash}`;
     }
 
     private showErrorMessage(message: string) {
@@ -1343,6 +2056,8 @@ export class PopupApp {
             this.showImportAccountForm();
         } else if (optionId === 'add-halo-chip') {
             this.showHaloChipNameForm();
+        } else if (optionId === 'add-firefly-wallet') {
+            this.showFireflyNameForm();
         } else if (optionId === 'create-multisig') {
             this.showCreateMultisigForm();
         } else if (optionId === 'add-contact') {
@@ -1387,6 +2102,16 @@ export class PopupApp {
 
     private hideHaloChipNameForm() {
         this.state.showHaloChipNameForm = false;
+        this.render();
+    }
+
+    private showFireflyNameForm() {
+        this.state.showFireflyNameForm = true;
+        this.render();
+    }
+
+    private hideFireflyNameForm() {
+        this.state.showFireflyNameForm = false;
         this.render();
     }
 
@@ -1529,6 +2254,22 @@ export class PopupApp {
             this.showSuccessMessage('✅ HaLo Chip Account Added! Address: ' + formatAddress(result.chipAddress));
         } catch (error: any) {
             this.showErrorMessage('Failed to add chip account: ' + (error.message || 'Unknown error'));
+        }
+    }
+
+    private async handleFireflyNameConfirm(name?: string) {
+        try {
+            this.hideFireflyNameForm();
+
+            const result = await this.fireflyService.addFireflyAccount(name);
+
+            await this.loadAccounts();
+            this.state.unlocked = true;
+            this.render();
+
+            this.showSuccessMessage('✅ Firefly Wallet Added! Address: ' + formatAddress(result.fireflyAddress));
+        } catch (error: any) {
+            this.showErrorMessage('Failed to add Firefly wallet: ' + (error.message || 'Unknown error'));
         }
     }
 
