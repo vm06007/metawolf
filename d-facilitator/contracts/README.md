@@ -1,66 +1,125 @@
-## Foundry
+# Settlement Receiver Contract
 
-**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**
+A secure consumer contract for receiving settlement reports from Chainlink CRE workflows.
 
-Foundry consists of:
+## Security Features
 
--   **Forge**: Ethereum testing framework (like Truffle, Hardhat and DappTools).
--   **Cast**: Swiss army knife for interacting with EVM smart contracts, sending transactions and getting chain data.
--   **Anvil**: Local Ethereum node, akin to Ganache, Hardhat Network.
--   **Chisel**: Fast, utilitarian, and verbose solidity REPL.
+This contract implements the **most secure recommended pattern** with multiple layers of validation:
 
-## Documentation
+1. **Forwarder Address Validation**: Only accepts reports from the trusted Chainlink KeystoneForwarder contract
+2. **Workflow ID Validation**: Only accepts reports from a specific workflow instance
+3. **Workflow Owner Validation**: Validates the workflow owner address (from IReceiverTemplate)
+4. **Workflow Name Validation**: Validates the workflow name (from IReceiverTemplate)
 
-https://book.getfoundry.sh/
+## Contract Structure
 
-## Usage
-
-### Build
-
-```shell
-$ forge build
+```
+contracts/
+├── src/
+│   ├── keystone/
+│   │   ├── IERC165.sol          # ERC165 interface
+│   │   ├── IReceiver.sol         # Receiver interface
+│   │   └── IReceiverTemplate.sol # Base template with validation
+│   └── SettlementReceiver.sol    # Main consumer contract
+└── test/
+    └── SettlementReceiver.t.sol  # Comprehensive tests
 ```
 
-### Test
+## Deployment
 
-```shell
-$ forge test
+### Constructor Parameters
+
+```solidity
+constructor(
+    address expectedAuthor,           // Your workflow owner address
+    bytes10 expectedWorkflowName,      // Your workflow name (e.g., "d-settle")
+    address _keystoneForwarderAddress, // KeystoneForwarder address
+    bytes32 _expectedWorkflowId        // Your specific workflow ID
+)
 ```
 
-### Format
+### Example Deployment
 
-```shell
-$ forge fmt
+```solidity
+// Sepolia Testnet
+address keystoneForwarder = 0x15fC6ae953E024d975e77382eEeC56A9101f9F88;
+address workflowOwner = 0xYourWorkflowOwnerAddress;
+bytes10 workflowName = "d-settle";
+bytes32 workflowId = 0xYourWorkflowId;
+
+SettlementReceiver receiver = new SettlementReceiver(
+    workflowOwner,
+    workflowName,
+    keystoneForwarder,
+    workflowId
+);
 ```
 
-### Gas Snapshots
+## KeystoneForwarder Addresses
 
-```shell
-$ forge snapshot
+- **Ethereum Sepolia**: `0x15fC6ae953E024d975e77382eEeC56A9101f9F88`
+- **Other networks**: Check Chainlink CRE documentation
+
+## Workflow Integration
+
+In your CRE workflow, use the `cre.report()` function to send data to this contract:
+
+```typescript
+// In your workflow
+const reportData = abi.encode(
+    payerAddress,
+    payeeAddress,
+    amount,
+    success
+);
+
+runtime.report(reportData);
 ```
 
-### Anvil
+## Customization
 
-```shell
-$ anvil
+To implement your settlement logic, modify the `_processReport` function in `SettlementReceiver.sol`:
+
+```solidity
+function _processReport(bytes calldata report) internal override {
+    // Decode your report data
+    (address payer, address payee, uint256 amount, bool success) = 
+        abi.decode(report, (address, address, uint256, bool));
+    
+    // Your settlement logic here
+    // e.g., update balances, emit events, etc.
+    
+    emit SettlementProcessed(payer, payee, amount, success);
+}
 ```
 
-### Deploy
+## Testing
 
-```shell
-$ forge script script/Counter.s.sol:CounterScript --rpc-url <your_rpc_url> --private-key <your_private_key>
+Run the test suite:
+
+```bash
+forge test
 ```
 
-### Cast
+Run with verbose output:
 
-```shell
-$ cast <subcommand>
+```bash
+forge test -vvv
 ```
 
-### Help
+## Security Considerations
 
-```shell
-$ forge --help
-$ anvil --help
-$ cast --help
+1. **Never deploy with zero addresses** - The constructor validates the forwarder address
+2. **Keep workflow ID secret** - Only share it with trusted parties
+3. **Verify workflow owner** - Ensure the expectedAuthor matches your CRE account
+4. **Test thoroughly** - Use the provided test suite before mainnet deployment
+
+## Building
+
+```bash
+forge build
 ```
+
+## License
+
+MIT

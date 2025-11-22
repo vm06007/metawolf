@@ -7,7 +7,7 @@ import {IReceiver} from "./IReceiver.sol";
 /// @title IReceiverTemplate - Abstract receiver with workflow validation and metadata decoding
 abstract contract IReceiverTemplate is IReceiver {
 
-    // Immutable expected values
+    // Updatable expected values
     address public EXPECTED_AUTHOR;
     bytes10 public EXPECTED_WORKFLOW_NAME;
 
@@ -27,8 +27,18 @@ abstract contract IReceiverTemplate is IReceiver {
     function onReport(
         bytes calldata metadata,
         bytes calldata report
-    ) external override {
-         (address workflowOwner, bytes10 workflowName) =  _decodeMetadata(metadata);
+    ) external virtual override {
+        _validateAndProcess(metadata, report);
+    }
+
+    /// @notice Validates metadata and processes the report
+    /// @param metadata Report metadata
+    /// @param report Report data
+    function _validateAndProcess(
+        bytes calldata metadata,
+        bytes calldata report
+    ) internal {
+        (address workflowOwner, bytes10 workflowName) = _decodeMetadata(metadata);
 
         if (workflowOwner != EXPECTED_AUTHOR) {
             revert InvalidAuthor(workflowOwner, EXPECTED_AUTHOR);
