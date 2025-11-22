@@ -46,6 +46,11 @@ export class UnifiedBalanceService {
             return await this.getWatchOnlyBalances(account);
         }
 
+        // For Firefly accounts, fetch balance directly from node (same as Halo accounts)
+        if (account?.isFireflyAccount) {
+            return await this.getFireflyBalances(account);
+        }
+
         if (!this.sdk) {
             return {
                 totalBalanceUSD: 0,
@@ -147,12 +152,14 @@ export class UnifiedBalanceService {
     }
 
     /**
-     * Fetch portfolio data from Octav API for watch-only addresses
+     * Fetch portfolio data from Octav API for watch-only and Firefly addresses
      * This provides unified balance across all chains and protocols
+     * (Both account types don't have private keys stored, so we use external API)
      */
     private async getWatchOnlyBalances(account: any): Promise<UnifiedBalanceData> {
         try {
-            console.log('[UnifiedBalanceService] Fetching watch-only balance from Octav for:', account.address);
+            const accountType = account.isFireflyAccount ? 'Firefly' : 'watch-only';
+            console.log(`[UnifiedBalanceService] Fetching ${accountType} balance from Octav for:`, account.address);
 
             const portfolio = await fetchPortfolioFromOctav({
                 addresses: account.address,
@@ -434,6 +441,139 @@ export class UnifiedBalanceService {
                 assets: [],
                 loading: false,
                 error: error.message || 'Failed to fetch watch-only balance from Octav',
+            };
+        }
+    }
+
+    /**
+     * Fetch ETH balance directly from node for Firefly accounts
+     * (same approach as Halo chip accounts - fetch directly from RPC)
+     */
+    private async getFireflyBalances(account: any, chainId?: number): Promise<UnifiedBalanceData> {
+        try {
+            // Get chain ID from account or parameter, default to mainnet
+            const targetChainId = chainId || account?.chainId || 1;
+            
+            console.log('[UnifiedBalanceService] Fetching Firefly balance from node for:', account.address, 'chainId:', targetChainId);
+
+            // Get RPC URL for the chain
+            let rpcUrl: string;
+            try {
+                const networks = await chrome.runtime.sendMessage({ type: 'GET_NETWORKS' });
+                const network = networks.find((n: any) => n.chainId === targetChainId);
+                if (network && network.rpcUrl) {
+                    rpcUrl = network.rpcUrl;
+                } else {
+                    // Fallback to default RPCs
+                    const defaultRPCs: Record<number, string> = {
+                        1: 'https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73',
+                        11155111: 'https://sepolia.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73',
+                        42161: 'https://arb1.arbitrum.io/rpc',
+                        48900: 'https://zircuit-mainnet.drpc.org',
+                    };
+                    rpcUrl = defaultRPCs[targetChainId] || defaultRPCs[1];
+                }
+            } catch (error) {
+                console.warn('[UnifiedBalanceService] Failed to get network config, using mainnet:', error);
+                rpcUrl = 'https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73';
+            }
+
+            // Fetch ETH balance directly from node using RPC call
+            const balanceResponse = await fetch(rpcUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'eth_getBalance',
+                    params: [account.address, 'latest'],
+                    id: 1,
+                }),
+            });
+
+            const balanceData = await balanceResponse.json();
+            if (balanceData.error) {
+                throw new Error(balanceData.error.message || 'Failed to fetch balance');
+            }
+
+            // Convert hex balance to ETH
+            const balanceWeiHex = balanceData.result;
+            const balanceWei = BigInt(balanceWeiHex);
+            const balanceEth = (Number(balanceWei) / 1e18).toString();
+            const balanceNumber = parseFloat(balanceEth);
+
+            // Fetch ETH price from CoinGecko
+            let ethPrice = 0;
+            try {
+                const priceResponse = await fetch('https://api.coingecko.com/api/v3/simple/price?ids=ethereum&vs_currencies=usd');
+                const priceData = await priceResponse.json();
+                if (priceData.ethereum && priceData.ethereum.usd) {
+                    ethPrice = priceData.ethereum.usd;
+                }
+            } catch (error) {
+                console.warn('[UnifiedBalanceService] Failed to fetch ETH price, using 0:', error);
+            }
+
+            // Calculate USD value
+            const balanceInFiat = balanceNumber * ethPrice;
+
+            // Get chain name
+            const chainNames: Record<number, string> = {
+                1: 'Ethereum',
+                11155111: 'Sepolia',
+                42161: 'Arbitrum One',
+                48900: 'Zircuit Mainnet',
+            };
+            const chainName = chainNames[targetChainId] || 'Ethereum';
+
+            // Create ETH asset with breakdown structure
+            const ethAsset: UserAsset = {
+                symbol: 'ETH',
+                balance: balanceEth,
+                balanceInFiat: balanceInFiat,
+                icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png',
+                chain: 'eth',
+                name: 'Ethereum',
+                decimals: 18,
+                address: account.address,
+                breakdown: [
+                    {
+                        chain: {
+                            id: targetChainId,
+                            name: chainName,
+                            logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png',
+                        },
+                        balance: balanceEth,
+                        balanceInFiat: balanceInFiat,
+                        contractAddress: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+                        decimals: 18,
+                        isNative: true,
+                        universe: 'mainnet' as any,
+                    }
+                ],
+            } as UserAsset;
+
+            const data: UnifiedBalanceData = {
+                totalBalanceUSD: balanceInFiat,
+                assets: [ethAsset],
+                loading: false,
+            };
+
+            console.log('[UnifiedBalanceService] Firefly balance fetched:', {
+                eth: balanceEth,
+                usd: balanceInFiat,
+                chainId: targetChainId,
+            });
+
+            return data;
+        } catch (error: any) {
+            console.error('[UnifiedBalanceService] Error fetching Firefly balance:', error);
+            return {
+                totalBalanceUSD: 0,
+                assets: [],
+                loading: false,
+                error: error.message || 'Failed to fetch Firefly balance',
             };
         }
     }

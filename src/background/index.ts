@@ -2360,6 +2360,34 @@ function handleMessage(
                     }
                     break;
 
+                case 'FIREFLY_SIGN_RESULT':
+                    // Forward Firefly transaction signing result from firefly-sign.html tab
+                    // Store it temporarily so popup can retrieve it via storage listener
+                    try {
+                        const requestId = message.requestId;
+                        if (requestId) {
+                            // Store the result temporarily
+                            await chrome.storage.local.set({
+                                [`firefly_sign_${requestId}`]: {
+                                    success: message.success,
+                                    signedTransaction: message.signedTransaction,
+                                    transactionHash: message.transactionHash,
+                                    error: message.error,
+                                    timestamp: Date.now(),
+                                },
+                            });
+
+                            // Response not needed - popup will get it via storage listener
+                            safeSendResponse({ success: true, forwarded: true });
+                        } else {
+                            safeSendResponse({ success: false, error: 'Missing requestId' });
+                        }
+                    } catch (error: any) {
+                        console.error('[FIREFLY_SIGN_RESULT] Error:', error);
+                        safeSendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
                 case 'SIGN_MULTISIG_DEPLOYMENT':
                 case 'SIGN_MULTISIG_TRANSACTION':
                     // Sign transaction with a specific Halo chip for multisig operations

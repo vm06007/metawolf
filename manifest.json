@@ -55,6 +55,8 @@
                 "popup/lib/ethers.js",
                 "popup/firefly-connect.html",
                 "popup/firefly-connect.js",
+                "popup/firefly-sign.html",
+                "popup/firefly-sign.js",
                 "popup/expanded.html",
                 "popup/wolfy-logo.png",
                 "popup/lock.svg",

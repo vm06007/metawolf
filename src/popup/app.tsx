@@ -142,6 +142,23 @@ export class PopupApp {
 
     async loadUnifiedBalances() {
         await BalanceModule.loadUnifiedBalances(this.getBalanceContext());
+
+        // If send screen is open, update the balance display for the selected token
+        if (this.state.showSendScreen) {
+            const sendState = (this as any)._sendScreenState;
+            if (sendState && sendState.selectedToken) {
+                // Update balance display for selected token
+                const asset = this.state.unifiedBalanceData?.assets.find(a => a.symbol === sendState.selectedToken);
+                const tokenBalance = asset ? parseFloat(asset.balance) : 0;
+                const amountBalance = document.getElementById('send-amount-balance');
+                if (amountBalance) {
+                    amountBalance.textContent = `Balance: ${tokenBalance.toFixed(6)} ${sendState.selectedToken}`;
+                }
+            } else {
+                // No token selected yet, refresh the entire send screen to show updated assets
+                this.render();
+            }
+        }
     }
 
     async loadHistoricalBalances() {
@@ -546,9 +563,15 @@ export class PopupApp {
 
             const displayName = getDisplayName(selectedAccount);
             const assets = this.state.unifiedBalanceData?.assets || [];
+
+            // Get ETH balance for display in send screen (like Halo tag does)
+            const ethAsset = assets.find(a => a.symbol === 'ETH' || a.symbol === 'WETH');
+            const ethBalance = ethAsset ? parseFloat(ethAsset.balance).toFixed(6) : '0.000000';
+
             app.innerHTML = renderSendScreen({
                 accountName: displayName,
-                balance: this.state.balance || '0.00',
+                balance: this.state.balance || '0.00', // Keep for backward compatibility
+                ethBalance: ethBalance, // ETH balance for send screen display
                 assets: assets,
                 hideBalance: this.state.sendScreenHideBalance,
                 onBack: () => {
@@ -1422,11 +1445,18 @@ export class PopupApp {
         });
 
         // Panel items
-        document.getElementById('panel-send')?.addEventListener('click', () => {
+        document.getElementById('panel-send')?.addEventListener('click', async () => {
             // Prevent opening send screen for watch-only accounts
             if (this.state.selectedAccount?.isWatchOnly) {
                 return;
             }
+
+            // Ensure balances are loaded before showing send screen (especially for Firefly accounts)
+            if (!this.state.unifiedBalanceData || this.state.unifiedBalanceData.assets.length === 0) {
+                console.log('[PopupApp] Loading balances before showing send screen...');
+                await this.loadUnifiedBalances();
+            }
+
             this.state.showSendScreen = true;
             this.render();
         });
@@ -1607,6 +1637,21 @@ export class PopupApp {
                         sendScreenState.selectedToken = token;
                         const asset = this.state.unifiedBalanceData?.assets.find(a => a.symbol === token);
                         const tokenIcon = asset?.icon || (token === 'ETH' ? 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png' : null);
+
+                        // For Firefly accounts with ETH selected, fetch balance for selected chain if available
+                        if (this.state.selectedAccount?.isFireflyAccount && token === 'ETH' && sendScreenState.selectedChainId) {
+                            // Fetch balance for the selected chain
+                            this.fetchFireflyBalanceForChain(sendScreenState.selectedChainId, sendScreenState).then(() => {
+                                // Update balance display after fetching
+                                const updatedAsset = this.state.unifiedBalanceData?.assets.find(a => a.symbol === token);
+                                const tokenBalance = updatedAsset ? parseFloat(updatedAsset.balance) : 0;
+                                const amountBalance = document.getElementById('send-amount-balance');
+                                if (amountBalance) {
+                                    amountBalance.textContent = `Balance: ${tokenBalance.toFixed(6)} ${token}`;
+                                }
+                            });
+                        }
+
                         const tokenBalance = asset ? parseFloat(asset.balance) : 0;
 
                         if (tokenDisplay) {
@@ -1697,6 +1742,12 @@ export class PopupApp {
                         if (chainModal) {
                             chainModal.style.display = 'none';
                         }
+
+                        // For Firefly accounts, fetch balance for the selected chain
+                        if (this.state.selectedAccount?.isFireflyAccount) {
+                            this.fetchFireflyBalanceForChain(parseInt(chainId), sendScreenState);
+                        }
+
                         this.updateSendButtonState(sendScreenState);
                     }
                 });
@@ -1833,6 +1884,94 @@ export class PopupApp {
                 e.stopPropagation();
                 await this.handleSendSubmit();
             }, false);
+        }
+    }
+
+    private async fetchFireflyBalanceForChain(chainId: number, sendState: any) {
+        try {
+            if (!this.state.selectedAccount?.isFireflyAccount || !this.state.selectedAccount?.address) {
+                return;
+            }
+
+            console.log('[PopupApp] Fetching Firefly balance for chain:', chainId);
+
+            // Get RPC URL for the chain
+            const networks = await chrome.runtime.sendMessage({ type: 'GET_NETWORKS' });
+            const network = networks.find((n: any) => n.chainId === chainId);
+            if (!network || !network.rpcUrl) {
+                console.warn('[PopupApp] Network not found for chainId:', chainId);
+                return;
+            }
+
+            // Fetch ETH balance directly from node
+            const balanceResponse = await fetch(network.rpcUrl, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({
+                    jsonrpc: '2.0',
+                    method: 'eth_getBalance',
+                    params: [this.state.selectedAccount.address, 'latest'],
+                    id: 1,
+                }),
+            });
+
+            const balanceData = await balanceResponse.json();
+            if (balanceData.error) {
+                console.error('[PopupApp] Error fetching Firefly balance:', balanceData.error);
+                return;
+            }
+
+            // Convert hex balance to ETH
+            const balanceWeiHex = balanceData.result;
+            const balanceWei = BigInt(balanceWeiHex);
+            const balanceEth = (Number(balanceWei) / 1e18).toString();
+            const balanceNumber = parseFloat(balanceEth);
+
+            // Update balance display if ETH is selected
+            if (sendState.selectedToken === 'ETH') {
+                const amountBalance = document.getElementById('send-amount-balance');
+                if (amountBalance) {
+                    amountBalance.textContent = `Balance: ${balanceNumber.toFixed(6)} ETH`;
+                }
+            }
+
+            // Update unified balance data for this chain
+            if (this.state.unifiedBalanceData) {
+                const ethAsset = this.state.unifiedBalanceData.assets.find(a => a.symbol === 'ETH');
+                if (ethAsset) {
+                    // Update the breakdown for this chain
+                    if (!ethAsset.breakdown) {
+                        ethAsset.breakdown = [];
+                    }
+                    const chainBreakdown = ethAsset.breakdown.find((b: any) => b.chain?.id === chainId);
+                    if (chainBreakdown) {
+                        chainBreakdown.balance = balanceEth;
+                    } else {
+                        // Add new breakdown entry for this chain
+                        ethAsset.breakdown.push({
+                            chain: {
+                                id: chainId,
+                                name: network.name || 'Unknown',
+                                logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png',
+                            },
+                            balance: balanceEth,
+                            balanceInFiat: 0, // Will be calculated if needed
+                            contractAddress: '0x0000000000000000000000000000000000000000' as `0x${string}`,
+                            decimals: 18,
+                            isNative: true,
+                            universe: 'mainnet' as any,
+                        });
+                    }
+                    // Update total balance
+                    ethAsset.balance = balanceEth;
+                }
+            }
+
+            console.log('[PopupApp] Firefly balance fetched for chain:', chainId, 'balance:', balanceEth);
+        } catch (error: any) {
+            console.error('[PopupApp] Error fetching Firefly balance for chain:', error);
         }
     }
 
@@ -2618,10 +2757,6 @@ export class PopupApp {
             this.render();
 
             // Step 2: Deploy multisig contract using first chip
-            // NOTE: The factory contract must be deployed first on the target chain
-            // Replace this with the actual deployed factory address
-            const FACTORY_ADDRESS = '0x0000000000000000000000000000000000000000'; // TODO: Deploy MultisigFactory contract
-
             // Get current chain ID
             const selectedAccount = await this.walletService.getSelectedAccount();
             const chainId = selectedAccount?.chainId || this.state.selectedAccount?.chainId || 1;
@@ -2631,9 +2766,10 @@ export class PopupApp {
                 this.showSuccessMessage('Deploying multisig contract... Please scan first Halo chip.');
 
                 // Deploy multisig contract (will prompt for chip scan)
+                // Factory address will be retrieved from config
                 const deployment = await multisigService.deployMultisig(
                     response.account,
-                    FACTORY_ADDRESS,
+                    null, // Will use factory address from config
                     chainId
                 );
 

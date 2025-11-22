@@ -38,6 +38,13 @@ export async function initializeUnifiedBalance(
         return;
     }
 
+    // For Firefly accounts, fetch balance directly from node (same as Halo accounts)
+    if (account.isFireflyAccount) {
+        console.log('[PopupApp] Firefly account detected, fetching balance directly from node');
+        await loadUnifiedBalances(context);
+        return;
+    }
+
     // For regular accounts, use SDK with signing
     let accountToUse = account;
 
@@ -110,11 +117,11 @@ export async function loadUnifiedBalances(context: BalanceContext): Promise<void
             hasError: !!data.error
         });
 
-        if (state.selectedAccount?.isWatchOnly && state.selectedAccount?.address) {
-            console.log('[PopupApp] Loading historical balances for view-only account');
+        if ((state.selectedAccount?.isWatchOnly || state.selectedAccount?.isFireflyAccount) && state.selectedAccount?.address) {
+            console.log('[PopupApp] Loading historical balances for view-only/Firefly account');
             await loadHistoricalBalances(context);
         } else {
-            console.log('[PopupApp] Not a view-only account, skipping historical data');
+            console.log('[PopupApp] Not a view-only/Firefly account, skipping historical data');
             state.historicalBalanceData = null;
             state.historicalBalanceLoading = false;
         }

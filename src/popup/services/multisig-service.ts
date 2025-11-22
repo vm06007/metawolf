@@ -1,6 +1,7 @@
 import { sendMessageWithRetry } from '../utils/messaging';
 import { loadEthers } from '../ethers-loader';
 import { HaloService } from './halo-service';
+import { getMultisigFactoryAddress } from '../../core/multisig-config.js';
 
 const FACTORY_ABI = [
     'function createMultisig(address[] calldata owners, uint256 threshold, bytes32 salt) external returns (address)',
@@ -32,9 +33,13 @@ export class MultisigService {
      */
     async deployMultisig(
         account: any,
-        factoryAddress: string,
+        factoryAddress: string | null,
         chainId: number
     ): Promise<{ address: string; txHash: string }> {
+        // Get factory address if not provided
+        if (!factoryAddress) {
+            factoryAddress = getMultisigFactoryAddress(chainId);
+        }
         if (!account.multisig || account.multisig.chips.length < 2) {
             throw new Error('Multisig account requires at least 2 chips');
         }
@@ -189,7 +194,26 @@ export class MultisigService {
         // Step 1: Submit transaction (requires 1 signature)
         const firstChip = account.multisig.chips[0];
         const multisigContract = new ethers.Contract(multisigAddress, MULTISIG_ABI);
-        const submitData = multisigContract.interface.encodeFunctionData('submitTransaction', [to, value, data]);
+        
+        // Normalize value to bigint
+        // Value can be: hex string (0x...), decimal string (wei), or bigint
+        let valueBigInt: bigint;
+        if (typeof value === 'string') {
+            if (value.startsWith('0x')) {
+                valueBigInt = ethers.getBigInt(value);
+            } else {
+                // Assume it's already in wei (decimal string)
+                valueBigInt = BigInt(value);
+            }
+        } else {
+            valueBigInt = BigInt(value);
+        }
+        
+        const submitData = multisigContract.interface.encodeFunctionData('submitTransaction', [
+            to, 
+            valueBigInt, 
+            data
+        ]);
 
         // Estimate gas for submit
         const submitGasEstimate = await provider.estimateGas({
@@ -241,91 +265,118 @@ export class MultisigService {
         }
 
         // Get transaction nonce from contract state
-        // The submitTransaction function returns the nonce, but we need to get it from the contract
-        const multisigInterface = new ethers.Interface(MULTISIG_ABI);
+        // The submitTransaction function does: uint256 txNonce = nonce++;
+        // This means it uses the current nonce value, then increments it
+        // So after submission, the contract's nonce is (txNonce + 1)
         const multisig = new ethers.Contract(multisigAddress, MULTISIG_ABI, provider);
-        
-        // Get the current nonce (which is the transaction nonce we just submitted)
-        // The nonce is incremented after submission, so we subtract 1
         const currentNonce = await multisig.nonce();
         const txNonce = Number(currentNonce) - 1;
+        
+        // Verify the transaction exists
+        const txInfo = await multisig.transactions(txNonce);
+        if (!txInfo || txInfo.to === ethers.ZeroAddress) {
+            throw new Error('Failed to retrieve transaction nonce after submission');
+        }
 
-        // Step 2: Confirm transaction with second chip (if threshold > 1)
-        if (threshold > 1 && account.multisig.chips.length >= 2) {
-            const secondChip = account.multisig.chips[1];
-            const confirmData = multisigContract.interface.encodeFunctionData('confirmTransaction', [txNonce]);
+        // Check current confirmation count
+        // Note: submitTransaction already calls confirmTransaction internally, so we have 1 confirmation
+        const currentConfirmations = Number(txInfo.confirmations);
+        
+        // Step 2: Collect additional confirmations if needed
+        // We need (threshold - 1) more confirmations since submitTransaction already confirmed once
+        const confirmationsNeeded = threshold - currentConfirmations;
+        
+        if (confirmationsNeeded > 0) {
+            // Collect confirmations from additional chips
+            // Start from chip index 1 (chip 0 already submitted)
+            for (let i = 1; i < account.multisig.chips.length && i <= confirmationsNeeded; i++) {
+                const chip = account.multisig.chips[i];
+                const confirmData = multisigContract.interface.encodeFunctionData('confirmTransaction', [txNonce]);
 
-            const confirmGasEstimate = await provider.estimateGas({
-                to: multisigAddress,
-                data: confirmData,
-                from: secondChip.address,
-            });
-
-            const confirmTransaction = {
-                to: multisigAddress,
-                data: confirmData,
-                value: '0x0',
-                gasLimit: (confirmGasEstimate * BigInt(120)) / BigInt(100),
-                maxFeePerGas: feeData.maxFeePerGas?.toString(),
-                maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
-                chainId: chainId,
-                nonce: await provider.getTransactionCount(secondChip.address, 'pending'),
-            };
-
-            // Sign confirm transaction with second chip
-            const confirmSignResponse = await chrome.runtime.sendMessage({
-                type: 'SIGN_MULTISIG_TRANSACTION',
-                transaction: confirmTransaction,
-                chipAddress: secondChip.address,
-                chipPublicKey: secondChip.publicKey,
-                slot: secondChip.slot || 1,
-                step: 'confirm',
-            });
-
-            if (!confirmSignResponse || !confirmSignResponse.success) {
-                throw new Error(confirmSignResponse?.error || 'Failed to sign confirm transaction');
-            }
-
-            // Send confirm transaction
-            const confirmSendResponse = await chrome.runtime.sendMessage({
-                type: 'SEND_SIGNED_TRANSACTION',
-                signedTransaction: confirmSignResponse.signedTransaction,
-            });
-
-            if (!confirmSendResponse || !confirmSendResponse.success) {
-                throw new Error(confirmSendResponse?.error || 'Failed to send confirm transaction');
-            }
-
-            // Wait for confirm transaction to be mined
-            const confirmReceipt = await provider.waitForTransaction(confirmSendResponse.transactionHash, 1);
-            if (!confirmReceipt || confirmReceipt.status !== 1) {
-                throw new Error('Confirm transaction failed');
-            }
-
-            // Transaction should auto-execute when threshold is met
-            // Check if it was executed
-            const txInfo = await multisig.transactions(txNonce);
-            if (txInfo.executed) {
-                // Find the execution transaction hash from logs
-                const executionEvent = confirmReceipt.logs.find((log: any) => {
-                    try {
-                        const parsed = multisigInterface.parseLog(log);
-                        return parsed?.name === 'TransactionExecuted';
-                    } catch {
-                        return false;
-                    }
+                const confirmGasEstimate = await provider.estimateGas({
+                    to: multisigAddress,
+                    data: confirmData,
+                    from: chip.address,
                 });
 
-                if (executionEvent) {
-                    return {
-                        success: true,
-                        transactionHash: confirmReceipt.hash, // Use confirm receipt hash
-                    };
+                const confirmTransaction = {
+                    to: multisigAddress,
+                    data: confirmData,
+                    value: '0x0',
+                    gasLimit: (confirmGasEstimate * BigInt(120)) / BigInt(100),
+                    maxFeePerGas: feeData.maxFeePerGas?.toString(),
+                    maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
+                    chainId: chainId,
+                    nonce: await provider.getTransactionCount(chip.address, 'pending'),
+                };
+
+                // Sign confirm transaction with chip
+                const confirmSignResponse = await chrome.runtime.sendMessage({
+                    type: 'SIGN_MULTISIG_TRANSACTION',
+                    transaction: confirmTransaction,
+                    chipAddress: chip.address,
+                    chipPublicKey: chip.publicKey,
+                    slot: chip.slot || 1,
+                    step: `confirm-${i}`,
+                });
+
+                if (!confirmSignResponse || !confirmSignResponse.success) {
+                    throw new Error(confirmSignResponse?.error || `Failed to sign confirm transaction with chip ${i + 1}`);
+                }
+
+                // Send confirm transaction
+                const confirmSendResponse = await chrome.runtime.sendMessage({
+                    type: 'SEND_SIGNED_TRANSACTION',
+                    signedTransaction: confirmSignResponse.signedTransaction,
+                });
+
+                if (!confirmSendResponse || !confirmSendResponse.success) {
+                    throw new Error(confirmSendResponse?.error || `Failed to send confirm transaction from chip ${i + 1}`);
+                }
+
+                // Wait for confirm transaction to be mined
+                const confirmReceipt = await provider.waitForTransaction(confirmSendResponse.transactionHash, 1);
+                if (!confirmReceipt || confirmReceipt.status !== 1) {
+                    throw new Error(`Confirm transaction from chip ${i + 1} failed`);
+                }
+
+                // Check if transaction was auto-executed (contract executes when threshold is met)
+                const updatedTxInfo = await multisig.transactions(txNonce);
+                if (updatedTxInfo.executed) {
+                    // Find the execution event in the receipt logs
+                    const executionEvent = confirmReceipt.logs.find((log: any) => {
+                        try {
+                            const parsed = multisigInterface.parseLog(log);
+                            return parsed?.name === 'TransactionExecuted';
+                        } catch {
+                            return false;
+                        }
+                    });
+
+                    if (executionEvent) {
+                        // Transaction was executed automatically by the contract
+                        return {
+                            success: true,
+                            transactionHash: confirmReceipt.hash,
+                        };
+                    }
                 }
             }
         }
 
-        // If threshold is 1 or transaction didn't auto-execute, manually execute
+        // Check if transaction was executed (should be if threshold was met)
+        const finalTxInfo = await multisig.transactions(txNonce);
+        if (finalTxInfo.executed) {
+            // Transaction was executed, find the transaction hash from the last confirmation
+            // We'll use the submit receipt hash as fallback
+            return {
+                success: true,
+                transactionHash: submitReceipt.hash,
+            };
+        }
+
+        // If threshold is 1, transaction should have been executed already
+        // If not, manually execute (shouldn't happen, but handle edge case)
         const executeData = multisigContract.interface.encodeFunctionData('executeTransaction', [txNonce]);
         const executeGasEstimate = await provider.estimateGas({
             to: multisigAddress,

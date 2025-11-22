@@ -4,7 +4,8 @@ import { getChainWhiteLogo } from '../utils/chain-icons';
 
 export interface SendScreenProps {
     accountName: string;
-    balance: string;
+    balance: string; // Total USD balance (for backward compatibility)
+    ethBalance?: string; // ETH balance to display in send screen
     assets: UserAsset[];
     onBack: () => void;
     onSend: (params: {
@@ -19,8 +20,11 @@ export interface SendScreenProps {
 }
 
 export function renderSendScreen(props: SendScreenProps): string {
-    const { accountName, balance, assets, onBack, onSend, hideBalance = false, onToggleVisibility } = props;
-    const displayBalance = hideBalance ? '***' : `$${balance}`;
+    const { accountName, balance, ethBalance, assets, onBack, onSend, hideBalance = false, onToggleVisibility } = props;
+    // In send mode, display ETH balance (like Halo tag does) instead of total USD balance
+    const displayBalance = hideBalance 
+        ? '***' 
+        : (ethBalance !== undefined ? `${ethBalance} ETH` : `$${balance}`);
 
     // Get available tokens from assets
     const availableTokens = assets.map(asset => ({
@@ -116,7 +120,7 @@ export function renderSendScreen(props: SendScreenProps): string {
                         <div class="send-account-content">
                             <div class="send-account-row">
                                 <div class="send-account-name" title="${accountName}">${accountName}</div>
-                                <div class="send-account-balance" title="${hideBalance ? 'Balance hidden' : `$${balance}`}">${displayBalance}</div>
+                                <div class="send-account-balance" title="${hideBalance ? 'Balance hidden' : (ethBalance !== undefined ? `${ethBalance} ETH` : `$${balance}`)}">${displayBalance}</div>
                             </div>
                         </div>
                     </div>

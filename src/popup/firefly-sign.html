@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Sign Transaction with Firefly</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 40px;
+            max-width: 600px;
+            margin: 0 auto;
+            background: #f5f5f5;
+        }
+        .container {
+            background: white;
+            padding: 30px;
+            border-radius: 12px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 { color: #333; margin-top: 0; }
+        .transaction-details {
+            background: #f9fafb;
+            padding: 15px;
+            border-radius: 8px;
+            margin: 20px 0;
+            font-size: 14px;
+        }
+        .transaction-details strong {
+            display: inline-block;
+            width: 120px;
+            color: #666;
+        }
+        .transaction-details div {
+            margin: 8px 0;
+            word-break: break-all;
+        }
+        button {
+            padding: 12px 24px;
+            font-size: 16px;
+            background: #4f46e5;
+            color: white;
+            border: none;
+            border-radius: 6px;
+            cursor: pointer;
+            margin: 10px 5px 10px 0;
+        }
+        button:hover { background: #4338ca; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        button.secondary {
+            background: #6b7280;
+        }
+        button.secondary:hover {
+            background: #4b5563;
+        }
+        #status {
+            margin-top: 20px;
+            padding: 15px;
+            border-radius: 6px;
+            display: none;
+        }
+        .success {
+            background: #d1fae5;
+            color: #065f46;
+            border: 1px solid #10b981;
+        }
+        .error {
+            background: #fee2e2;
+            color: #991b1b;
+            border: 1px solid #ef4444;
+        }
+        .info {
+            background: #dbeafe;
+            color: #1e40af;
+            border: 1px solid #3b82f6;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Sign Transaction with Firefly</h1>
+        
+        <div class="transaction-details" id="tx-details" style="display: none;">
+            <div><strong>To:</strong> <span id="tx-to"></span></div>
+            <div><strong>Amount:</strong> <span id="tx-amount"></span></div>
+            <div><strong>Network:</strong> <span id="tx-network"></span></div>
+            <div><strong>Gas Limit:</strong> <span id="tx-gas"></span></div>
+        </div>
+        
+        <button id="connect-btn">Connect Firefly</button>
+        <button id="sign-btn" class="secondary" disabled>Sign Transaction</button>
+        
+        <div id="status"></div>
+    </div>
+
+    <script type="module" src="firefly-sign.js"></script>
+</body>
+</html>
+
