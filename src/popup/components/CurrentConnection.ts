@@ -15,7 +15,8 @@ export function renderCurrentConnection(
     onChainChange?: () => void,
     ethPriceData?: EthPriceData | null,
     isExpanded?: boolean,
-    ethPriceLoading?: boolean
+    ethPriceLoading?: boolean,
+    currentNetworkName?: string
 ): string {
     if (!connectedDApp) {
         // In expanded view, show price info in the same row
@@ -180,7 +181,7 @@ export function renderCurrentConnection(
                             <circle cx="8" cy="8" r="7" fill="#627EEA"/>
                             <path d="M8 2V8L11 10" stroke="white" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>
-                        <span>Ethereum</span>
+                        <span>${currentNetworkName || 'Ethereum'}</span>
                         <svg width="12" height="12" viewBox="0 0 12 12" fill="none">
                             <path d="M3 4.5L6 7.5L9 4.5" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
                         </svg>

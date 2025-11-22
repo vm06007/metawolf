@@ -92,10 +92,35 @@ export function renderTransactionSuccess(
                 <p style="
                     font-size: 14px;
                     color: var(--r-neutral-body);
-                    margin: 0 0 24px 0;
+                    margin: 0 0 12px 0;
                     text-align: center;
                     line-height: 1.5;
                 ">Your transaction has been successfully submitted to the network.</p>
+
+                <div id="tx-status" style="
+                    font-size: 14px;
+                    color: var(--r-neutral-body);
+                    margin: 0 0 24px 0;
+                    text-align: center;
+                    line-height: 1.5;
+                ">
+                    <div style="display: flex; align-items: center; justify-content: center; gap: 8px;">
+                        <div class="spinner" style="
+                            width: 16px;
+                            height: 16px;
+                            border: 2px solid var(--r-neutral-line);
+                            border-top-color: var(--r-blue-default);
+                            border-radius: 50%;
+                            animation: spin 1s linear infinite;
+                        "></div>
+                        <span>Pending...</span>
+                    </div>
+                    <style>
+                        @keyframes spin {
+                            to { transform: rotate(360deg); }
+                        }
+                    </style>
+                </div>
 
                 <div style="
                     background: var(--r-neutral-card1);

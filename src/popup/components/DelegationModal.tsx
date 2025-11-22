@@ -27,7 +27,7 @@ export function renderDelegationModal(
     const defaultAddress = isUpgrade ? PREDEFINED_DELEGATORS[0].address : ZERO_ADDRESS;
     const action = isUpgrade ? 'Upgrade' : 'Reset';
     const actionDescription = isUpgrade
-        ? 'This will delegate your account to the smart account contract, enabling advanced features like batched transactions.'
+        ? 'This will delegate your account to the smart account, enabling advanced features.'
         : 'This will clear the delegation, removing the smart account functionality from your account.';
 
     // Get the name for the current address if it's a predefined one
@@ -36,6 +36,7 @@ export function renderDelegationModal(
     );
     const contractAddress = targetAddress || defaultAddress;
     const contractName = currentDelegator?.name || 'Custom Address';
+    const isCustomAddress = !currentDelegator;
 
     // Etherscan URL based on chainId (with #code hash)
     const getEtherscanUrl = (address: string) => {
@@ -117,7 +118,6 @@ export function renderDelegationModal(
                     <div style="
                         background: var(--r-neutral-card1);
                         border-radius: 12px;
-                        padding: 16px;
                         margin-bottom: 20px;
                         padding-top: 0px;
                     ">
@@ -149,7 +149,7 @@ export function renderDelegationModal(
                                     transition: all 0.2s;
                                     box-sizing: border-box;
                                 " onfocus="this.style.borderColor='var(--r-blue-default)'" onblur="this.style.borderColor='var(--r-neutral-line)'">
-                                    <option value="custom">Custom Address</option>
+                                    <option value="custom" ${isCustomAddress ? 'selected' : ''}>Custom Address</option>
                                     ${PREDEFINED_DELEGATORS.map(delegator => `
                                         <option value="${delegator.address}" ${delegator.address.toLowerCase() === contractAddress.toLowerCase() ? 'selected' : ''}>
                                             ${delegator.name}
@@ -168,20 +168,22 @@ export function renderDelegationModal(
                                 id="delegator-address-input"
                                 value="${contractAddress}"
                                 placeholder="0x..."
+                                ${!isCustomAddress ? 'readonly' : ''}
                                 style="
                                     flex: 1;
                                     font-family: monospace;
                                     font-size: 13px;
                                     color: var(--r-neutral-title1);
-                                    background: var(--r-neutral-bg2);
+                                    background: ${isCustomAddress ? 'var(--r-neutral-bg2)' : 'var(--r-neutral-bg1)'};
                                     padding: 10px 12px;
                                     border: 1px solid var(--r-neutral-line);
                                     border-radius: 8px;
                                     transition: all 0.2s;
                                     box-sizing: border-box;
+                                    cursor: ${isCustomAddress ? 'text' : 'not-allowed'};
                                 "
-                                onfocus="this.style.borderColor='var(--r-blue-default)'; this.style.background='var(--r-neutral-bg1)'"
-                                onblur="this.style.borderColor='var(--r-neutral-line)'; this.style.background='var(--r-neutral-bg2)'"
+                                onfocus="if (!this.readOnly) { this.style.borderColor='var(--r-blue-default)'; this.style.background='var(--r-neutral-bg1)'; }"
+                                onblur="if (!this.readOnly) { this.style.borderColor='var(--r-neutral-line)'; this.style.background='var(--r-neutral-bg2)'; }"
                             />
                             <a
                                 id="delegator-etherscan-link"
@@ -239,6 +241,8 @@ export function renderDelegationModal(
                     padding: 20px 24px 24px 24px;
                     background: var(--r-neutral-bg1);
                     border-top: 1px solid var(--r-neutral-line);
+                    border-bottom-right-radius: 20px;
+                    border-bottom-left-radius: 20px;
                 ">
                     <div style="
                         display: flex;

@@ -8,6 +8,7 @@ import { renderLockScreen } from './components/LockScreen';
 import { renderAccountSelectorModal } from './components/AccountSelectorModal';
 import { renderAccountDetailModal } from './components/AccountDetailModal';
 import { renderSmartAccountUpgrade } from './components/SmartAccountUpgrade';
+import { renderEip7702Modal } from './components/Eip7702Modal';
 import { renderDelegationModal } from './components/DelegationModal';
 import { renderPasswordModal } from './components/PasswordModal';
 import { renderAccountSidebar } from './components/AccountSidebar';
@@ -29,6 +30,7 @@ import { renderUnifiedBalancePanel } from './components/UnifiedBalancePanel';
 import { renderReceiveScreen, initReceiveScreenQRCode } from './components/ReceiveScreen';
 import { renderSendScreen } from './components/SendScreen';
 import { renderTransactionsScreen } from './components/TransactionsScreen';
+import { renderNetworkSelectorModal } from './components/NetworkSelectorModal';
 import { ethPriceService } from './services/eth-price-service';
 import { unifiedBalanceService, UnifiedBalanceData } from './services/unified-balance-service';
 import { transferService } from './services/transfer-service';
@@ -52,6 +54,7 @@ interface AppState {
     hasPassword: boolean;
     showAccountSelector: boolean;
     accountSelectorFirstRender: boolean;
+    showNetworkSelector: boolean;
     showAddWalletModal: boolean;
     showCreateAccountForm: boolean;
     showImportAccountForm: boolean;
@@ -96,12 +99,17 @@ interface AppState {
         codeHash: string;
     } | null;
     delegationLoading: boolean;
+    delegationTargetAddress: string | null;
+    delegationStatusAddress: string | null;
     showDelegationModal: boolean;
     delegationModalIsUpgrade: boolean;
     delegationModalFirstRender: boolean;
     delegationContractAddress: string | null;
     delegationTransactionHash: string | null;
     delegationButtonToConfirm: boolean;
+    showEip7702Modal: boolean;
+    eip7702ModalFirstRender: boolean;
+    eip7702ModalAccountAddress: string | null;
     showTransactionsScreen: boolean;
     transactions: OctavTransaction[];
     transactionsLoading: boolean;
@@ -125,6 +133,7 @@ export class PopupApp {
         hasPassword: false,
         showAccountSelector: false,
         accountSelectorFirstRender: true,
+        showNetworkSelector: false,
         showAddWalletModal: false,
         showCreateAccountForm: false,
         showImportAccountForm: false,
@@ -161,12 +170,17 @@ export class PopupApp {
         sendScreenHideBalance: false,
         delegationStatus: null,
         delegationLoading: false,
+        delegationTargetAddress: null,
+        delegationStatusAddress: null,
         showDelegationModal: false,
         delegationModalIsUpgrade: true,
         delegationModalFirstRender: true,
         delegationContractAddress: null,
         delegationTransactionHash: null,
         delegationButtonToConfirm: false,
+        showEip7702Modal: false,
+        eip7702ModalFirstRender: true,
+        eip7702ModalAccountAddress: null,
         showTransactionsScreen: false,
         transactions: [],
         transactionsLoading: false,
@@ -180,6 +194,8 @@ export class PopupApp {
     private walletService: WalletService;
     private haloService: HaloService;
     private fireflyService: FireflyService;
+    private delegationRequestId = 0;
+    private delegationLoadingTimeout?: number;
 
     constructor() {
         this.walletService = new WalletService();
@@ -276,25 +292,15 @@ export class PopupApp {
             return;
         }
 
-        // Find a non-watch-only account to use for signing
-        // If the selected account is watch-only, find the first non-watch-only account
-        let accountToUse = account;
+        // For watch-only addresses, use Octav portfolio API (no SDK needed)
         if (account.isWatchOnly) {
-            const nonWatchOnlyAccount = this.state.accounts.find(acc => !acc.isWatchOnly);
-            if (!nonWatchOnlyAccount) {
-                console.warn('[PopupApp] No non-watch-only accounts available for unified balance');
-                this.state.unifiedBalanceLoading = false;
-                this.state.unifiedBalanceData = {
-                    totalBalanceUSD: 0,
-                    assets: [],
-                    loading: false,
-                    error: 'No accounts with private keys available. Unified balance requires a signable account.',
-                };
-                return;
-            }
-            accountToUse = nonWatchOnlyAccount;
-            console.log(`[PopupApp] Selected account is watch-only, using account ${accountToUse.address} instead`);
+            console.log('[PopupApp] Watch-only account detected, fetching balance from Octav API');
+            await this.loadUnifiedBalances();
+            return;
         }
+
+        // For regular accounts, use SDK with signing
+        let accountToUse = account;
 
         // Ensure Buffer is available before initializing SDK
         if (typeof (window as any).Buffer === 'undefined') {
@@ -323,7 +329,7 @@ export class PopupApp {
             // Dynamically import ethers to avoid bundling conflicts
             const ethersModule = await loadEthers();
             const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
-            const provider = new ethers.JsonRpcProvider('https://mainnet.infura.io/v3/db2e296c0a0f475fb6c3a3281a0c39d6');
+            const provider = new ethers.JsonRpcProvider('https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73');
 
             // Create EIP-1193 provider wrapper
             // Use a non-watch-only account for signing (required for SIWE)
@@ -671,7 +677,8 @@ export class PopupApp {
                 () => this.handleChainChange(),
                 this.state.ethPriceData,
                 true,
-                this.state.ethPriceLoading
+                this.state.ethPriceLoading,
+                this.state.networks.find(n => n.chainId === this.state.selectedNetwork)?.name
             )}
                             </div>
                         </div>
@@ -807,7 +814,9 @@ export class PopupApp {
                 () => this.handleDisconnectDApp(),
                 () => this.handleChainChange(),
                 undefined,
-                false
+                false,
+                false,
+                this.state.networks.find(n => n.chainId === this.state.selectedNetwork)?.name
             )}
                         </div>
                 </div>
@@ -820,6 +829,13 @@ export class PopupApp {
                 this.state.accountSelectorFirstRender,
                 (account) => this.handleDeleteAccount(account),
                 (account) => this.handleEditAccount(account)
+            )}
+            ${renderNetworkSelectorModal(
+                this.state.networks.map(n => ({ chainId: n.chainId, name: n.name, logo: n.logo })),
+                this.state.selectedNetwork,
+                (chainId) => this.handleSelectNetwork(chainId),
+                () => this.hideNetworkSelector(),
+                this.state.showNetworkSelector
             )}
             ${renderAccountDetailModal(
                 this.state.accountToEdit,
@@ -932,6 +948,16 @@ export class PopupApp {
                 this.attachPrivateKeyModalListeners();
             }, 100);
         }
+
+        // If network selector modal is visible, attach its listeners
+        if (this.state.showNetworkSelector) {
+            setTimeout(() => {
+                this.attachNetworkSelectorListeners();
+            }, 100);
+        }
+
+        // Keep the standalone EIP-7702 modal in sync after any re-render
+        this.updateEip7702Modal();
     }
 
     private attachLockScreenListeners() {
@@ -1374,7 +1400,7 @@ export class PopupApp {
         document.getElementById('panel-approvals')?.addEventListener('click', () => console.log('Approvals clicked'));
         document.getElementById('panel-settings')?.addEventListener('click', () => this.handleSettings());
         document.getElementById('panel-nft')?.addEventListener('click', () => console.log('NFT clicked'));
-        document.getElementById('panel-ecology')?.addEventListener('click', () => console.log('Ecology clicked'));
+        document.getElementById('panel-eip7702')?.addEventListener('click', () => this.showEip7702Modal());
     }
 
     private attachReceiveScreenListeners() {
@@ -2376,6 +2402,20 @@ export class PopupApp {
         this.state.selectedAccount = account;
         this.hideAccountSelector();
 
+        // Immediately clear previous balance data to avoid showing stale data
+        this.state.balance = '0.00';
+        this.state.unifiedBalanceData = {
+            totalBalanceUSD: 0,
+            assets: [],
+            loading: true,
+        };
+        this.state.unifiedBalanceLoading = true;
+        
+        // Clear unified balance cache for the previous account
+        unifiedBalanceService.clearCache();
+        
+        this.render(); // Render immediately with cleared data
+
         // Reinitialize unified balance for the new account
         await this.initializeUnifiedBalance(account);
 
@@ -2596,7 +2636,7 @@ export class PopupApp {
                 try {
                     const ethersModule = await loadEthers();
                     const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
-                    const provider = new ethers.JsonRpcProvider('https://mainnet.infura.io/v3/db2e296c0a0f475fb6c3a3281a0c39d6');
+                    const provider = new ethers.JsonRpcProvider('https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73');
                     const resolved = await provider.resolveName(address);
                     if (resolved && ensResult) {
                         ensResult.innerHTML = `
@@ -2873,8 +2913,71 @@ export class PopupApp {
     }
 
     handleChainChange() {
-        // TODO: Implement chain selector modal
-        console.log('Chain change requested');
+        this.state.showNetworkSelector = true;
+        this.render();
+        // Listeners will be attached in attachListeners() via setTimeout
+    }
+
+    hideNetworkSelector() {
+        this.state.showNetworkSelector = false;
+        this.render();
+    }
+
+    async handleSelectNetwork(chainId: number) {
+        try {
+            const { WalletService } = await import('./services/wallet-service.js');
+            const walletService = new WalletService();
+            await walletService.switchNetwork(chainId);
+            
+            // Update local state
+            this.state.selectedNetwork = chainId;
+            
+            // Reload data for new network
+            await this.loadAccounts();
+            await this.loadBalance();
+            
+            this.hideNetworkSelector();
+            this.showSuccessMessage('Network switched successfully');
+        } catch (error: any) {
+            console.error('Error switching network:', error);
+            this.showErrorMessage(error.message || 'Failed to switch network');
+        }
+    }
+
+    attachNetworkSelectorListeners() {
+        // Close button
+        const closeBtn = document.getElementById('network-selector-close');
+        if (closeBtn) {
+            closeBtn.onclick = (e) => {
+                e.stopPropagation();
+                e.preventDefault();
+                this.hideNetworkSelector();
+            };
+        }
+
+        // Overlay click
+        const overlay = document.getElementById('network-selector-overlay');
+        if (overlay) {
+            overlay.onclick = (e) => {
+                if (e.target === e.currentTarget) {
+                    this.hideNetworkSelector();
+                }
+            };
+        }
+
+        // Network option clicks - use event delegation on the modal container
+        const modal = document.querySelector('.network-selector-modal');
+        if (modal) {
+            modal.onclick = (e) => {
+                const target = e.target as HTMLElement;
+                const networkOption = target.closest('.network-option');
+                if (networkOption) {
+                    e.stopPropagation();
+                    const chainId = parseInt(networkOption.getAttribute('data-chain-id') || '1');
+                    this.handleSelectNetwork(chainId);
+                }
+            };
+        }
     }
 
     handleDeleteAccount(account: any) {
@@ -2919,6 +3022,7 @@ export class PopupApp {
         const isSameAccount = this.state.accountToEdit?.address?.toLowerCase() === account.address?.toLowerCase();
         
         this.state.accountToEdit = account;
+        this.state.delegationTargetAddress = account.address;
         this.state.showAccountDetailModal = true;
         // Only animate on first render or when switching to a different account
         this.state.accountDetailModalFirstRender = !modalExists || !isSameAccount;
@@ -3266,8 +3370,15 @@ export class PopupApp {
     }
 
     private async checkDelegationStatus(address: string) {
+        const normalizedAddress = address?.toLowerCase();
+        const requestId = ++this.delegationRequestId;
         try {
             this.state.delegationLoading = true;
+            this.state.delegationStatusAddress = normalizedAddress;
+            if (this.delegationLoadingTimeout) {
+                window.clearTimeout(this.delegationLoadingTimeout);
+                this.delegationLoadingTimeout = undefined;
+            }
             // Only update the delegation section, don't re-render entire modal
             this.updateDelegationSection();
             
@@ -3284,11 +3395,14 @@ export class PopupApp {
             
             console.log('[checkDelegationStatus] Received response:', response);
             
+            if (requestId !== this.delegationRequestId) {
+                return;
+            }
+
             if (response && response.success) {
                 this.state.delegationStatus = response.delegationStatus;
-                this.state.delegationLoading = false;
-                // Update only the delegation section, not the entire modal
-                this.updateDelegationSection();
+                this.state.delegationStatusAddress = normalizedAddress;
+                this.scheduleDelegationLoadingCompletion(1000);
                 console.log('[checkDelegationStatus] Delegation status updated:', response.delegationStatus);
             } else {
                 const errorMsg = response?.error || 'Unknown error checking delegation';
@@ -3297,29 +3411,58 @@ export class PopupApp {
                 this.updateDelegationSection();
             }
         } catch (error: any) {
+            if (requestId !== this.delegationRequestId) {
+                return;
+            }
             console.error('[checkDelegationStatus] Error checking delegation:', error);
             this.state.delegationLoading = false;
             this.updateDelegationSection();
         }
     }
 
+    private scheduleDelegationLoadingCompletion(delayMs: number) {
+        if (this.delegationLoadingTimeout) {
+            window.clearTimeout(this.delegationLoadingTimeout);
+        }
+        this.delegationLoadingTimeout = window.setTimeout(() => {
+            this.state.delegationLoading = false;
+            this.updateDelegationSection();
+            this.delegationLoadingTimeout = undefined;
+        }, delayMs);
+    }
+
+    /**
+     * Update delegation UI blocks (account detail + standalone modal)
+     * without re-rendering the entire app
+     */
+    private updateDelegationSection() {
+        this.updateAccountDetailDelegationSection();
+        this.updateEip7702Modal();
+    }
+
     /**
      * Update only the delegation section in the Account Detail modal
      * without re-rendering the entire modal (prevents slide-up animation)
      */
-    private updateDelegationSection() {
+    private updateAccountDetailDelegationSection() {
         if (!this.state.showAccountDetailModal || !this.state.accountToEdit) {
+            return;
+        }
+
+        if (this.state.accountToEdit.isWatchOnly) {
             return;
         }
 
         // Try both possible IDs for compatibility
         const smartAccountSection = document.getElementById('smart-account-section') || 
-                                   document.getElementById('smart-account-upgrade-section');
-        if (smartAccountSection && this.state.accountToEdit && !this.state.accountToEdit.isWatchOnly) {
+            document.getElementById('smart-account-upgrade-section');
+        if (smartAccountSection) {
+            const accountAddress = this.state.accountToEdit.address?.toLowerCase();
+            const isCurrentAccount = accountAddress && accountAddress === this.state.delegationStatusAddress;
             smartAccountSection.innerHTML = renderSmartAccountUpgrade(
                 this.state.accountToEdit,
-                this.state.delegationStatus,
-                this.state.delegationLoading,
+                isCurrentAccount ? this.state.delegationStatus : null,
+                this.state.delegationLoading && !!isCurrentAccount,
                 () => this.showDelegationModal(true),
                 () => this.showDelegationModal(false),
                 this.state.delegationTransactionHash,
@@ -3378,30 +3521,130 @@ export class PopupApp {
         }
     }
 
+    private showEip7702Modal() {
+        const selectedAccount = this.state.selectedAccount;
+        if (!selectedAccount) {
+            this.showErrorMessage('Please select an account first.');
+            return;
+        }
+
+        const modalExists = document.getElementById('eip7702-modal-root') !== null;
+        const normalizedAddress = selectedAccount.address?.toLowerCase() || null;
+        const isDifferentAccount = normalizedAddress !== this.state.delegationStatusAddress;
+
+        if (isDifferentAccount) {
+            this.state.delegationStatus = null;
+        }
+
+        this.state.delegationLoading = true;
+        this.state.delegationStatusAddress = normalizedAddress;
+        this.state.showEip7702Modal = true;
+        this.state.delegationTargetAddress = selectedAccount.address;
+        this.state.eip7702ModalAccountAddress = selectedAccount.address?.toLowerCase() || null;
+        this.state.eip7702ModalFirstRender = !modalExists;
+        this.updateEip7702Modal();
+        this.checkDelegationStatus(selectedAccount.address);
+        if (this.state.eip7702ModalFirstRender) {
+            this.state.eip7702ModalFirstRender = false;
+        }
+    }
+
+    private hideEip7702Modal() {
+        this.state.showEip7702Modal = false;
+        this.state.eip7702ModalFirstRender = true;
+        this.state.eip7702ModalAccountAddress = null;
+        this.updateEip7702Modal();
+    }
+
+    private updateEip7702Modal() {
+        const app = document.getElementById('app');
+        if (!app) {
+            return;
+        }
+
+        const existingModal = document.getElementById('eip7702-modal-root');
+
+        if (!this.state.showEip7702Modal) {
+            if (existingModal) {
+                existingModal.remove();
+            }
+            return;
+        }
+
+        const targetAddress = this.state.eip7702ModalAccountAddress;
+        const modalAccount = this.state.accounts.find((account) =>
+            account.address?.toLowerCase() === targetAddress
+        ) || this.state.selectedAccount;
+        const accountAddress = modalAccount?.address?.toLowerCase();
+        const isCurrentAccount = accountAddress && accountAddress === this.state.delegationStatusAddress;
+
+        const modalHTML = renderEip7702Modal({
+            visible: this.state.showEip7702Modal,
+            account: modalAccount,
+            delegationStatus: isCurrentAccount ? this.state.delegationStatus : null,
+            isLoading: !!(this.state.delegationLoading && isCurrentAccount),
+            isFirstRender: this.state.eip7702ModalFirstRender,
+            transactionHash: this.state.delegationTransactionHash,
+            chainId: this.state.selectedNetwork,
+        });
+
+        if (existingModal) {
+            existingModal.outerHTML = modalHTML;
+        } else {
+            app.insertAdjacentHTML('beforeend', modalHTML);
+        }
+
+        setTimeout(() => {
+            this.attachEip7702ModalListeners();
+            this.attachDelegationListeners();
+        }, 50);
+    }
+
+    private attachEip7702ModalListeners() {
+        const overlay = document.getElementById('eip7702-modal-overlay');
+        const closeBtn = document.getElementById('eip7702-modal-close');
+
+        overlay?.addEventListener('click', (event) => {
+            if (event.target === overlay) {
+                this.hideEip7702Modal();
+            }
+        });
+
+        closeBtn?.addEventListener('click', () => {
+            this.hideEip7702Modal();
+        });
+    }
+
     /**
      * Attach listeners for the smart account upgrade/reset buttons
      */
     private attachDelegationListeners() {
-        const upgradeBtn = document.getElementById('upgrade-smart-account-btn');
-        const resetBtn = document.getElementById('reset-delegation-btn');
-        
-        // Remove existing listeners to prevent duplicates
-        const newUpgradeBtn = upgradeBtn?.cloneNode(true);
-        const newResetBtn = resetBtn?.cloneNode(true);
-        
-        if (upgradeBtn && newUpgradeBtn) {
-            upgradeBtn.parentNode?.replaceChild(newUpgradeBtn, upgradeBtn);
-            newUpgradeBtn.addEventListener('click', () => {
+        const upgradeButtons = document.querySelectorAll<HTMLButtonElement>('[data-smart-account-action="upgrade"]');
+        const resetButtons = document.querySelectorAll<HTMLButtonElement>('[data-smart-account-action="reset"]');
+
+        upgradeButtons.forEach((button) => {
+            const newButton = button.cloneNode(true) as HTMLButtonElement;
+            button.parentNode?.replaceChild(newButton, button);
+            newButton.addEventListener('click', () => {
+                const address = newButton.dataset.delegationAddress;
+                if (address) {
+                    this.state.delegationTargetAddress = address;
+                }
                 this.showDelegationModal(true);
             });
-        }
-        
-        if (resetBtn && newResetBtn) {
-            resetBtn.parentNode?.replaceChild(newResetBtn, resetBtn);
-            newResetBtn.addEventListener('click', () => {
+        });
+
+        resetButtons.forEach((button) => {
+            const newButton = button.cloneNode(true) as HTMLButtonElement;
+            button.parentNode?.replaceChild(newButton, button);
+            newButton.addEventListener('click', () => {
+                const address = newButton.dataset.delegationAddress;
+                if (address) {
+                    this.state.delegationTargetAddress = address;
+                }
                 this.showDelegationModal(false);
             });
-        }
+        });
     }
 
     private showDelegationModal(isUpgrade: boolean) {
@@ -3459,7 +3702,10 @@ export class PopupApp {
     }
 
     private async handleApproveDelegation() {
-        if (!this.state.accountToEdit) return;
+        const targetAddress = this.state.delegationTargetAddress || this.state.accountToEdit?.address;
+        if (!targetAddress) {
+            return;
+        }
         
         // Reset button state
         this.state.delegationButtonToConfirm = false;
@@ -3479,7 +3725,6 @@ export class PopupApp {
         }
         
         try {
-            const address = this.state.accountToEdit.address;
             const messageType = this.state.delegationModalIsUpgrade ? 'UPGRADE_TO_SMART_ACCOUNT' : 'CLEAR_DELEGATION';
             
             // Get the contract address from input if upgrade
@@ -3504,7 +3749,7 @@ export class PopupApp {
             
             const response = await chrome.runtime.sendMessage({
                 type: messageType,
-                address: address,
+                address: targetAddress,
                 chainId: this.state.selectedNetwork,
                 contractAddress: contractAddress
             });
@@ -3514,7 +3759,7 @@ export class PopupApp {
                 this.hideDelegationModal();
                 // Refresh delegation status after a delay
                 setTimeout(() => {
-                    this.checkDelegationStatus(address);
+                    this.checkDelegationStatus(targetAddress);
                 }, 5000);
                 // Don't re-render entire modal, just update delegation section
                 this.updateDelegationSection();
@@ -3551,6 +3796,20 @@ export class PopupApp {
             const delegatorSelect = document.getElementById('delegator-select') as HTMLSelectElement;
             const delegatorInput = document.getElementById('delegator-address-input') as HTMLInputElement;
             const etherscanLink = document.getElementById('delegator-etherscan-link') as HTMLAnchorElement;
+            
+            // Initialize readonly state based on current selection
+            if (delegatorSelect && delegatorInput && this.state.delegationModalIsUpgrade) {
+                const selectedValue = delegatorSelect.value;
+                if (selectedValue !== 'custom') {
+                    delegatorInput.readOnly = true;
+                    delegatorInput.style.background = 'var(--r-neutral-bg1)';
+                    delegatorInput.style.cursor = 'not-allowed';
+                } else {
+                    delegatorInput.readOnly = false;
+                    delegatorInput.style.background = 'var(--r-neutral-bg2)';
+                    delegatorInput.style.cursor = 'text';
+                }
+            }
             
             overlay?.addEventListener('click', (e) => {
                 if (e.target === overlay) {
@@ -3597,7 +3856,11 @@ export class PopupApp {
                 delegatorSelect.addEventListener('change', (e) => {
                     const selectedValue = (e.target as HTMLSelectElement).value;
                     if (selectedValue !== 'custom') {
+                        // Predefined option selected - make input readonly
                         delegatorInput.value = selectedValue;
+                        delegatorInput.readOnly = true;
+                        delegatorInput.style.background = 'var(--r-neutral-bg1)';
+                        delegatorInput.style.cursor = 'not-allowed';
                         this.state.delegationContractAddress = selectedValue;
                         // Update Etherscan link
                         if (etherscanLink) {
@@ -3614,13 +3877,25 @@ export class PopupApp {
                             const domain = chainMap[this.state.selectedNetwork] || 'etherscan.io';
                             etherscanLink.href = `https://${domain}/address/${selectedValue}#code`;
                         }
+                    } else {
+                        // Custom option selected - make input editable and clear it
+                        delegatorInput.value = '';
+                        delegatorInput.readOnly = false;
+                        delegatorInput.style.background = 'var(--r-neutral-bg2)';
+                        delegatorInput.style.cursor = 'text';
+                        this.state.delegationContractAddress = '';
+                        delegatorInput.focus();
                     }
                 });
             }
             
-            // Handle custom address input
+            // Handle custom address input (only when not readonly)
             if (delegatorInput && this.state.delegationModalIsUpgrade) {
                 delegatorInput.addEventListener('input', (e) => {
+                    if (delegatorInput.readOnly) {
+                        e.preventDefault();
+                        return;
+                    }
                     const value = (e.target as HTMLInputElement).value;
                     this.state.delegationContractAddress = value;
                     // Update Etherscan link
@@ -3639,15 +3914,6 @@ export class PopupApp {
                         etherscanLink.href = `https://${domain}/address/${value}#code`;
                     }
                 });
-                
-                // When user selects "custom", focus the input
-                if (delegatorSelect) {
-                    delegatorSelect.addEventListener('change', (e) => {
-                        if ((e.target as HTMLSelectElement).value === 'custom') {
-                            delegatorInput.focus();
-                        }
-                    });
-                }
             }
         }, 100);
     }

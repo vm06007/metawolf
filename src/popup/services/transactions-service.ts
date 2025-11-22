@@ -86,3 +86,92 @@ export async function fetchTransactionsFromOctav(params: FetchTransactionsParams
     return { transactions };
 }
 
+// Portfolio interfaces
+export interface OctavPortfolioAsset {
+    balance: string;
+    symbol: string;
+    price: string;
+    value: string;
+    contractAddress?: string;
+    chain?: string;
+}
+
+export interface OctavPortfolioProtocol {
+    key: string;
+    name: string;
+    value: string;
+    assets: OctavPortfolioAsset[];
+}
+
+export interface OctavPortfolioChain {
+    key: string;
+    name: string;
+    value: string;
+    protocols: string[];
+}
+
+export interface OctavPortfolio {
+    address: string;
+    networth: string;
+    cashBalance: string;
+    dailyIncome: string;
+    dailyExpense: string;
+    fees: string;
+    feesFiat: string;
+    lastUpdated: string;
+    openPnl: string;
+    closedPnl: string;
+    totalCostBasis: string;
+    assetByProtocols: Record<string, OctavPortfolioProtocol>;
+    chains: Record<string, OctavPortfolioChain>;
+}
+
+interface FetchPortfolioParams {
+    addresses: string | string[];
+    includeNFTs?: boolean;
+    includeImages?: boolean;
+    includeExplorerUrls?: boolean;
+    waitForSync?: boolean;
+}
+
+export async function fetchPortfolioFromOctav(params: FetchPortfolioParams): Promise<OctavPortfolio | OctavPortfolio[]> {
+    const addresses = Array.isArray(params.addresses) ? params.addresses.join(',') : params.addresses;
+    
+    if (!addresses) {
+        throw new Error('No addresses provided');
+    }
+
+    const url = new URL(`${OCTAV_API_BASE}/portfolio`);
+    url.searchParams.set('addresses', addresses);
+    
+    if (params.includeNFTs) {
+        url.searchParams.set('includeNFTs', 'true');
+    }
+    if (params.includeImages) {
+        url.searchParams.set('includeImages', 'true');
+    }
+    if (params.includeExplorerUrls) {
+        url.searchParams.set('includeExplorerUrls', 'true');
+    }
+    if (params.waitForSync) {
+        url.searchParams.set('waitForSync', 'true');
+    }
+
+    const response = await fetch(url.toString(), {
+        method: 'GET',
+        headers: {
+            Authorization: `Bearer ${OCTAV_API_KEY}`,
+            'Content-Type': 'application/json',
+        },
+    });
+
+    if (!response.ok) {
+        const errorText = await response.text();
+        throw new Error(`Failed to load portfolio (${response.status}): ${errorText || response.statusText}`);
+    }
+
+    const data = await response.json();
+    // API may return array for multiple addresses or single object for one address
+    return data as OctavPortfolio | OctavPortfolio[];
+}
+

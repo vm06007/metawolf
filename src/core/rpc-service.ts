@@ -14,13 +14,13 @@ export interface RPCStore {
 // Default RPC endpoints with fallbacks
 const DEFAULT_RPC_ENDPOINTS: Record<number, string[]> = {
     1: [
-        'https://mainnet.infura.io/v3/db2e296c0a0f475fb6c3a3281a0c39d6', // Infura (primary)
+        'https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73', // Infura (primary)
         'https://eth.llamarpc.com', // LlamaRPC (fallback)
         'https://rpc.ankr.com/eth', // Ankr (fallback)
         'https://ethereum.publicnode.com', // Public Node (fallback)
     ],
     11155111: [ // Sepolia
-        'https://sepolia.infura.io/v3/db2e296c0a0f475fb6c3a3281a0c39d6',
+        'https://sepolia.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73',
         'https://rpc.sepolia.org',
     ],
 };
@@ -46,7 +46,7 @@ class RPCService {
      */
     getRPCUrl(chainId: number): string {
         const chainKey = chainId.toString();
-        
+
         // Check if custom RPC is set and enabled
         const customRPC = this.store.customRPC[chainKey];
         if (customRPC && customRPC.enable) {
@@ -60,7 +60,7 @@ class RPCService {
         }
 
         // Fallback to Infura mainnet
-        return 'https://mainnet.infura.io/v3/db2e296c0a0f475fb6c3a3281a0c39d6';
+        return 'https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73';
     }
 
     /**
@@ -68,7 +68,7 @@ class RPCService {
      */
     getRPCUrls(chainId: number): string[] {
         const chainKey = chainId.toString();
-        
+
         // Check if custom RPC is set and enabled
         const customRPC = this.store.customRPC[chainKey];
         if (customRPC && customRPC.enable) {
@@ -77,7 +77,7 @@ class RPCService {
 
         // Return default RPCs with fallbacks
         return DEFAULT_RPC_ENDPOINTS[chainId] || [
-            'https://mainnet.infura.io/v3/db2e296c0a0f475fb6c3a3281a0c39d6',
+            'https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73',
         ];
     }
 

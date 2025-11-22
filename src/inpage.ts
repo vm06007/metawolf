@@ -155,6 +155,15 @@ class WolfyProvider implements EthereumProvider {
             // Handle adding chains
             return null;
         }
+        if (args.method === 'wallet_sendCalls') {
+            return this.wallet_sendCalls(args.params![0]);
+        }
+        if (args.method === 'wallet_getCallsStatus') {
+            return this.wallet_getCallsStatus(args.params![0]);
+        }
+        if (args.method === 'wallet_getCapabilities') {
+            return this.wallet_getCapabilities(args.params![0]);
+        }
         if (args.method === 'eth_getBlockByNumber') {
             // Forward to background script
             return new Promise((resolve, reject) => {
@@ -539,6 +548,133 @@ class WolfyProvider implements EthereumProvider {
                     id: messageId,
                     method: 'eth_signTypedData_v4',
                     params: [address, typedData],
+                },
+                '*'
+            );
+
+            setTimeout(() => {
+                const listeners = this.listeners.get(messageId.toString());
+                if (listeners) {
+                    listeners.delete(handler);
+                    if (listeners.size === 0) {
+                        this.listeners.delete(messageId.toString());
+                    }
+                }
+                reject(new Error('Request timeout'));
+            }, 30000);
+        });
+    }
+
+    async wallet_sendCalls(params: any): Promise<string> {
+        return new Promise((resolve, reject) => {
+            const id = ++this.messageId;
+            const messageId = id;
+
+            const handler = (response: any) => {
+                if (response.success) {
+                    // EIP-5792: wallet_sendCalls should return the transaction hash directly (string)
+                    // For batched transactions (atomic), return the single transaction hash
+                    const txHash = response.id || response.transactionHash || response.result?.id;
+                    console.log('[Wolfy Inpage] wallet_sendCalls returning transaction hash:', txHash);
+                    resolve(txHash);
+                } else {
+                    reject(new Error(response.error || 'Failed to send batched calls'));
+                }
+            };
+
+            if (!this.listeners.has(messageId.toString())) {
+                this.listeners.set(messageId.toString(), new Set());
+            }
+            this.listeners.get(messageId.toString())!.add(handler);
+
+            window.postMessage(
+                {
+                    type: 'WOLFY_REQUEST',
+                    id: messageId,
+                    method: 'wallet_sendCalls',
+                    params: [params],
+                },
+                '*'
+            );
+
+            setTimeout(() => {
+                const listeners = this.listeners.get(messageId.toString());
+                if (listeners) {
+                    listeners.delete(handler);
+                    if (listeners.size === 0) {
+                        this.listeners.delete(messageId.toString());
+                    }
+                }
+                reject(new Error('Request timeout'));
+            }, 30000);
+        });
+    }
+
+    async wallet_getCallsStatus(params: any): Promise<any> {
+        return new Promise((resolve, reject) => {
+            const id = ++this.messageId;
+            const messageId = id;
+
+            const handler = (response: any) => {
+                if (response.success) {
+                    resolve(response.status || response.result || null);
+                } else {
+                    reject(new Error(response.error || 'Failed to get calls status'));
+                }
+            };
+
+            if (!this.listeners.has(messageId.toString())) {
+                this.listeners.set(messageId.toString(), new Set());
+            }
+            this.listeners.get(messageId.toString())!.add(handler);
+
+            window.postMessage(
+                {
+                    type: 'WOLFY_REQUEST',
+                    id: messageId,
+                    method: 'wallet_getCallsStatus',
+                    params: [params],
+                },
+                '*'
+            );
+
+            setTimeout(() => {
+                const listeners = this.listeners.get(messageId.toString());
+                if (listeners) {
+                    listeners.delete(handler);
+                    if (listeners.size === 0) {
+                        this.listeners.delete(messageId.toString());
+                    }
+                }
+                reject(new Error('Request timeout'));
+            }, 30000);
+        });
+    }
+
+    async wallet_getCapabilities(params: any): Promise<any> {
+        return new Promise((resolve, reject) => {
+            const id = ++this.messageId;
+            const messageId = id;
+
+            const handler = (response: any) => {
+                if (response.success) {
+                    resolve(response.capabilities || response.result || {});
+                } else {
+                    reject(new Error(response.error || 'Failed to get capabilities'));
+                }
+            };
+
+            if (!this.listeners.has(messageId.toString())) {
+                this.listeners.set(messageId.toString(), new Set());
+            }
+            this.listeners.get(messageId.toString())!.add(handler);
+
+            window.postMessage(
+                {
+                    type: 'WOLFY_REQUEST',
+                    id: messageId,
+                    method: 'wallet_getCapabilities',
+                    params: [params],
                 },
                 '*'
             );

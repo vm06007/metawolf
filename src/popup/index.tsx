@@ -40,7 +40,7 @@ async function waitForBuffer(maxWait = 2000) {
             app.state.networks = [{
                 chainId: 1,
                 name: 'Ethereum Mainnet',
-                rpcUrl: 'https://mainnet.infura.io/v3/db2e296c0a0f475fb6c3a3281a0c39d6',
+                rpcUrl: 'https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73',
                 currency: { name: 'Ether', symbol: 'ETH', decimals: 18 }
             }];
             app.state.selectedNetwork = 1;

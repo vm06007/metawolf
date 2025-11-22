@@ -277,7 +277,7 @@ export class Wallet {
      */
     async verifyAccountIntegrity(): Promise<Array<{ account: Account; issue: string; recoveredAddress: string }>> {
         const issues: Array<{ account: Account; issue: string; recoveredAddress: string }> = [];
-        
+
         for (const account of this.state.accounts) {
             // Skip watch-only, chip accounts, and firefly accounts (they don't have stored private keys)
             if (account.isWatchOnly || account.isChipAccount || account.isFireflyAccount) {
@@ -330,7 +330,7 @@ export class Wallet {
             const account = this.state.accounts.find(
                 acc => acc.address.toLowerCase() === accountAddress.toLowerCase()
             );
-            
+
             if (!account) {
                 throw new Error('Account not found');
             }
@@ -352,7 +352,7 @@ export class Wallet {
 
             // Re-store private key under the correct address
             await this.storePrivateKey(actualAddress, privateKey);
-            
+
             // Remove old private key if address changed
             if (oldAddress.toLowerCase() !== actualAddress.toLowerCase()) {
                 const normalizedOldAddress = oldAddress.toLowerCase();
@@ -457,16 +457,16 @@ export class Wallet {
         try {
             // Always use lowercase for retrieval to ensure consistency
             const normalizedAddress = address.toLowerCase();
-            
+
             // Try lowercase first (new format)
             let stored = await chrome.storage.local.get(`key_${normalizedAddress}`);
             let privateKey = stored[`key_${normalizedAddress}`];
-            
+
             // If not found, try with original address casing (for backward compatibility)
             if (!privateKey && address !== normalizedAddress) {
                 stored = await chrome.storage.local.get(`key_${address}`);
                 privateKey = stored[`key_${address}`];
-                
+
                 // If found with old format, migrate to new format
                 if (privateKey) {
                     await this.storePrivateKey(normalizedAddress, privateKey);
@@ -475,7 +475,7 @@ export class Wallet {
                     console.log(`[Wallet] Migrated private key storage for ${address} to lowercase format`);
                 }
             }
-            
+
             return privateKey || null;
         } catch (error) {
             console.error('[Wallet] Error getting private key:', error);
@@ -651,7 +651,7 @@ export class Wallet {
             {
                 chainId: 1,
                 name: 'Ethereum Mainnet',
-                rpcUrl: 'https://mainnet.infura.io/v3/db2e296c0a0f475fb6c3a3281a0c39d6',
+                rpcUrl: 'https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73',
                 blockExplorer: 'https://etherscan.io',
                 currency: {
                     name: 'Ether',
@@ -662,7 +662,7 @@ export class Wallet {
             {
                 chainId: 11155111,
                 name: 'Sepolia',
-                rpcUrl: 'https://sepolia.infura.io/v3/db2e296c0a0f475fb6c3a3281a0c39d6',
+                rpcUrl: 'https://sepolia.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73',
                 blockExplorer: 'https://sepolia.etherscan.io',
                 currency: {
                     name: 'Sepolia Ether',
@@ -673,4 +673,3 @@ export class Wallet {
         ];
     }
 }
-

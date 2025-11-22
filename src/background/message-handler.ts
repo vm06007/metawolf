@@ -1,3 +1,4 @@
+import type { Transaction } from '../core/types.js';
 import { ethers } from 'ethers';
 
 /**
@@ -16,7 +17,7 @@ export async function handleSignMessage(
     try {
         // Get the account to verify it exists
         const accounts = wallet.getAccounts();
-        const account = accounts.find(acc => acc.address.toLowerCase() === address.toLowerCase());
+        const account = accounts.find((acc: any) => acc.address.toLowerCase() === address.toLowerCase());
         if (!account) {
             return { success: false, error: 'Account not found' };
         }
@@ -75,7 +76,7 @@ export async function handleSignTypedData(
     try {
         // Get the account to verify it exists
         const accounts = wallet.getAccounts();
-        const account = accounts.find(acc => acc.address.toLowerCase() === address.toLowerCase());
+        const account = accounts.find((acc: any) => acc.address.toLowerCase() === address.toLowerCase());
         if (!account) {
             return { success: false, error: 'Account not found' };
         }
@@ -113,3 +114,4 @@ export async function handleSignTypedData(
         };
     }
 }
+

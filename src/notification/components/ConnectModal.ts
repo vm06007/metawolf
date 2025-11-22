@@ -19,11 +19,10 @@ export function renderConnectModal(
     onCancel: () => void,
     showAccountSelector: boolean = false
 ): string {
-    // Mock data for DApp stats (in real implementation, fetch from API)
     const sitePopularity = 'High'; // Could be 'High', 'Medium', 'Low'
     const listedBy = [
-        { name: 'MetaMask', icon: 'https://metamask.io/images/metamask-icon.svg' },
-        { name: 'Binance', icon: 'https://binance.com/favicon.ico' },
+        /*{ name: 'MetaMask', icon: 'https://metamask.io/images/metamask-icon.svg' },
+        { name: 'Binance', icon: 'https://binance.com/favicon.ico' },*/
         { name: 'CoinMarketCap', icon: 'https://coinmarketcap.com/favicon.ico' },
         { name: 'TokenPocket', icon: 'https://tokenpocket.pro/favicon.ico' },
     ];
@@ -31,9 +30,9 @@ export function renderConnectModal(
     const accountsHtml = accounts.map(account => {
         const isSelected = selectedAccount?.address?.toLowerCase() === account.address?.toLowerCase();
         const displayName = getDisplayName(account);
-        
+
         return `
-            <div class="connect-account-option ${isSelected ? 'selected' : ''}" 
+            <div class="connect-account-option ${isSelected ? 'selected' : ''}"
                  data-address="${account.address}"
                  style="
                      padding: 12px 16px;
@@ -158,7 +157,7 @@ export function renderConnectModal(
                             overflow: hidden;
                             background: var(--r-neutral-bg2);
                         ">
-                            <img src="${dappIcon}" 
+                            <img src="${dappIcon}"
                                  alt="${dappName}"
                                  style="width: 100%; height: 100%; object-fit: cover;"
                                  onerror="this.style.display='none'; this.parentElement.innerHTML='<div style=\\'width:100%;height:100%;display:flex;align-items:center;justify-content:center;background:var(--r-blue-light1);color:var(--r-blue-default);font-weight:500;\\'>${dappName.charAt(0).toUpperCase()}</div>'">
@@ -205,7 +204,7 @@ export function renderConnectModal(
                                         justify-content: center;
                                         overflow: hidden;
                                     ">
-                                        <img src="${listing.icon}" 
+                                        <img src="${listing.icon}"
                                              alt="${listing.name}"
                                              style="width: 100%; height: 100%; object-fit: cover;"
                                              onerror="this.style.display='none'">

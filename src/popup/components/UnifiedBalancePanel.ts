@@ -68,9 +68,19 @@ export function renderUnifiedBalancePanel(props: UnifiedBalancePanelProps): stri
     // Get unique chains from all assets
     const chainIds = new Set<number>();
     data.assets.forEach(asset => {
-        asset.breakdown?.forEach(breakdown => {
-            chainIds.add(breakdown.chain.id);
-        });
+        if (asset.breakdown && Array.isArray(asset.breakdown)) {
+            asset.breakdown.forEach(breakdown => {
+                if (breakdown?.chain?.id) {
+                    chainIds.add(breakdown.chain.id);
+                }
+            });
+        }
+    });
+    
+    console.log('[UnifiedBalancePanel] Extracted chains:', {
+        chainIds: Array.from(chainIds),
+        assetCount: data.assets.length,
+        assetsWithBreakdown: data.assets.filter(a => a.breakdown && a.breakdown.length > 0).length,
     });
 
     const chainLogos = Array.from(chainIds).slice(0, 8); // Show first 8 chains

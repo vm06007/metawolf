@@ -609,6 +609,617 @@ function handleMessage(
                     }
                     break;
 
+                case 'SEND_BATCHED_CALLS':
+                    // EIP-5792: Handle batched calls request
+                    if (!wallet.isUnlocked()) {
+                        safeSendResponse({ success: false, error: 'Wallet is locked' });
+                        break;
+                    }
+                    try {
+                        // Check if this is a DApp request
+                        const isDAppRequest = sender.tab && sender.tab.id;
+                        let origin = sender.origin || sender.url || 'Unknown';
+                        try {
+                            if (origin.startsWith('http://') || origin.startsWith('https://')) {
+                                origin = new URL(origin).origin;
+                            }
+                        } catch {
+                            // If URL parsing fails, use as-is
+                        }
+                        const isChromeExtension = origin.startsWith('chrome-extension://');
+
+                        if (isDAppRequest && !isChromeExtension) {
+                            // DApp batched calls request - show approval modal
+                            const tabId = sender.tab?.id;
+
+                            // Get DApp info from connections
+                            const connections = await chrome.storage.local.get('dapp_connections') || {};
+                            const dappConnections = connections.dapp_connections || {};
+                            let dappInfo;
+                            try {
+                                dappInfo = dappConnections[origin] || {
+                                    name: origin !== 'Unknown' ? new URL(origin).hostname : 'Unknown DApp',
+                                    icon: '',
+                                };
+                            } catch {
+                                dappInfo = {
+                                    name: origin !== 'Unknown' ? origin : 'Unknown DApp',
+                                    icon: '',
+                                };
+                            }
+
+                            // Get selected account
+                            const account = wallet.getSelectedAccount();
+                            if (!account) {
+                                safeSendResponse({ success: false, error: 'No account selected' });
+                                break;
+                            }
+
+                            // Store pending batched calls request
+                            const requestId = `batched_calls_${Date.now()}_${Math.random()}`;
+                            await chrome.storage.local.set({
+                                pendingBatchedCalls: {
+                                    id: requestId,
+                                    calls: message.calls || [],
+                                    address: account.address,
+                                    origin: origin,
+                                    dappName: dappInfo.name,
+                                    dappIcon: dappInfo.icon,
+                                    chainId: message.chainId,
+                                    capabilities: message.capabilities,
+                                    forceAtomic: message.forceAtomic,
+                                    tabId: tabId,
+                                }
+                            });
+
+                            // Check if notification window already exists
+                            try {
+                                const windows = await chrome.windows.getAll({ populate: true });
+                                const existingWindow = windows.find(win => {
+                                    if (!win.tabs || win.tabs.length === 0) return false;
+                                    return win.tabs.some(tab => tab.url === notificationUrl);
+                                });
+
+                                if (existingWindow && existingWindow.id) {
+                                    await chrome.tabs.update(existingWindow.tabs![0].id!, {
+                                        url: `${notificationUrl}?type=batched-calls&requestId=${requestId}`
+                                    });
+                                    await chrome.windows.update(existingWindow.id, { focused: true });
+                                    notificationWindowIds.add(existingWindow.id);
+                                    safeSendResponse({ success: true, pending: true, id: requestId });
+                                    break;
+                                }
+                            } catch (error) {
+                                console.warn('[SEND_BATCHED_CALLS] Could not check existing windows:', error);
+                            }
+
+                            // Create new notification window
+                            const windowWidth = 400;
+                            const windowHeight = 600;
+                            const margin = 20;
+                            const top = 100;
+
+                            let left: number;
+                            try {
+                                const displayInfo = await chrome.system.display.getInfo();
+                                const primaryDisplay = displayInfo[0];
+                                const screenWidth = primaryDisplay.workArea.width;
+                                left = screenWidth - windowWidth - margin;
+                            } catch (error) {
+                                left = 1920 - windowWidth - margin;
+                            }
+
+                            const window = await chrome.windows.create({
+                                url: `${notificationUrl}?type=batched-calls&requestId=${requestId}`,
+                                type: 'popup',
+                                width: windowWidth,
+                                height: windowHeight,
+                                left: left,
+                                top: top,
+                                focused: true,
+                            });
+
+                            if (window.id) {
+                                notificationWindowIds.add(window.id);
+                            }
+
+                            safeSendResponse({ success: true, pending: true, id: requestId });
+                            break;
+                        }
+
+                        // Internal wallet operation - not supported for batched calls
+                        safeSendResponse({ success: false, error: 'Batched calls only supported for DApp requests' });
+                    } catch (error: any) {
+                        console.error('[SEND_BATCHED_CALLS] Error:', error);
+                        safeSendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'APPROVE_BATCHED_CALLS':
+                    try {
+                        const requestId = message.requestId;
+                        const storage = await chrome.storage.local.get('pendingBatchedCalls');
+                        const pendingBatchedCalls = storage.pendingBatchedCalls;
+
+                        if (!pendingBatchedCalls || pendingBatchedCalls.id !== requestId) {
+                            safeSendResponse({ success: false, error: 'Batched calls request not found' });
+                            break;
+                        }
+
+                        // Get account
+                        const account = wallet.getAccounts().find(
+                            acc => acc.address.toLowerCase() === pendingBatchedCalls.address.toLowerCase()
+                        );
+                        if (!account) {
+                            safeSendResponse({ success: false, error: 'Account not found' });
+                            break;
+                        }
+
+                        // Get chain-specific provider
+                        const { rpcService } = await import('../core/rpc-service.js');
+                        // Convert chainId to number if it's a hex string
+                        let chainId: number;
+                        if (typeof pendingBatchedCalls.chainId === 'string' && pendingBatchedCalls.chainId.startsWith('0x')) {
+                            chainId = parseInt(pendingBatchedCalls.chainId, 16);
+                        } else if (typeof pendingBatchedCalls.chainId === 'number') {
+                            chainId = pendingBatchedCalls.chainId;
+                        } else {
+                            chainId = wallet.getSelectedNetwork();
+                        }
+                        const rpcUrl = rpcService.getRPCUrl(chainId);
+                        const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+                        // Verify provider chainId matches
+                        const providerChainId = (await provider.getNetwork()).chainId;
+                        if (Number(providerChainId) !== chainId) {
+                            console.warn(`[APPROVE_BATCHED_CALLS] Provider chainId (${providerChainId}) doesn't match requested chainId (${chainId}), using provider chainId`);
+                            chainId = Number(providerChainId);
+                        }
+
+                        // Check if account is a smart account (EIP-7702 delegated)
+                        const { EIP7702 } = await import('../eips/eip7702.js');
+                        const delegationStatus = await EIP7702.checkDelegation(account.address, provider);
+
+                        // Verify delegation to a smart account contract
+                        const isSmartAccount = delegationStatus.isDelegated && delegationStatus.delegateAddress;
+
+                        if (!isSmartAccount) {
+                            throw new Error('Account must be delegated to a smart account contract to use batched calls. Please upgrade your account first.');
+                        }
+
+                        // Use the dynamic delegate address from the delegation check
+                        const delegateAddress = delegationStatus.delegateAddress;
+                        console.log('[APPROVE_BATCHED_CALLS] Account delegated to:', delegateAddress);
+
+                        const calls = pendingBatchedCalls.calls || [];
+                        let txHash: string;
+
+                        // Smart account - encode all calls into a single execute transaction
+                        console.log('[APPROVE_BATCHED_CALLS] Account is delegated to smart account contract');
+                        console.log('[APPROVE_BATCHED_CALLS] Delegate address:', delegationStatus.delegateAddress);
+                        console.log('[APPROVE_BATCHED_CALLS] Number of calls to batch:', calls.length);
+
+                        // CRITICAL INSIGHT FROM CONTRACT SOURCE:
+                        // The contract's execute() function calls: _executionCalldata.decodeBatch()
+                        // This means executionCalldata should be encoded as Execution[] (array of structs)
+                        // NOT as (uint256 nonce, bytes[] calls) - the nonce is NOT part of executionCalldata!
+                        // The nonce is managed by the EntryPoint contract, not included in the execution data.
+
+                        // Execution struct: (address target, uint256 value, bytes callData)
+                        // So executionCalldata = [(address, uint256, bytes), (address, uint256, bytes), ...]
+
+                        console.log('[APPROVE_BATCHED_CALLS] Encoding executionCalldata as Execution[] array (without nonce)');
+
+                        // Encode executionCalldata as array of Execution structs
+                        const executionCalldata = ethers.AbiCoder.defaultAbiCoder().encode(
+                            ['tuple(address,uint256,bytes)[]'],
+                            [calls.map((call: any) => {
+                                const target = call.to || ethers.ZeroAddress;
+                                const value = call.value ? BigInt(call.value) : 0n;
+                                const callData = call.data || '0x';
+                                return [target, value, callData];
+                            })]
+                        );
+
+                        const execDataLengthBytes = (executionCalldata.length - 2) / 2;
+                        console.log('[APPROVE_BATCHED_CALLS] ExecutionCalldata length:', executionCalldata.length, 'chars');
+                        console.log('[APPROVE_BATCHED_CALLS] ExecutionCalldata length (bytes):', execDataLengthBytes);
+                        console.log('[APPROVE_BATCHED_CALLS] ExecutionCalldata length (hex):', execDataLengthBytes.toString(16));
+                        console.log('[APPROVE_BATCHED_CALLS] Expected length (hex): 500 (1280 bytes)');
+                        console.log('[APPROVE_BATCHED_CALLS] Match:', execDataLengthBytes === 1280 ? '✓' : '✗');
+                        console.log('[APPROVE_BATCHED_CALLS] ExecutionCalldata (first 400 chars):', executionCalldata.slice(0, 400));
+                        console.log('[APPROVE_BATCHED_CALLS] Number of calls:', calls.length);
+
+                        // ModeCode for batched execution
+                        // CALLTYPE_BATCH (0x01) for batch execution
+                        const modeCode = '0x01' + '0'.repeat(62); // bytes32: 0x01 + 31 zero bytes
+
+                        // Encode the execute function: execute(ModeCode, bytes)
+                        const executeInterface = new ethers.Interface([
+                            'function execute(bytes32 _mode, bytes _executionCalldata) payable',
+                        ]);
+
+                        const executeData = executeInterface.encodeFunctionData('execute', [modeCode, executionCalldata]);
+                        const selector = executeData.slice(0, 10);
+                        console.log('[APPROVE_BATCHED_CALLS] Encoded execute call');
+                        console.log('[APPROVE_BATCHED_CALLS] Function selector:', selector);
+                        console.log('[APPROVE_BATCHED_CALLS] Expected selector: 0xe9ae5c53');
+                        console.log('[APPROVE_BATCHED_CALLS] ModeCode:', modeCode);
+                        console.log('[APPROVE_BATCHED_CALLS] Number of calls:', calls.length);
+
+                        if (selector !== '0xe9ae5c53') {
+                            console.error('[APPROVE_BATCHED_CALLS] ❌ Function selector mismatch!');
+                            throw new Error(`Function selector mismatch: got ${selector}, expected 0xe9ae5c53`);
+                        }
+
+                        // Build transaction to smart account itself
+                        let transaction: any = {
+                            to: account.address, // Send to self (smart account)
+                            value: 0n,
+                            data: executeData,
+                            chainId: chainId,
+                            from: account.address,
+                        };
+
+                        // Sign and send
+                        if (account.isChipAccount && account.chipInfo) {
+                            const { HaloSigner } = await import('../halo/halo-signer.js');
+                            const haloSigner = new HaloSigner(account.address, account.chipInfo.slot, provider);
+                            const signedTx = await haloSigner.signTransaction(transaction);
+                            const txResponse = await provider.broadcastTransaction(signedTx);
+                            const tx = ethers.Transaction.from(signedTx);
+                            txHash = tx.hash || (typeof txResponse === 'string' ? txResponse : txResponse?.hash);
+                        } else {
+                            const privateKey = await wallet.getPrivateKey(account.address);
+                            if (!privateKey) {
+                                throw new Error('Private key not found');
+                            }
+                            const signerWallet = new ethers.Wallet(privateKey, provider);
+
+                            try {
+                                const populatedTx = await signerWallet.populateTransaction(transaction);
+                                transaction = { ...populatedTx, chainId: chainId };
+                            } catch (gasError: any) {
+                                console.warn('[APPROVE_BATCHED_CALLS] Gas estimation failed, using defaults:', gasError.message);
+                                const feeData = await provider.getFeeData();
+                                transaction = {
+                                    ...transaction,
+                                    gasLimit: 500000n, // Higher gas for batched calls
+                                    maxFeePerGas: feeData.maxFeePerGas || feeData.gasPrice,
+                                    maxPriorityFeePerGas: feeData.maxPriorityFeePerGas,
+                                };
+                            }
+
+                            const txResponse = await signerWallet.sendTransaction(transaction);
+                            txHash = txResponse.hash;
+                        }
+
+                        // Validate transaction hash
+                        if (!txHash || !txHash.startsWith('0x') || txHash.length !== 66) {
+                            throw new Error(`Invalid transaction hash: ${txHash}`);
+                        }
+
+                        console.log('[APPROVE_BATCHED_CALLS] Transaction sent successfully:', txHash);
+
+                        // Store transaction hash for status tracking
+                        // Store with BOTH the request ID and the transaction hash as keys
+                        // This allows lookup by either ID (for backward compatibility) or by transaction hash
+                        const statusKey = `batched_call_${requestId}`;
+                        const txHashKey = `batched_call_${txHash}`;
+                        await chrome.storage.local.set({
+                            [statusKey]: {
+                                hash: txHash,
+                                status: 'pending',
+                                timestamp: Date.now(),
+                                isSmartAccount: isSmartAccount,
+                                requestId: requestId,
+                            },
+                            [txHashKey]: {
+                                hash: txHash,
+                                status: 'pending',
+                                timestamp: Date.now(),
+                                isSmartAccount: isSmartAccount,
+                                requestId: requestId,
+                            }
+                        });
+
+                        // Use the transaction hash as the primary identifier
+                        const primaryTxHash = txHash;
+
+                        // Clear pending request
+                        await chrome.storage.local.set({ pendingBatchedCalls: null });
+
+                        // Send approval to content script
+                        if (pendingBatchedCalls.tabId) {
+                            try {
+                                await chrome.tabs.sendMessage(pendingBatchedCalls.tabId, {
+                                    type: 'BATCHED_CALLS_APPROVED',
+                                    requestId: requestId,
+                                    id: primaryTxHash,
+                                    results: [primaryTxHash], // Single transaction hash for batched call
+                                });
+                            } catch (error) {
+                                console.error('[APPROVE_BATCHED_CALLS] Error sending to content script:', error);
+                            }
+                        }
+
+                        safeSendResponse({
+                            success: true,
+                            id: primaryTxHash,
+                            transactionHash: primaryTxHash, // For compatibility
+                            results: [primaryTxHash] // Single transaction hash for batched call
+                        });
+                    } catch (error: any) {
+                        console.error('[APPROVE_BATCHED_CALLS] Error:', error);
+                        safeSendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'REJECT_BATCHED_CALLS':
+                    try {
+                        const requestId = message.requestId;
+                        const storage = await chrome.storage.local.get('pendingBatchedCalls');
+                        const pendingBatchedCalls = storage.pendingBatchedCalls;
+
+                        if (!pendingBatchedCalls || pendingBatchedCalls.id !== requestId) {
+                            safeSendResponse({ success: false, error: 'Batched calls request not found' });
+                            break;
+                        }
+
+                        // Clear pending request
+                        await chrome.storage.local.set({ pendingBatchedCalls: null });
+
+                        // Send rejection to content script
+                        if (pendingBatchedCalls.tabId) {
+                            try {
+                                await chrome.tabs.sendMessage(pendingBatchedCalls.tabId, {
+                                    type: 'BATCHED_CALLS_REJECTED',
+                                    requestId: requestId,
+                                });
+                            } catch (error) {
+                                console.error('[REJECT_BATCHED_CALLS] Error sending to content script:', error);
+                            }
+                        }
+
+                        safeSendResponse({ success: true });
+                    } catch (error: any) {
+                        console.error('[REJECT_BATCHED_CALLS] Error:', error);
+                        safeSendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'GET_CALLS_STATUS':
+                    // EIP-5792: Get status of batched calls
+                    try {
+                        const callsId = message.id;
+                        console.log('[GET_CALLS_STATUS] Looking up status for ID:', callsId);
+
+                        if (!callsId) {
+                            console.log('[GET_CALLS_STATUS] No ID provided, returning pending');
+                            safeSendResponse({
+                                success: true,
+                                status: {
+                                    status: 'PENDING',
+                                    receipts: [],
+                                }
+                            });
+                            break;
+                        }
+
+                        // Try direct lookup first (by transaction hash or request ID)
+                        const directKey = `batched_call_${callsId}`;
+                        console.log('[GET_CALLS_STATUS] Trying direct lookup with key:', directKey);
+                        const directStorage = await chrome.storage.local.get(directKey);
+                        const statusEntry = directStorage[directKey];
+
+                        console.log('[GET_CALLS_STATUS] Direct lookup result:', statusEntry ? 'Found' : 'Not found');
+
+                        if (statusEntry && statusEntry.hash) {
+                            console.log('[GET_CALLS_STATUS] Found stored status for ID:', callsId);
+                            console.log('[GET_CALLS_STATUS] Transaction hash:', statusEntry.hash);
+                            console.log('[GET_CALLS_STATUS] Checking on chain...');
+
+                            // Check transaction status on chain
+                            try {
+                                const { rpcService } = await import('../core/rpc-service.js');
+                                const chainId = message.chainId || wallet.getSelectedNetwork();
+                                const rpcUrl = rpcService.getRPCUrl(chainId);
+                                const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+                                const receipt = await provider.getTransactionReceipt(statusEntry.hash);
+                                console.log('[GET_CALLS_STATUS] Receipt result:', receipt ? `Found (block ${receipt.blockNumber})` : 'null (not mined yet)');
+
+                                if (receipt) {
+                                    console.log('[GET_CALLS_STATUS] ✓ Transaction confirmed! Block:', receipt.blockNumber);
+                                    console.log('[GET_CALLS_STATUS] Receipt status:', receipt.status);
+                                    const overallStatus = receipt.status === 1 ? 'CONFIRMED' : 'FAILED';
+                                    const response = {
+                                        success: true,
+                                        status: {
+                                            status: overallStatus,
+                                            receipts: [{
+                                                logs: receipt.logs,
+                                                status: receipt.status === 1 ? '0x1' : '0x0',
+                                                blockHash: receipt.blockHash,
+                                                blockNumber: '0x' + receipt.blockNumber.toString(16),
+                                                gasUsed: '0x' + receipt.gasUsed.toString(16),
+                                                transactionHash: receipt.hash,
+                                            }]
+                                        }
+                                    };
+                                    console.log('[GET_CALLS_STATUS] ✓ Returning CONFIRMED status');
+                                    safeSendResponse(response);
+                                } else {
+                                    // Transaction not yet mined
+                                    console.log('[GET_CALLS_STATUS] Transaction still pending (no receipt yet)');
+                                    safeSendResponse({
+                                        success: true,
+                                        status: {
+                                            status: 'PENDING',
+                                            receipts: []
+                                        }
+                                    });
+                                }
+                            } catch (error: any) {
+                                console.error('[GET_CALLS_STATUS] Error checking receipt:', error.message);
+                                // Transaction might not exist yet
+                                safeSendResponse({
+                                    success: true,
+                                    status: {
+                                        status: 'PENDING',
+                                        receipts: []
+                                    }
+                                });
+                            }
+                            // Always exit after direct lookup to prevent fall-through
+                            break;
+                        }
+
+                        // If not found by direct lookup, search all storage (fallback)
+                        console.log('[GET_CALLS_STATUS] No direct match, searching all storage...');
+                        const allStorage = await chrome.storage.local.get(null);
+                        const receipts: any[] = [];
+                        let allConfirmed = true;
+                        let anyFound = false;
+
+                        // Look for stored status entries
+                        for (const [key, value] of Object.entries(allStorage)) {
+                            if (key.startsWith('batched_call_') && typeof value === 'object' && value !== null) {
+                                const entry = value as any;
+                                // Match by hash or request ID
+                                if (entry.hash === callsId || entry.requestId === callsId || key === directKey) {
+                                    anyFound = true;
+                                    console.log('[GET_CALLS_STATUS] Found matching entry with key:', key);
+                                    // Check transaction status on chain
+                                    try {
+                                        const { rpcService } = await import('../core/rpc-service.js');
+                                        const chainId = message.chainId || wallet.getSelectedNetwork();
+                                        const rpcUrl = rpcService.getRPCUrl(chainId);
+                                        const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+                                        const receipt = await provider.getTransactionReceipt(entry.hash);
+                                        if (receipt) {
+                                            receipts.push({
+                                                blockNumber: receipt.blockNumber.toString(),
+                                                blockHash: receipt.blockHash,
+                                                transactionHash: receipt.hash,
+                                                status: receipt.status === 1 ? 'success' : 'reverted',
+                                                gasUsed: receipt.gasUsed.toString(),
+                                            });
+                                            if (receipt.status !== 1) {
+                                                allConfirmed = false;
+                                            }
+                                        } else {
+                                            // Transaction not yet mined
+                                            allConfirmed = false;
+                                            receipts.push({
+                                                transactionHash: entry.hash,
+                                                status: 'pending',
+                                            });
+                                        }
+                                    } catch (error) {
+                                        // Transaction might not exist yet
+                                        allConfirmed = false;
+                                        receipts.push({
+                                            transactionHash: entry.hash,
+                                            status: 'pending',
+                                        });
+                                    }
+                                }
+                            }
+                        }
+
+                        const overallStatus = allConfirmed && receipts.length > 0 ? 'CONFIRMED' :
+                            anyFound ? 'PENDING' : 'PENDING';
+
+                        safeSendResponse({
+                            success: true,
+                            status: {
+                                status: overallStatus,
+                                receipts: receipts,
+                            }
+                        });
+                    } catch (error: any) {
+                        console.error('[GET_CALLS_STATUS] Error:', error);
+                        safeSendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'GET_CAPABILITIES':
+                    // EIP-5792: Get wallet capabilities
+                    // Returns capabilities grouped by chain ID
+                    try {
+                        const account = message.account ? wallet.getAccounts().find(
+                            acc => acc.address.toLowerCase() === message.account.toLowerCase()
+                        ) : wallet.getSelectedAccount();
+
+                        // Return capabilities grouped by supported chain IDs
+                        // For EIP-7702 enabled chains, we support atomic batched transactions
+                        // Chain IDs MUST be decimal strings, not hex!
+                        const capabilities = {
+                            // Ethereum Mainnet
+                            '1': {
+                                atomicBatch: {
+                                    supported: true
+                                }
+                            },
+                            // Sepolia Testnet
+                            '11155111': {
+                                atomicBatch: {
+                                    supported: true
+                                }
+                            }
+                        };
+
+                        console.log('[GET_CAPABILITIES] Returning capabilities:', capabilities);
+                        safeSendResponse({
+                            success: true,
+                            capabilities: capabilities
+                        });
+                    } catch (error: any) {
+                        console.error('[GET_CAPABILITIES] Error:', error);
+                        safeSendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
+                case 'GET_TRANSACTION_RECEIPT':
+                    // Get transaction receipt for status display in notification
+                    try {
+                        const { txHash, chainId: msgChainId } = message;
+                        if (!txHash) {
+                            safeSendResponse({ success: false, error: 'No transaction hash provided' });
+                            break;
+                        }
+
+                        const { rpcService } = await import('../core/rpc-service.js');
+                        const chainId = msgChainId || wallet.getSelectedNetwork();
+                        const rpcUrl = rpcService.getRPCUrl(chainId);
+                        const provider = new ethers.JsonRpcProvider(rpcUrl);
+
+                        const receipt = await provider.getTransactionReceipt(txHash);
+                        if (receipt) {
+                            safeSendResponse({
+                                success: true,
+                                receipt: {
+                                    blockNumber: receipt.blockNumber.toString(),
+                                    blockHash: receipt.blockHash,
+                                    transactionHash: receipt.hash,
+                                    status: receipt.status,
+                                    gasUsed: receipt.gasUsed.toString(),
+                                }
+                            });
+                        } else {
+                            safeSendResponse({
+                                success: true,
+                                receipt: null // Transaction not yet mined
+                            });
+                        }
+                    } catch (error: any) {
+                        console.error('[GET_TRANSACTION_RECEIPT] Error:', error);
+                        safeSendResponse({ success: false, error: error.message });
+                    }
+                    break;
+
                 case 'GET_ACCOUNTS':
                     try {
                         // Check if this is from a connected dApp

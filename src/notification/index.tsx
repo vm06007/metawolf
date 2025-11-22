@@ -4,6 +4,7 @@ import { renderConnectModal, Account } from './components/ConnectModal';
 import { renderSignatureModal, SignatureRequest } from './components/SignatureModal';
 import { renderTransactionModal, TransactionRequest } from './components/TransactionModal';
 import { renderTransactionSuccess } from './components/TransactionSuccess';
+import { renderBatchedCallsModal, BatchedCallsRequest, BatchedCallsSimulation } from './components/BatchedCallsModal';
 
 interface ConnectionRequest {
     origin: string;
@@ -18,6 +19,7 @@ class NotificationApp {
     private connectionRequest?: ConnectionRequest;
     private signatureRequest?: SignatureRequest;
     private transactionRequest?: TransactionRequest;
+    private batchedCallsRequest?: BatchedCallsRequest;
     private transactionSuccess?: { hash: string; chainId: number };
     private showAdvancedSettings: boolean = false;
     private selectedProvider?: EIP6963ProviderInfo;
@@ -46,6 +48,12 @@ class NotificationApp {
             // Check if this is a transaction request
             if (type === 'transaction' && requestId) {
                 await this.initTransactionRequest(requestId);
+                return;
+            }
+
+            // Check if this is a batched calls request
+            if (type === 'batched-calls' && requestId) {
+                await this.initBatchedCallsRequest(requestId);
                 return;
             }
 
@@ -166,6 +174,12 @@ class NotificationApp {
             return;
         }
 
+        // If batched calls request, render batched calls modal
+        if (this.batchedCallsRequest) {
+            this.renderBatchedCallsModal();
+            return;
+        }
+
         if (this.showWalletSelector && this.connectionRequest) {
             app.innerHTML = `
                 <div class="notification-container">
@@ -280,6 +294,70 @@ class NotificationApp {
         document.getElementById('close-success-btn')?.addEventListener('click', () => {
             this.handleCloseSuccess();
         });
+    }
+
+    async pollTransactionStatus(txHash: string, chainId: number) {
+        console.log('[Notification] Starting status polling for tx:', txHash);
+        
+        // Poll every 2 seconds for up to 2 minutes
+        const maxAttempts = 60; // 2 minutes
+        let attempts = 0;
+        
+        const poll = async () => {
+            attempts++;
+            console.log(`[Notification] Polling attempt ${attempts}/${maxAttempts}`);
+            
+            try {
+                const response = await chrome.runtime.sendMessage({
+                    type: 'GET_TRANSACTION_RECEIPT',
+                    txHash: txHash,
+                    chainId: chainId,
+                });
+                
+                if (response?.success && response?.receipt) {
+                    console.log('[Notification] Transaction confirmed!', response.receipt);
+                    // Update status in UI
+                    const statusEl = document.getElementById('tx-status');
+                    if (statusEl) {
+                        if (response.receipt.status === 1) {
+                            statusEl.innerHTML = `
+                                <div style="color: var(--r-green-default); font-weight: 500;">
+                                    ✓ Confirmed in block ${response.receipt.blockNumber}
+                                </div>
+                            `;
+                        } else {
+                            statusEl.innerHTML = `
+                                <div style="color: var(--r-red-default); font-weight: 500;">
+                                    ✗ Transaction failed
+                                </div>
+                            `;
+                        }
+                    }
+                    return; // Stop polling
+                } else if (attempts < maxAttempts) {
+                    // Continue polling
+                    setTimeout(poll, 2000);
+                } else {
+                    console.log('[Notification] Polling timeout after', maxAttempts, 'attempts');
+                    const statusEl = document.getElementById('tx-status');
+                    if (statusEl) {
+                        statusEl.innerHTML = `
+                            <div style="color: var(--r-neutral-body);">
+                                Transaction pending...
+                            </div>
+                        `;
+                    }
+                }
+            } catch (error) {
+                console.error('[Notification] Error polling status:', error);
+                if (attempts < maxAttempts) {
+                    setTimeout(poll, 2000);
+                }
+            }
+        };
+        
+        // Start polling
+        setTimeout(poll, 2000); // Wait 2 seconds before first poll
     }
 
     renderConnectConfirmation() {
@@ -586,6 +664,149 @@ class NotificationApp {
     }
 
     handleCloseSuccess() {
+        window.close();
+    }
+
+    async initBatchedCallsRequest(requestId: string) {
+        try {
+            // Get pending batched calls from storage
+            const storage = await chrome.storage.local.get('pendingBatchedCalls');
+            const pendingBatchedCalls = storage.pendingBatchedCalls;
+
+            if (!pendingBatchedCalls || pendingBatchedCalls.id !== requestId) {
+                console.error('Batched calls request not found:', requestId);
+                this.renderError('Batched calls request not found');
+                return;
+            }
+
+            this.batchedCallsRequest = pendingBatchedCalls as BatchedCallsRequest;
+            this.renderBatchedCallsModal();
+        } catch (error) {
+            console.error('Error initializing batched calls request:', error);
+            this.renderError('Error loading batched calls request');
+        }
+    }
+
+    renderBatchedCallsModal() {
+        const app = document.getElementById('app');
+        if (!app || !this.batchedCallsRequest) return;
+
+        // TODO: Add simulation support later
+        const simulation: BatchedCallsSimulation | undefined = undefined;
+
+        app.innerHTML = renderBatchedCallsModal(
+            this.batchedCallsRequest,
+            () => this.handleApproveBatchedCalls(),
+            () => this.handleRejectBatchedCalls(),
+            simulation
+        );
+
+        // Attach listeners
+        document.getElementById('approve-batched-calls-btn')?.addEventListener('click', () => {
+            this.handleApproveBatchedCalls();
+        });
+        document.getElementById('reject-batched-calls-btn')?.addEventListener('click', () => {
+            this.handleRejectBatchedCalls();
+        });
+    }
+
+    async handleApproveBatchedCalls() {
+        try {
+            if (!this.batchedCallsRequest) {
+                console.error('No batched calls request to approve');
+                return;
+            }
+
+            const approveBtn = document.getElementById('approve-batched-calls-btn') as HTMLButtonElement;
+            if (approveBtn) {
+                approveBtn.disabled = true;
+                approveBtn.textContent = 'Confirming...';
+            }
+
+            // Send approval to background script
+            const response = await chrome.runtime.sendMessage({
+                type: 'APPROVE_BATCHED_CALLS',
+                requestId: this.batchedCallsRequest.id,
+            });
+
+            if (response?.success && (response?.transactionHash || response?.id)) {
+                // Show success screen with actual transaction hash
+                // Convert chainId from hex string to number if needed
+                let chainId: number = 1; // Default to mainnet
+                if (this.batchedCallsRequest.chainId) {
+                    if (typeof this.batchedCallsRequest.chainId === 'string' && this.batchedCallsRequest.chainId.startsWith('0x')) {
+                        chainId = parseInt(this.batchedCallsRequest.chainId, 16);
+                    } else if (typeof this.batchedCallsRequest.chainId === 'number') {
+                        chainId = this.batchedCallsRequest.chainId;
+                    }
+                }
+                
+                const txHash = response.transactionHash || response.id;
+                
+                // Validate it's a real transaction hash (starts with 0x and is 66 chars)
+                if (txHash && txHash.startsWith('0x') && txHash.length === 66) {
+                    console.log('[Notification] Transaction hash:', txHash);
+                    console.log('[Notification] ChainId:', chainId);
+                    
+                    this.transactionSuccess = {
+                        hash: txHash,
+                        chainId: chainId,
+                    };
+                    this.batchedCallsRequest = undefined; // Clear request
+                    this.renderTransactionSuccess();
+                    
+                    // Start polling for confirmation status
+                    this.pollTransactionStatus(txHash, chainId);
+                } else {
+                    // If we have multiple hashes, show the first one
+                    const results = response.results || [];
+                    if (results.length > 0 && results[0] && results[0].startsWith('0x')) {
+                        this.transactionSuccess = {
+                            hash: results[0],
+                            chainId: chainId,
+                        };
+                        this.batchedCallsRequest = undefined;
+                        this.renderTransactionSuccess();
+                        
+                        // Start polling for confirmation status
+                        this.pollTransactionStatus(results[0], chainId);
+                    } else {
+                        alert('Transaction submitted but no valid transaction hash received. Check your wallet for transaction status.');
+                        window.close();
+                    }
+                }
+            } else {
+                alert('Failed to send batched calls: ' + (response?.error || 'Unknown error'));
+                if (approveBtn) {
+                    approveBtn.disabled = false;
+                    approveBtn.textContent = 'Confirm';
+                }
+            }
+        } catch (error) {
+            console.error('Error approving batched calls:', error);
+            alert('Failed to send batched calls: ' + (error as Error).message);
+            const approveBtn = document.getElementById('approve-batched-calls-btn') as HTMLButtonElement;
+            if (approveBtn) {
+                approveBtn.disabled = false;
+                approveBtn.textContent = 'Confirm';
+            }
+        }
+    }
+
+    handleRejectBatchedCalls() {
+        if (!this.batchedCallsRequest) {
+            window.close();
+            return;
+        }
+
+        // Send rejection to background script
+        chrome.runtime.sendMessage({
+            type: 'REJECT_BATCHED_CALLS',
+            requestId: this.batchedCallsRequest.id,
+        }).catch((error) => {
+            console.error('Error rejecting batched calls:', error);
+        });
+
         window.close();
     }
 }

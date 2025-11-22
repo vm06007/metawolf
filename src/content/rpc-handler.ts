@@ -47,16 +47,16 @@ export class RPCHandler {
                         const networkResponse = await chrome.runtime.sendMessage({
                             type: 'GET_NETWORKS',
                         });
-                        let chainIdHex2 = '0x1';
+                        let chainIdString = '0x1';
                         if (networkResponse.success && networkResponse.networks) {
                             const selected = networkResponse.networks[0];
                             if (selected) {
-                                chainIdHex2 = '0x' + selected.chainId.toString(16);
+                                chainIdString = '0x' + selected.chainId.toString(16);
                             }
                         }
                         resolve({
                             id: message.id,
-                            result: chainIdHex2,
+                            result: chainIdString,
                             jsonrpc: '2.0',
                         });
                         break;
@@ -211,6 +211,90 @@ export class RPCHandler {
                         });
                         break;
 
+                    case 'wallet_sendCalls':
+                        // EIP-5792: Send batched calls
+                        const callsParams = message.params[0] || {};
+                        const sendCallsResponse = await chrome.runtime.sendMessage({
+                            type: 'SEND_BATCHED_CALLS',
+                            calls: callsParams.calls || [],
+                            chainId: callsParams.chainId,
+                            capabilities: callsParams.capabilities,
+                            forceAtomic: callsParams.forceAtomic,
+                        });
+
+                        if (sendCallsResponse.success) {
+                            resolve({
+                                id: message.id,
+                                result: {
+                                    id: sendCallsResponse.id || `calls_${Date.now()}`,
+                                    capabilities: sendCallsResponse.capabilities,
+                                },
+                                jsonrpc: '2.0',
+                            });
+                        } else {
+                            resolve({
+                                id: message.id,
+                                error: {
+                                    code: -32000,
+                                    message: sendCallsResponse.error || 'Failed to send batched calls',
+                                },
+                                jsonrpc: '2.0',
+                            });
+                        }
+                        break;
+
+                    case 'wallet_getCallsStatus':
+                        // EIP-5792: Get status of batched calls
+                        const statusParams = message.params[0] || {};
+                        const callsStatusResponse = await chrome.runtime.sendMessage({
+                            type: 'GET_CALLS_STATUS',
+                            id: statusParams.id,
+                        });
+
+                        if (callsStatusResponse.success) {
+                            resolve({
+                                id: message.id,
+                                result: callsStatusResponse.status || null,
+                                jsonrpc: '2.0',
+                            });
+                        } else {
+                            resolve({
+                                id: message.id,
+                                error: {
+                                    code: -32000,
+                                    message: callsStatusResponse.error || 'Failed to get calls status',
+                                },
+                                jsonrpc: '2.0',
+                            });
+                        }
+                        break;
+
+                    case 'wallet_getCapabilities':
+                        // EIP-5792: Get wallet capabilities
+                        const capabilitiesParams = message.params[0] || {};
+                        const capabilitiesResponse = await chrome.runtime.sendMessage({
+                            type: 'GET_CAPABILITIES',
+                            account: capabilitiesParams.account,
+                        });
+
+                        if (capabilitiesResponse.success) {
+                            resolve({
+                                id: message.id,
+                                result: capabilitiesResponse.capabilities || {},
+                                jsonrpc: '2.0',
+                            });
+                        } else {
+                            resolve({
+                                id: message.id,
+                                error: {
+                                    code: -32000,
+                                    message: capabilitiesResponse.error || 'Failed to get capabilities',
+                                },
+                                jsonrpc: '2.0',
+                            });
+                        }
+                        break;
+
                     default:
                         // Forward to RPC provider
                         resolve({
@@ -239,4 +323,3 @@ export class RPCHandler {
         return await this.handleRequest(message);
     }
 }
-

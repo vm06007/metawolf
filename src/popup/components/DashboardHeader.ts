@@ -99,9 +99,13 @@ function renderUnifiedBalanceInHeader(data: any, loading: boolean, fallbackBalan
     // Get unique chains from all assets
     const chainIds = new Set<number>();
     data.assets.forEach((asset: any) => {
-        asset.breakdown?.forEach((breakdown: any) => {
-            chainIds.add(breakdown.chain.id);
-        });
+        if (asset.breakdown && Array.isArray(asset.breakdown)) {
+            asset.breakdown.forEach((breakdown: any) => {
+                if (breakdown?.chain?.id) {
+                    chainIds.add(breakdown.chain.id);
+                }
+            });
+        }
     });
 
     const chainLogos = Array.from(chainIds).slice(0, 8);
