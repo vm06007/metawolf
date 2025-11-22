@@ -19,8 +19,9 @@
         "build:popup:expanded": "bun build src/popup/expanded.tsx --outdir dist/popup --target browser --format esm --outfile expanded.js && cp src/popup/expanded.html dist/popup/expanded.html",
         "build:notification": "bun run build:notification:html && bun run build:notification:js",
         "build:notification:html": "mkdir -p dist/notification && cp src/notification/index.html dist/notification/index.html && cp src/popup/rabby-styles.css dist/notification/rabby-styles.css",
-        "build:notification:js": "bun build src/notification/index.tsx --outdir dist/notification --target browser --format esm",
-        "build:assets": "mkdir -p dist/icons && mkdir -p dist/popup/lib && bun run build:icons && cp manifest.json dist/ && cp -r icons/* dist/icons/ 2>/dev/null || true && cp src/popup/lib/libhalo.js dist/popup/lib/ 2>/dev/null || true && cp src/popup/lib/firefly.js dist/popup/lib/ 2>/dev/null || true",
+        "build:notification:js": "bun build src/notification/index.tsx --outdir dist/notification --target browser --format esm --external ethers",
+        "build:assets": "mkdir -p dist/icons && mkdir -p dist/popup/lib && bun run build:icons && bun run build:ethers && cp manifest.json dist/ && cp -r icons/* dist/icons/ 2>/dev/null || true && cp src/popup/lib/libhalo.js dist/popup/lib/ 2>/dev/null || true && cp src/popup/lib/firefly.js dist/popup/lib/ 2>/dev/null || true",
+        "build:ethers": "bun build node_modules/ethers/lib.esm/index.js --outfile dist/popup/lib/ethers.js --target browser --format esm --minify",
         "build:icons": "sips -z 16 16 wolfy.svg.png --out icons/icon16.png 2>/dev/null || true && sips -z 32 32 wolfy.svg.png --out icons/icon32.png 2>/dev/null || true && sips -z 48 48 wolfy.svg.png --out icons/icon48.png 2>/dev/null || true && sips -z 128 128 wolfy.svg.png --out icons/icon128.png 2>/dev/null || true",
         "build:watch": "bun run --watch build:all"
     },
