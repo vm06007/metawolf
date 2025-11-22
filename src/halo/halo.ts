@@ -7,6 +7,7 @@
 export interface HaloConfig {
     slot?: number;
     password?: string;
+    onPairing?: (pairInfo: any) => void;
 }
 
 export interface HaloResponse {
@@ -73,36 +74,42 @@ export class HaloChip {
         config?: HaloConfig
     ): Promise<HaloResponse> {
         try {
-            // Try LibHaLo first if available
+            // Always try LibHaLo first (it will load the library if needed)
             const { LibHaLoAdapter } = await import('./libhalo-adapter.js');
-            if (LibHaLoAdapter.isAvailable()) {
-                const messageHex =
-                    typeof message === 'string'
-                        ? message.startsWith('0x')
-                            ? message.slice(2)
-                            : message
-                        : Array.from(message)
-                              .map((b) => b.toString(16).padStart(2, '0'))
-                              .join('');
+            
+            // Convert message to hex
+            const messageHex =
+                typeof message === 'string'
+                    ? message.startsWith('0x')
+                        ? message.slice(2)
+                        : message
+                    : Array.from(message)
+                          .map((b) => b.toString(16).padStart(2, '0'))
+                          .join('');
 
-                const result = await LibHaLoAdapter.signMessage(
-                    messageHex,
-                    config?.slot || this.DEFAULT_SLOT,
-                    config?.password
-                );
+            // Try to sign with LibHaLo (it will load library and create gateway if needed)
+            // For transaction hashes, we need to use 'digest' parameter (plain ECDSA)
+            // For messages, we use 'message' parameter (EIP-191)
+            // Since we're signing a transaction hash (32-byte digest), use digest=true
+            const result = await LibHaLoAdapter.signMessage(
+                messageHex,
+                config?.slot || this.DEFAULT_SLOT,
+                config?.password,
+                config?.onPairing,
+                true // useDigest = true for transaction hashes
+            );
 
-                if (result) {
-                    return {
-                        success: true,
-                        data: {
-                            signature: result.signature,
-                            messageHash: result.messageHash,
-                        },
-                    };
-                }
+            if (result && result.signature) {
+                return {
+                    success: true,
+                    data: {
+                        signature: result.signature,
+                        messageHash: result.messageHash,
+                    },
+                };
             }
         } catch (error) {
-            console.warn('LibHaLo not available, using fallback:', error);
+            console.warn('LibHaLo signing failed, using fallback:', error);
         }
 
         // Fallback to command-based approach

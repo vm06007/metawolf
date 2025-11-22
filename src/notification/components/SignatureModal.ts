@@ -1,5 +1,5 @@
 import { formatAddress } from '../../popup/utils/account';
-import { ethers } from 'ethers';
+import { loadEthers } from '../ethers-loader';
 
 export interface SignatureRequest {
     id: string;
@@ -15,11 +15,13 @@ export interface SignatureRequest {
 /**
  * Decode hex message to readable text
  */
-function decodeMessage(message: string): string {
+async function decodeMessage(message: string): Promise<string> {
     try {
         // If it's hex, try to decode it
         if (message.startsWith('0x')) {
             try {
+                const ethersModule = await loadEthers();
+                const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
                 return ethers.toUtf8String(message);
             } catch {
                 // If UTF-8 decode fails, return hex representation
@@ -60,15 +62,15 @@ function formatTypedData(typedData: any): string {
     }
 }
 
-export function renderSignatureModal(
+export async function renderSignatureModal(
     request: SignatureRequest,
     onApprove: () => void,
     onReject: () => void
-): string {
+): Promise<string> {
     const isTypedData = request.isTypedData || false;
     const messageContent = isTypedData 
         ? formatTypedData(request.typedData)
-        : decodeMessage(request.message || '');
+        : await decodeMessage(request.message || '');
     
     const displayMessage = isTypedData
         ? messageContent

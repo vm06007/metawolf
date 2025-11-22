@@ -52,6 +52,7 @@
                 "inpage.js",
                 "popup/lib/libhalo.js",
                 "popup/lib/firefly.js",
+                "popup/lib/ethers.js",
                 "popup/firefly-connect.html",
                 "popup/firefly-connect.js",
                 "popup/expanded.html",

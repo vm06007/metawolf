@@ -1,5 +1,4 @@
 import { sendMessageWithRetry } from '../utils/messaging';
-import { ethers } from 'ethers';
 
 export class FireflyService {
     async addFireflyAccount(name?: string): Promise<any> {

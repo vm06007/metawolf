@@ -30,7 +30,9 @@ import { ethPriceService } from './services/eth-price-service';
 import { unifiedBalanceService, UnifiedBalanceData } from './services/unified-balance-service';
 import { transferService } from './services/transfer-service';
 import { createEIP1193Provider } from './services/eip1193-provider';
-import { ethers } from 'ethers';
+import { HaloUI } from './halo-ui';
+import { isAddress, getAddress } from '@ethersproject/address';
+import { loadEthers } from './ethers-loader';
 
 interface AppState {
     unlocked: boolean;
@@ -223,6 +225,13 @@ export class PopupApp {
             return;
         }
 
+        // For Halo chip accounts, fetch balance directly from node (no SDK needed)
+        if (account.isChipAccount && account.chipInfo) {
+            console.log('[PopupApp] Halo chip account detected, fetching balance directly from node');
+            await this.loadUnifiedBalances();
+            return;
+        }
+
         // Find a non-watch-only account to use for signing
         // If the selected account is watch-only, find the first non-watch-only account
         let accountToUse = account;
@@ -267,6 +276,9 @@ export class PopupApp {
             unifiedBalanceService.deinit();
 
             // Get a provider for Ethereum mainnet (Nexus SDK needs a provider)
+            // Dynamically import ethers to avoid bundling conflicts
+            const ethersModule = await loadEthers();
+            const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
             const provider = new ethers.JsonRpcProvider('https://mainnet.infura.io/v3/db2e296c0a0f475fb6c3a3281a0c39d6');
 
             // Create EIP-1193 provider wrapper
@@ -305,7 +317,9 @@ export class PopupApp {
             this.state.unifiedBalanceLoading = true;
             this.render(); // Show loading state
 
-            const data = await unifiedBalanceService.getUnifiedBalances();
+            // Pass selected account to unified balance service
+            // This allows it to detect Halo chip accounts and fetch balance directly from node
+            const data = await unifiedBalanceService.getUnifiedBalances(this.state.selectedAccount);
             this.state.unifiedBalanceData = data;
 
             // Update the balance display with total USD value
@@ -1543,7 +1557,7 @@ export class PopupApp {
             recipientInput.addEventListener('input', () => {
                 const address = recipientInput.value.trim();
                 if (address && recipientError) {
-                    if (ethers.isAddress(address)) {
+                    if (isAddress(address)) {
                         recipientError.style.display = 'none';
                     } else {
                         recipientError.textContent = 'Invalid address';
@@ -1589,7 +1603,7 @@ export class PopupApp {
         const hasToken = !!sendState.selectedToken;
         const hasChain = !!sendState.selectedChainId;
         const hasAmount = amountInput?.value && parseFloat(amountInput.value) > 0;
-        const hasRecipient = recipientInput?.value && ethers.isAddress(recipientInput.value.trim());
+        const hasRecipient = recipientInput?.value && isAddress(recipientInput.value.trim());
 
         if (submitBtn) {
             (submitBtn as HTMLButtonElement).disabled = !(hasToken && hasChain && hasAmount && hasRecipient);
@@ -1612,7 +1626,7 @@ export class PopupApp {
         const amount = amountInput.value.trim();
         const recipient = recipientInput.value.trim() as `0x${string}`;
 
-        if (!ethers.isAddress(recipient)) {
+        if (!isAddress(recipient)) {
             if (errorMessage) {
                 errorMessage.textContent = 'Invalid recipient address';
                 errorMessage.style.display = 'block';
@@ -1670,7 +1684,27 @@ export class PopupApp {
                 params.token.toUpperCase() === 'BNB' ||
                 params.token.toUpperCase() === 'AVAX';
 
-            if (isNative) {
+            // Check if account is Halo chip account
+            const selectedAccount = await this.walletService.getSelectedAccount();
+            const isHaloChipAccount = selectedAccount?.isChipAccount && selectedAccount?.chipInfo;
+
+            if (isNative && isHaloChipAccount) {
+                // Handle ETH transfer with Halo chip (show QR code)
+                const result = await this.handleHaloETHTransfer({
+                    amount: params.amount,
+                    recipient: params.recipient,
+                    chainId: params.chainId,
+                });
+
+                if (result.success) {
+                    this.showSuccessMessage('Transfer successful!', result.transactionHash, params.chainId);
+                    await this.loadUnifiedBalances();
+                    this.state.showSendScreen = false;
+                    this.render();
+                } else {
+                    throw new Error(result.error || 'Transfer failed');
+                }
+            } else if (isNative) {
                 // Use Nexus SDK for native token transfers (cross-chain support)
                 const result = await transferService.transfer({
                     token: params.token,
@@ -1746,6 +1780,10 @@ export class PopupApp {
 
             // Get token decimals (default to 18)
             const decimals = (asset as any).decimals || 18;
+
+            // Dynamically import ethers to avoid bundling conflicts
+            const ethersModule = await loadEthers();
+            const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
 
             // Convert amount to token's smallest unit
             const amountBigInt = ethers.parseUnits(params.amount, decimals);
@@ -1836,6 +1874,185 @@ export class PopupApp {
             return {
                 success: false,
                 error: error.message || 'ERC20 transfer failed',
+            };
+        }
+    }
+
+    private async handleHaloETHTransfer(params: {
+        amount: string;
+        recipient: string;
+        chainId: number;
+    }): Promise<{ success: boolean; transactionHash?: string; error?: string }> {
+        try {
+            // Get selected account
+            const selectedAccount = await this.walletService.getSelectedAccount();
+            if (!selectedAccount || !selectedAccount.isChipAccount || !selectedAccount.chipInfo) {
+                throw new Error('Halo chip account not found');
+            }
+
+            // Dynamically import ethers to avoid bundling conflicts
+            const ethersModule = await loadEthers();
+            const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
+
+            // Get provider
+            const networks = await this.walletService.getNetworks();
+            const network = networks.find(n => n.chainId === params.chainId) || networks[0];
+            if (!network || !network.rpcUrl) {
+                throw new Error(`Network not found for chainId ${params.chainId}`);
+            }
+            const provider = new ethers.JsonRpcProvider(network.rpcUrl);
+
+            // Convert amount to wei
+            const value = ethers.parseEther(params.amount);
+
+            // Build transaction
+            const transaction = {
+                to: params.recipient,
+                value: value.toString(),
+                chainId: params.chainId,
+            };
+
+            // Estimate gas
+            let gasLimit: bigint;
+            try {
+                const estimatedGas = await provider.estimateGas({
+                    ...transaction,
+                    from: selectedAccount.address,
+                });
+                gasLimit = (estimatedGas * BigInt(120)) / BigInt(100);
+            } catch (error) {
+                console.warn('[handleHaloETHTransfer] Gas estimation failed, using default:', error);
+                gasLimit = BigInt(21000);
+            }
+
+            // Get gas price
+            const feeData = await provider.getFeeData();
+            const maxFeePerGas = feeData.maxFeePerGas || feeData.gasPrice;
+            const maxPriorityFeePerGas = feeData.maxPriorityFeePerGas || undefined;
+
+            // Get nonce
+            const nonce = await provider.getTransactionCount(selectedAccount.address, 'pending');
+
+            // Build final transaction
+            // For EIP-1559 transactions (with maxFeePerGas), type should be 2
+            const finalTransaction: any = {
+                ...transaction,
+                gasLimit: gasLimit,
+                maxFeePerGas: maxFeePerGas,
+                maxPriorityFeePerGas: maxPriorityFeePerGas,
+                nonce: nonce,
+                type: maxFeePerGas ? 2 : 0, // Type 2 for EIP-1559, 0 for legacy
+            };
+
+            // Show QR code UI for Halo chip signing
+            type QRCodeUI = { remove: () => void; updateStatus: (status: string) => void };
+            const uiRefs: { qrCodeUI: QRCodeUI | null; removeWaiting: (() => void) | null; gate: any } = {
+                qrCodeUI: null,
+                removeWaiting: null,
+                gate: null,
+            };
+
+            try {
+                // Ensure HaloUI is available
+                let HaloUIInstance = HaloUI;
+                if (!HaloUIInstance) {
+                    try {
+                        const haloUIModule = await import('./halo-ui.js');
+                        HaloUIInstance = haloUIModule.HaloUI;
+                    } catch (error) {
+                        console.warn('[handleHaloETHTransfer] Could not load HaloUI:', error);
+                    }
+                }
+
+                // Import HaloSigner
+                // Use the account address - this is what we expect the signature to recover to
+                // The chipInfo should have the correct slot that corresponds to this address
+                const expectedAddress = selectedAccount.address;
+                const slot = selectedAccount.chipInfo.slot;
+
+                console.log('[handleHaloETHTransfer] Signing with Halo chip:', {
+                    accountAddress: expectedAddress,
+                    slot: slot,
+                    chipInfo: selectedAccount.chipInfo,
+                });
+
+                const { HaloSigner } = await import('../halo/halo-signer.js');
+                const haloSigner = new HaloSigner(
+                    expectedAddress, // This is the address we expect the signature to recover to
+                    slot,
+                    provider
+                );
+
+                // Sign transaction with QR code callback
+                const signedTx = await haloSigner.signTransaction(finalTransaction, (pairInfo) => {
+                    console.log('[handleHaloETHTransfer] Pairing started, showing QR code:', pairInfo);
+                    // Show QR code when pairing starts
+                    if (HaloUIInstance) {
+                        uiRefs.qrCodeUI = HaloUIInstance.showQRCode(pairInfo.qrCode, pairInfo.execURL, () => {
+                            // Cancel handler - could close gateway here if needed
+                            console.log('[handleHaloETHTransfer] QR code cancelled');
+                            if (uiRefs.qrCodeUI) {
+                                uiRefs.qrCodeUI.remove();
+                                uiRefs.qrCodeUI = null;
+                            }
+                            if (uiRefs.removeWaiting) {
+                                uiRefs.removeWaiting();
+                                uiRefs.removeWaiting = null;
+                            }
+                        });
+                        if (uiRefs.qrCodeUI) {
+                            uiRefs.qrCodeUI.updateStatus('Waiting for phone to scan QR code...');
+                        }
+                    } else {
+                        console.error('[handleHaloETHTransfer] HaloUI not available, cannot show QR code');
+                    }
+                });
+
+                // Wait a bit for QR code to be shown, then update status
+                if (uiRefs.qrCodeUI) {
+                    setTimeout(() => {
+                        if (uiRefs.qrCodeUI) {
+                            uiRefs.qrCodeUI.updateStatus('Phone connected! Tap your HaLo chip to your phone when prompted...');
+                        }
+                    }, 2000);
+                }
+
+                // Broadcast transaction
+                const txResponse = await provider.broadcastTransaction(signedTx);
+                const tx = ethers.Transaction.from(signedTx);
+                const txHash = tx.hash || (typeof txResponse === 'string' ? txResponse : txResponse?.hash);
+
+                // Clean up UI
+                if (uiRefs.qrCodeUI) {
+                    uiRefs.qrCodeUI.remove();
+                    uiRefs.qrCodeUI = null;
+                }
+                if (uiRefs.removeWaiting) {
+                    uiRefs.removeWaiting();
+                    uiRefs.removeWaiting = null;
+                }
+
+                return {
+                    success: true,
+                    transactionHash: txHash,
+                };
+            } catch (error: any) {
+                // Clean up UI on error
+                if (uiRefs.qrCodeUI) {
+                    uiRefs.qrCodeUI.remove();
+                    uiRefs.qrCodeUI = null;
+                }
+                if (uiRefs.removeWaiting) {
+                    uiRefs.removeWaiting();
+                    uiRefs.removeWaiting = null;
+                }
+                throw error;
+            }
+        } catch (error: any) {
+            console.error('[PopupApp] Halo ETH transfer error:', error);
+            return {
+                success: false,
+                error: error.message || 'Halo ETH transfer failed',
             };
         }
     }
@@ -2025,7 +2242,7 @@ export class PopupApp {
         if (this.state.selectedAccount) {
             try {
                 // Convert to checksum address like the clone does
-                const checksumAddress = ethers.getAddress(this.state.selectedAccount.address);
+                const checksumAddress = getAddress(this.state.selectedAccount.address);
                 await navigator.clipboard.writeText(checksumAddress);
 
                 // Show toast notification (same as Account Created)
@@ -2193,12 +2410,14 @@ export class PopupApp {
                 if (!address) return;
 
                 // Check if it's a valid address
-                if (ethers.isAddress(address)) {
+                if (isAddress(address)) {
                     return;
                 }
 
                 // Try to resolve ENS
                 try {
+                    const ethersModule = await loadEthers();
+                    const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
                     const provider = new ethers.JsonRpcProvider('https://mainnet.infura.io/v3/db2e296c0a0f475fb6c3a3281a0c39d6');
                     const resolved = await provider.resolveName(address);
                     if (resolved && ensResult) {

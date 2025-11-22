@@ -97,7 +97,7 @@ class NotificationApp {
                 this.showWalletSelector = true;
             }
 
-            this.render();
+            await this.render();
         } catch (error) {
             console.error('Error initializing notification:', error);
             this.renderError();
@@ -117,7 +117,7 @@ class NotificationApp {
             }
 
             this.signatureRequest = pendingSignature as SignatureRequest;
-            this.renderSignatureModal();
+            await this.renderSignatureModal();
         } catch (error) {
             console.error('Error initializing signature request:', error);
             this.renderError('Error loading signature request');
@@ -144,13 +144,13 @@ class NotificationApp {
         }
     }
 
-    render() {
+    async render() {
         const app = document.getElementById('app');
         if (!app) return;
 
         // If signature request, render signature modal
         if (this.signatureRequest) {
-            this.renderSignatureModal();
+            await this.renderSignatureModal();
             return;
         }
         
@@ -184,11 +184,11 @@ class NotificationApp {
         }
     }
 
-    renderSignatureModal() {
+    async renderSignatureModal() {
         const app = document.getElementById('app');
         if (!app || !this.signatureRequest) return;
 
-        app.innerHTML = renderSignatureModal(
+        app.innerHTML = await renderSignatureModal(
             this.signatureRequest,
             () => this.handleApproveSignature(),
             () => this.handleRejectSignature()

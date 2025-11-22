@@ -1,5 +1,4 @@
 import { formatAddress } from '../../popup/utils/account';
-import { ethers } from 'ethers';
 
 export interface TransactionRequest {
     id: string;

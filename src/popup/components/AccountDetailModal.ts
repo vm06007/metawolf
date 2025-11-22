@@ -1,5 +1,4 @@
 import { formatAddress, getDisplayName } from '../utils/account';
-import { ethers } from 'ethers';
 
 export function renderAccountDetailModal(
     account: any,

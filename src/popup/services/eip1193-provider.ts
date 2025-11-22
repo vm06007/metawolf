@@ -1,12 +1,12 @@
-import { ethers } from 'ethers';
 import type { EthereumProvider } from '@avail-project/nexus-core';
+import type { JsonRpcProvider } from 'ethers';
 
 /**
  * Creates an EIP-1193 provider wrapper from an ethers JsonRpcProvider
  * This allows the Nexus SDK to work with the wallet's provider
  * Supports signing methods needed for SIWE (Sign-In with Ethereum)
  */
-export function createEIP1193Provider(provider: ethers.JsonRpcProvider, address: string): EthereumProvider {
+export function createEIP1193Provider(provider: JsonRpcProvider, address: string): EthereumProvider {
     const eip1193Provider: EthereumProvider = {
         request: async (args: { method: string; params?: any[] }) => {
             switch (args.method) {

@@ -153,41 +153,76 @@ export class LibHaLoAdapter {
 
     /**
      * Sign message/hash with HaLo chip using Gateway
+     * @param messageHash - The message or hash to sign (hex-encoded)
+     * @param slot - The key slot to use (1 or 3)
+     * @param password - Optional password for the key slot
+     * @param onPairing - Optional callback for pairing info
+     * @param useDigest - If true, sign as raw digest (plain ECDSA). If false, sign as EIP-191 message.
      */
     static async signMessage(
         messageHash: string,
         slot: number = 1,
         password?: string,
-        onPairing?: (pairInfo: HaloGatewayPairInfo) => void
+        onPairing?: (pairInfo: HaloGatewayPairInfo) => void,
+        useDigest: boolean = false
     ): Promise<LibHaLoSignResult | null> {
+        // Load library first if needed
+        if (!this.isAvailable()) {
+            const loaded = await this.loadLibrary();
+            if (!loaded) {
+                console.error('[LibHaLoAdapter] Failed to load library');
+                throw new Error('Failed to load LibHaLo library');
+            }
+        }
+
         const gate = await this.createGateway();
         if (!gate) {
-            return null;
+            throw new Error('Failed to create Halo Gateway');
         }
 
         try {
-            // Start pairing and show QR code
+            // Start pairing and show QR code FIRST
+            console.log('[LibHaLoAdapter] Starting pairing...');
             const pairInfo = await gate.startPairing();
+            console.log('[LibHaLoAdapter] Pairing info received:', pairInfo);
+            
+            // Call onPairing callback immediately to show QR code
             if (onPairing) {
+                console.log('[LibHaLoAdapter] Calling onPairing callback');
                 onPairing(pairInfo);
+            } else {
+                console.warn('[LibHaLoAdapter] No onPairing callback provided');
             }
 
-            // Wait for phone to connect
+            // Wait for phone to connect (this happens after QR code is scanned)
+            console.log('[LibHaLoAdapter] Waiting for phone to connect...');
             await gate.waitConnected();
+            console.log('[LibHaLoAdapter] Phone connected!');
 
             // Execute sign command
-            const cmd = {
+            // For transaction hashes (raw digests), use 'digest' parameter
+            // For EIP-191 messages, use 'message' parameter
+            const cmd: any = {
                 name: 'sign',
-                message: messageHash,
                 keyNo: slot,
             };
+            
+            if (useDigest) {
+                // Sign as raw digest using plain ECDSA (for transaction hashes)
+                cmd.digest = messageHash;
+            } else {
+                // Sign as EIP-191 message (for personal_sign)
+                cmd.message = messageHash;
+            }
 
             const result = await gate.execHaloCmd(cmd);
             await gate.close();
 
             if (result && result.signature) {
+                // The gateway returns a full signature object with raw, der, and ether fields
+                // Return the entire signature object so it can be properly parsed
                 return {
-                    signature: result.signature || '',
+                    signature: result.signature, // Full signature object, not just a string
                     messageHash: result.messageHash || messageHash,
                 };
             }
@@ -220,7 +255,7 @@ export class LibHaLoAdapter {
         }
 
         try {
-            const reader = new window.NDEFReader();
+            const reader = new NDEFReader();
             await reader.scan();
             return true;
         } catch (error) {

@@ -1,5 +1,4 @@
 import { sendMessageWithRetry } from '../utils/messaging';
-import { ethers } from 'ethers';
 
 export class HaloService {
     async addChipAccount(name?: string): Promise<any> {
@@ -80,6 +79,9 @@ export class HaloService {
 
                 // Derive address from public key
                 const publicKey = result.publicKey;
+                const { loadEthers } = await import('../ethers-loader');
+                const ethersModule = await loadEthers();
+                const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
                 let chipAddress = result.address || ethers.computeAddress('0x' + publicKey);
 
                 // Create account from chip
@@ -173,6 +175,9 @@ export class HaloService {
             }
 
             const publicKey = result.publicKey;
+            const { loadEthers } = await import('../ethers-loader');
+            const ethersModule = await loadEthers();
+            const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
             const chipAddress = result.address || ethers.computeAddress('0x' + publicKey);
 
             return {
@@ -309,6 +314,9 @@ export class HaloService {
 
             // Extract address and public key
             const publicKey = result.publicKey;
+            const { loadEthers } = await import('../ethers-loader');
+            const ethersModule = await loadEthers();
+            const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
             const chipAddress = result.address || ethers.computeAddress('0x' + publicKey);
 
             // Link the account
@@ -354,7 +362,10 @@ export class HaloService {
         return response;
     }
 
-    computeAddressFromPublicKey(publicKey: string): string {
+    async computeAddressFromPublicKey(publicKey: string): Promise<string> {
+        const { loadEthers } = await import('../ethers-loader');
+        const ethersModule = await loadEthers();
+        const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
         return ethers.computeAddress('0x' + publicKey);
     }
 }
