@@ -3,6 +3,7 @@ pragma solidity ^0.8.26;
 
 import { IReceiverTemplate } from "./keystone/IReceiverTemplate.sol";
 import { Ownable } from "./utils/Ownable.sol";
+import { ExecutionProxy } from "./ExecutionProxy.sol";
 
 /// @title SettlementReceiver - Secure consumer contract for Chainlink CRE settlement reports
 /// @notice This contract implements the most secure pattern with:
@@ -15,6 +16,9 @@ contract SettlementReceiver is IReceiverTemplate, Ownable {
     // Updatable security parameters
     address public keystoneForwarderAddress;
     bytes32 public expectedWorkflowId;
+    
+    // ExecutionProxy for executing arbitrary signed data
+    address public executionProxy;
 
     // Custom errors
     error InvalidSender(address sender, address expected);
@@ -27,6 +31,8 @@ contract SettlementReceiver is IReceiverTemplate, Ownable {
     event WorkflowIdUpdated(bytes32 indexed oldWorkflowId, bytes32 indexed newWorkflowId);
     event ExpectedAuthorUpdated(address indexed oldAuthor, address indexed newAuthor);
     event ExpectedWorkflowNameUpdated(bytes10 indexed oldName, bytes10 indexed newName);
+    event ExecutionProxyUpdated(address indexed oldProxy, address indexed newProxy);
+    event ExecutionRequested(address indexed target, bytes data, uint256 value, bool success);
 
     /// @notice Constructor sets all security parameters
     /// @param expectedAuthor The expected workflow owner address
@@ -88,14 +94,63 @@ contract SettlementReceiver is IReceiverTemplate, Ownable {
 
     /// @notice Processes the validated report
     /// @param report The ABI-encoded report data from the workflow
+    /// @dev The report should contain: (address target, bytes data, uint256 value)
     function _processReport(bytes calldata report) internal override {
-        // TODO: Decode the report and implement your settlement logic here
-        // Example:
-        // (address payer, address payee, uint256 amount, bool success) = abi.decode(report, (address, address, uint256, bool));
-        // 
-        // Your settlement logic here...
-        // 
-        // emit SettlementProcessed(payer, payee, amount, success);
+        // Decode the report containing execution data
+        // Expected format: (address target, bytes data, uint256 value)
+        (address target, bytes memory data, uint256 value) = abi.decode(report, (address, bytes, uint256));
+        
+        // Execute the signed data through ExecutionProxy
+        // This will only succeed if ExecutionProxy is set and all validations passed
+        (bool success, bytes memory result) = executeSignedData(target, data, value);
+        
+        // Handle execution result if needed
+        // The ExecutionProxy already emits events, but you can add additional logic here
+        if (!success) {
+            // Execution failed - you can add custom error handling here
+            // The ExecutionFailed event was already emitted by ExecutionProxy
+        }
+        
+        // Optional: Emit additional events or perform other actions based on result
+        // emit SettlementProcessed(target, data, value, success);
+    }
+
+    /// @notice Sets the ExecutionProxy address (owner only)
+    /// @param _executionProxy The ExecutionProxy contract address
+    function setExecutionProxy(address _executionProxy) external onlyOwner {
+        if (_executionProxy != address(0) && _executionProxy.code.length == 0) {
+            revert InvalidAddress(_executionProxy);
+        }
+        address oldProxy = executionProxy;
+        executionProxy = _executionProxy;
+        emit ExecutionProxyUpdated(oldProxy, _executionProxy);
+    }
+
+    /// @notice Executes arbitrary signed data through ExecutionProxy
+    /// @dev Can be called from _processReport to execute validated signed data
+    /// @param target The target address to call
+    /// @param data The calldata to send to the target
+    /// @param value The amount of ETH to send with the call
+    /// @return success Whether the execution succeeded
+    /// @return result The return data from the execution
+    function executeSignedData(
+        address target,
+        bytes memory data,
+        uint256 value
+    ) internal returns (bool success, bytes memory result) {
+        // Ensure ExecutionProxy is set
+        if (executionProxy == address(0)) {
+            revert InvalidAddress(address(0));
+        }
+        
+        // Call ExecutionProxy to execute (ExecutionProxy will emit events)
+        // Convert bytes memory to bytes calldata for the call
+        (success, result) = ExecutionProxy(payable(executionProxy)).execute(target, data, value);
+        
+        // Emit additional event for SettlementReceiver tracking
+        emit ExecutionRequested(target, data, value, success);
+        
+        return (success, result);
     }
 
     /// @notice Updates the KeystoneForwarder address (owner only)

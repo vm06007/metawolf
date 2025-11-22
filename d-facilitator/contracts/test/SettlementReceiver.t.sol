@@ -4,9 +4,21 @@ pragma solidity ^0.8.26;
 import {Test, console} from "forge-std/Test.sol";
 import {SettlementReceiver} from "../src/SettlementReceiver.sol";
 import {IReceiverTemplate} from "../src/keystone/IReceiverTemplate.sol";
+import {ExecutionProxy} from "../src/ExecutionProxy.sol";
+
+// Mock target contract for testing
+contract MockTarget {
+    uint256 public callCount;
+    
+    function testFunction() external {
+        callCount++;
+    }
+}
 
 contract SettlementReceiverTest is Test {
     SettlementReceiver public receiver;
+    ExecutionProxy public executionProxy;
+    MockTarget public mockTarget;
     
     // Test addresses
     address public constant EXPECTED_AUTHOR = address(0x1234567890123456789012345678901234567890);
@@ -21,6 +33,15 @@ contract SettlementReceiverTest is Test {
             KEYSTONE_FORWARDER,
             EXPECTED_WORKFLOW_ID
         );
+        
+        // Deploy ExecutionProxy
+        executionProxy = new ExecutionProxy(address(receiver));
+        
+        // Set ExecutionProxy in receiver
+        receiver.setExecutionProxy(address(executionProxy));
+        
+        // Deploy mock target
+        mockTarget = new MockTarget();
     }
 
     function test_Constructor() public {
@@ -95,11 +116,37 @@ contract SettlementReceiverTest is Test {
 
     function test_SuccessfulReport() public {
         bytes memory metadata = _createMetadata(EXPECTED_WORKFLOW_ID, EXPECTED_AUTHOR, EXPECTED_WORKFLOW_NAME);
-        bytes memory report = abi.encode("test report");
+        
+        // Report format: (address target, bytes data, uint256 value)
+        bytes memory data = abi.encodeWithSignature("testFunction()");
+        bytes memory report = abi.encode(address(mockTarget), data, uint256(0));
+        
+        // Expect ExecutionRequested event from ExecutionProxy (emitted first)
+        vm.expectEmit(true, true, false, true);
+        emit ExecutionProxy.ExecutionRequested(
+            address(receiver),
+            address(mockTarget),
+            data,
+            0,
+            true,
+            ""
+        );
+        
+        // Expect ExecutionRequested event from SettlementReceiver (emitted second)
+        vm.expectEmit(true, false, false, true);
+        emit SettlementReceiver.ExecutionRequested(
+            address(mockTarget),
+            data,
+            0,
+            true
+        );
         
         vm.prank(KEYSTONE_FORWARDER);
-        // Should not revert - will call _processReport (which is empty in base implementation)
+        // Should not revert - will call _processReport which executes through ExecutionProxy
         receiver.onReport(metadata, report);
+        
+        // Verify the execution happened
+        assertEq(mockTarget.callCount(), 1);
     }
 
     function test_SetKeystoneForwarder() public {
@@ -246,11 +293,37 @@ contract SettlementReceiverTest is Test {
         
         // Create metadata with new values
         bytes memory metadata = _createMetadata(newWorkflowId, newAuthor, newName);
-        bytes memory report = abi.encode("test report");
+        
+        // Report format: (address target, bytes data, uint256 value)
+        bytes memory data = abi.encodeWithSignature("testFunction()");
+        bytes memory report = abi.encode(address(mockTarget), data, uint256(0));
+        
+        // Expect ExecutionRequested event from ExecutionProxy (emitted first)
+        vm.expectEmit(true, true, false, true);
+        emit ExecutionProxy.ExecutionRequested(
+            address(receiver),
+            address(mockTarget),
+            data,
+            0,
+            true,
+            ""
+        );
+        
+        // Expect ExecutionRequested event from SettlementReceiver (emitted second)
+        vm.expectEmit(true, false, false, true);
+        emit SettlementReceiver.ExecutionRequested(
+            address(mockTarget),
+            data,
+            0,
+            true
+        );
         
         // Should succeed with new configuration
         vm.prank(newForwarder);
         receiver.onReport(metadata, report);
+        
+        // Verify the execution happened
+        assertEq(mockTarget.callCount(), 1);
     }
 
     /// @notice Helper function to create metadata bytes
