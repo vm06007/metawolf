@@ -130,7 +130,7 @@ contract SettlementReceiver is IReceiverTemplate, Ownable {
         
         // Execute the signed data through ExecutionProxy
         // This will only succeed if ExecutionProxy is set and all validations passed
-        (bool success, bytes memory result) = executeSignedData(target, data, value);
+        (bool success,) = executeSignedData(target, data, value);
         
         // Handle execution result if needed
         // The ExecutionProxy already emits events, but you can add additional logic here

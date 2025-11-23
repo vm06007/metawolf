@@ -1,9 +1,9 @@
 {
-  "authorizedEVMAddress": "0xb08E004bd2b5aFf1F5F950d141f449B1c05800eb",
+  "authorizedEVMAddress": "0x46e0d7556c38e6b5dac66d905814541723a42176",
   "chainSelectorName": "ethereum-testnet-sepolia",
   "isTestnet": true,
-  "settlementReceiverAddress": "0xYourSettlementReceiverContractAddress",
-  "executionProxyAddress": "0xYourExecutionProxyContractAddress",
+  "settlementReceiverAddress": "0xA02539DFb35bF1561d19061F5975bBfAC85b2031",
+  "executionProxyAddress": "0xdDc178F24094480Fa2f20efE0a05cB6687456Fab",
   "gasLimit": "500000",
-  "callbackUrl": "https://webhook.site/defe88ad-5059-4410-904c-95a2feb81dde"
+  "callbackUrl": "https://express-jg8osw3xp-emanherawys-projects.vercel.app/"
 }

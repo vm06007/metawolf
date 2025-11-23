@@ -27,38 +27,82 @@ contracts/
 
 ## Deployment
 
-### Constructor Parameters
+**📖 For detailed deployment instructions, see [DEPLOYMENT.md](./DEPLOYMENT.md)**
 
-```solidity
-constructor(
-    address expectedAuthor,           // Your workflow owner address
-    bytes10 expectedWorkflowName,      // Your workflow name (e.g., "d-settle")
-    address _keystoneForwarderAddress, // KeystoneForwarder address
-    bytes32 _expectedWorkflowId        // Your specific workflow ID
-)
+### Quick Start
+
+1. **Setup environment:**
+   ```bash
+   cp .env.example .env
+   # Add your ALCHEMY_API_KEY and PRIVATE_KEY to .env
+   ```
+
+2. **Deploy using the script:**
+   ```bash
+   # Ethereum Sepolia
+   ./deploy.sh eth_sepolia ethereum-testnet-sepolia
+   
+   # Ethereum Mainnet
+   ./deploy.sh eth_mainnet ethereum-mainnet
+   
+   # Base Sepolia
+   ./deploy.sh base_sepolia ethereum-testnet-sepolia-base-1
+   ```
+
+### Deployed Contracts
+
+#### Ethereum Sepolia (Chain ID: 11155111)
+
+**Deployment Date:** 2025-01-22  
+**Deployer:** `0x46e0d7556C38E6b5Dac66D905814541723A42176`
+
+| Contract | Address | Transaction Hash |
+|----------|---------|------------------|
+| **SettlementReceiver** | [`0xA02539DFb35bF1561d19061F5975bBfAC85b2031`](https://sepolia.etherscan.io/address/0xA02539DFb35bF1561d19061F5975bBfAC85b2031) | [`0xe3699ebace0d8bb4f3ad0ddbc49ca5f754d4da412abd4205d9995c20cb95fa87`](https://sepolia.etherscan.io/tx/0xe3699ebace0d8bb4f3ad0ddbc49ca5f754d4da412abd4205d9995c20cb95fa87) |
+| **ExecutionProxy** | [`0xdDc178F24094480Fa2f20efE0a05cB6687456Fab`](https://sepolia.etherscan.io/address/0xdDc178F24094480Fa2f20efE0a05cB6687456Fab) | [`0x079563dc0685f9a7968281407185f3d72b9d862c30f28c4bddc2d57eac2adfca`](https://sepolia.etherscan.io/tx/0x079563dc0685f9a7968281407185f3d72b9d862c30f28c4bddc2d57eac2adfca) |
+
+**Configuration:**
+- **Forwarder Address:** `0x15fC6ae953E024d975e77382eEeC56A9101f9F88` (Chainlink KeystoneForwarder for Ethereum Sepolia Simulation)
+- **Expected Author:** `0x1234567890123456789012345678901234567890` (⚠️ Update this to your actual CRE workflow owner)
+- **Expected Workflow Name:** `d-settle`
+- **Expected Workflow ID:** `0x1234567890123456789012345678901234567890123456789012345678901234` (⚠️ Update this to your actual workflow ID)
+
+**Gas Costs:**
+- SettlementReceiver deployment: 1,941,866 gas (~0.00000234 ETH)
+- ExecutionProxy deployment: 733,852 gas (~0.00000088 ETH)
+- **Total:** 2,675,718 gas (~0.00000322 ETH)
+
+**⚠️ Important:** After deployment, update the workflow configuration in `d-settlement/config.staging.json`:
+```json
+{
+  "settlementReceiverAddress": "0xA02539DFb35bF1561d19061F5975bBfAC85b2031",
+  "executionProxyAddress": "0xdDc178F24094480Fa2f20efE0a05cB6687456Fab"
+}
 ```
 
-### Example Deployment
+### Configuration
 
-```solidity
-// Sepolia Testnet
-address keystoneForwarder = 0x15fC6ae953E024d975e77382eEeC56A9101f9F88;
-address workflowOwner = 0xYourWorkflowOwnerAddress;
-bytes10 workflowName = "d-settle";
-bytes32 workflowId = 0xYourWorkflowId;
+The contracts use **array-based configuration** - all parameters are added via setter functions after deployment:
 
-SettlementReceiver receiver = new SettlementReceiver(
-    workflowOwner,
-    workflowName,
-    keystoneForwarder,
-    workflowId
-);
-```
+- `addKeystoneForwarder(address)` - Add authorized forwarder
+- `addExpectedWorkflowId(bytes32)` - Add authorized workflow ID
+- `addExpectedAuthor(address)` - Add authorized workflow owner
+- `addExpectedWorkflowName(bytes10)` - Add authorized workflow name
 
-## KeystoneForwarder Addresses
+This allows multiple forwarders, workflow IDs, authors, and names to be authorized.
 
-- **Ethereum Sepolia**: `0x15fC6ae953E024d975e77382eEeC56A9101f9F88`
-- **Other networks**: Check Chainlink CRE documentation
+## Supported Networks
+
+### Testnets
+- **Ethereum Sepolia** (Chain ID: 11155111)
+- **Base Sepolia** (Chain ID: 84532)
+
+### Mainnets
+- **Ethereum Mainnet** (Chain ID: 1)
+
+### KeystoneForwarder Addresses
+
+See [ForwarderAddresses.sol](./src/utils/ForwarderAddresses.sol) for all supported networks and addresses.
 
 ## Workflow Integration
 

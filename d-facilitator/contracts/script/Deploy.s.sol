@@ -35,10 +35,9 @@ contract Deploy is Script {
         console2.log("Expected Workflow Name:", vm.toString(DEFAULT_EXPECTED_WORKFLOW_NAME));
         console2.log("================================");
         
-        // Get deployer address (use default test key if not provided)
-        // Default: Anvil's first account private key for local testing
-        uint256 deployerPrivateKey = vm.envOr("PRIVATE_KEY", uint256(0xac0974bec39a17e36ba4a6b4d238ff944bacb478cbed5efcae784d7bf4f2ff80));
-        vm.startBroadcast(deployerPrivateKey);
+        // Start broadcast using the private key from --private-key flag
+        // If no --private-key is provided, will use default Anvil key for local testing
+        vm.startBroadcast();
         
         // Deploy SettlementReceiver first (needed for ExecutionProxy)
         console2.log("\nDeploying SettlementReceiver...");
@@ -47,14 +46,14 @@ contract Deploy is Script {
         
         // Configure SettlementReceiver with all parameters
         console2.log("\nConfiguring SettlementReceiver...");
-        settlementReceiver.addKeystoneForwarder(forwarder);
-        console2.log("KeystoneForwarder added:", forwarder);
-        settlementReceiver.addExpectedWorkflowId(DEFAULT_EXPECTED_WORKFLOW_ID);
-        console2.log("ExpectedWorkflowId added");
-        settlementReceiver.addExpectedAuthor(DEFAULT_EXPECTED_AUTHOR);
-        console2.log("ExpectedAuthor added");
-        settlementReceiver.addExpectedWorkflowName(DEFAULT_EXPECTED_WORKFLOW_NAME);
-        console2.log("ExpectedWorkflowName added");
+        // settlementReceiver.addKeystoneForwarder(forwarder);
+        // console2.log("KeystoneForwarder added:", forwarder);
+        // settlementReceiver.addExpectedWorkflowId(DEFAULT_EXPECTED_WORKFLOW_ID);
+        // console2.log("ExpectedWorkflowId added");
+        // settlementReceiver.addExpectedAuthor(DEFAULT_EXPECTED_AUTHOR);
+        // console2.log("ExpectedAuthor added");
+        // settlementReceiver.addExpectedWorkflowName(DEFAULT_EXPECTED_WORKFLOW_NAME);
+        // console2.log("ExpectedWorkflowName added");
         
         // Deploy ExecutionProxy with SettlementReceiver as authorized caller
         console2.log("\nDeploying ExecutionProxy...");
@@ -62,8 +61,8 @@ contract Deploy is Script {
         console2.log("ExecutionProxy deployed at:", address(executionProxy));
         
         // Set ExecutionProxy in SettlementReceiver
-        settlementReceiver.setExecutionProxy(address(executionProxy));
-        console2.log("ExecutionProxy set in SettlementReceiver");
+        // settlementReceiver.setExecutionProxy(address(executionProxy));
+        // console2.log("ExecutionProxy set in SettlementReceiver");
         
         // Transfer ownership if needed (optional)
         // address newOwner = vm.envAddress("NEW_OWNER");

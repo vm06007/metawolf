@@ -16,6 +16,12 @@ if [ -z "$ALCHEMY_API_KEY" ]; then
     exit 1
 fi
 
+# Check if PRIVATE_KEY is set
+if [ -z "$PRIVATE_KEY" ]; then
+    echo "Error: PRIVATE_KEY not set. Please add it to .env file or export it."
+    exit 1
+fi
+
 # Network selection
 NETWORK=${1:-eth_sepolia}
 CHAIN_NAME=${2:-ethereum-testnet-sepolia}
@@ -55,6 +61,7 @@ echo ""
 # Run deployment
 forge script script/Deploy.s.sol:Deploy \
     --rpc-url "$RPC_URL" \
+    --private-key "$PRIVATE_KEY" \
     --broadcast \
     "$@"
 
