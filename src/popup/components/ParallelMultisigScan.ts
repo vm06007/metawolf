@@ -18,6 +18,11 @@ export interface ParallelScanState {
         chipInfo?: any;
         gate?: any;
     };
+    deploymentTx?: {
+        hash: string;
+        address: string;
+        chainId: number;
+    };
 }
 
 export function renderParallelMultisigScan(
@@ -32,6 +37,21 @@ export function renderParallelMultisigScan(
     const chip1Status = state.chip1.status;
     const chip2Status = state.chip2.status;
     const bothDone = chip1Status === 'done' && chip2Status === 'done';
+    const hasDeployment = state.deploymentTx && state.deploymentTx.hash;
+
+    // Helper to get Etherscan URL
+    const getEtherscanUrl = (chainId: number, txHash: string): string => {
+        const baseUrls: Record<number, string> = {
+            1: 'https://etherscan.io',
+            11155111: 'https://sepolia.etherscan.io',
+            137: 'https://polygonscan.com',
+            8453: 'https://basescan.org',
+            42161: 'https://arbiscan.io',
+            10: 'https://optimistic.etherscan.io',
+        };
+        const baseUrl = baseUrls[chainId] || 'https://etherscan.io';
+        return `${baseUrl}/tx/${txHash}`;
+    };
 
     return `
         <div class="parallel-scan-overlay" id="parallel-scan-overlay" style="
@@ -315,7 +335,39 @@ export function renderParallelMultisigScan(
                         color: var(--r-green-default);
                         font-weight: 500;
                     ">
-                        ✅ Both chips scanned! Deploying multisig contract...
+                        ${hasDeployment ? `
+                            <div style="margin-bottom: 12px;">
+                                ✅ Multisig Deployed Successfully!
+                            </div>
+                            <div style="
+                                font-size: 13px;
+                                color: var(--r-neutral-body);
+                                margin-bottom: 8px;
+                            ">
+                                Contract Address: <span style="font-family: monospace; font-weight: 500;">${state.deploymentTx!.address.slice(0, 6)}...${state.deploymentTx!.address.slice(-4)}</span>
+                            </div>
+                            <div style="
+                                font-size: 13px;
+                                color: var(--r-neutral-body);
+                            ">
+                                Transaction:
+                                <a href="${getEtherscanUrl(state.deploymentTx!.chainId, state.deploymentTx!.hash)}"
+                                   target="_blank"
+                                   rel="noopener noreferrer"
+                                   style="
+                                       color: var(--r-blue-default);
+                                       text-decoration: none;
+                                       font-family: monospace;
+                                       font-weight: 500;
+                                   "
+                                   onmouseover="this.style.textDecoration='underline'"
+                                   onmouseout="this.style.textDecoration='none'">
+                                    ${state.deploymentTx!.hash.slice(0, 6)}...${state.deploymentTx!.hash.slice(-4)}
+                                </a>
+                            </div>
+                        ` : `
+                            ✅ Both chips scanned! Deploying multisig contract...
+                        `}
                     </div>
                 ` : ''}
             </div>

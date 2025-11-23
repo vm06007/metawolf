@@ -1,12 +1,12 @@
 /**
  * Multisig Factory Configuration
  * Factory contract addresses per chain
- * 
+ *
  * TODO: Deploy MultisigFactory contract on each chain and update these addresses
  */
 export const MULTISIG_FACTORY_ADDRESSES: Record<number, string> = {
     // Mainnet
-    1: '0x0000000000000000000000000000000000000000', // TODO: Deploy factory
+    1: '0xfF25B865d75583FB77102De88901Bf9c1C51B6C0',
     // Sepolia
     11155111: '0x0000000000000000000000000000000000000000', // TODO: Deploy factory
     // Polygon

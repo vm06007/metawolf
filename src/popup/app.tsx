@@ -2889,6 +2889,19 @@ export class PopupApp {
             // Deploy using gas station
             const deployment = await this.deployMultisigWithGasStation(response.account, chainId);
 
+            // Update UI with deployment transaction
+            if (this.state.parallelScanState) {
+                this.state.parallelScanState.deploymentTx = {
+                    hash: deployment.txHash,
+                    address: deployment.address,
+                    chainId: chainId,
+                };
+                this.render();
+
+                // Wait 5 seconds to let user see the transaction hash
+                await new Promise(resolve => setTimeout(resolve, 5000));
+            }
+
             // Hide parallel scan UI
             this.state.showParallelMultisigScan = false;
             this.state.parallelScanState = undefined;

@@ -63,9 +63,10 @@ export async function getGasStationSigner(provider: any): Promise<any> {
             'Please set it using setGasStationPrivateKey() or store it in chrome.storage.local with key "gasStationPrivateKey"'
         );
     }
-    
-    const ethersModule = await import('ethers');
-    const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
+
+    // Load ethers using the loader to avoid bundling issues
+    const { loadEthers } = await import('../popup/ethers-loader.js');
+    const ethers = await loadEthers();
     return new ethers.Wallet(privateKey, provider);
 }
 
