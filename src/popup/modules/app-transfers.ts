@@ -95,8 +95,9 @@ export async function handleSendTransfer(
                 address: selectedAccount.address,
             }, walletService);
 
-            if (result.success) {
-                showSuccessMessage('Transfer successful!', result.transactionHash, params.chainId);
+            if (result.success && result.transactionHash) {
+                // Show transaction hash immediately after device confirmation
+                showSuccessMessage('Transaction submitted!', result.transactionHash, params.chainId);
                 await loadUnifiedBalances();
                 state.showSendScreen = false;
                 render();

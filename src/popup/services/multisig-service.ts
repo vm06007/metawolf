@@ -119,42 +119,55 @@ export class MultisigService {
             throw new Error(sendResponse?.error || 'Failed to send deployment transaction');
         }
 
-        // Wait for transaction receipt
-        const receipt = await provider.waitForTransaction(sendResponse.transactionHash, 1);
+        const transactionHash = sendResponse.transactionHash;
 
-        if (!receipt || receipt.status !== 1) {
-            throw new Error('Deployment transaction failed');
-        }
-
-        // Extract deployed address from event
-        const factoryInterface = new ethers.Interface(FACTORY_ABI);
-        const event = receipt.logs.find((log: any) => {
+        // Return transaction hash immediately, then wait for confirmation in background
+        // This allows UI to show the transaction right away
+        (async () => {
             try {
-                const parsed = factoryInterface.parseLog(log);
-                return parsed?.name === 'MultisigCreated';
-            } catch {
-                return false;
+                // Wait for transaction receipt in background
+                const receipt = await provider.waitForTransaction(transactionHash, 1);
+
+                if (!receipt || receipt.status !== 1) {
+                    console.error('[MultisigService] Deployment transaction failed:', transactionHash);
+                    return;
+                }
+
+                // Extract deployed address from event
+                const factoryInterface = new ethers.Interface(FACTORY_ABI);
+                const event = receipt.logs.find((log: any) => {
+                    try {
+                        const parsed = factoryInterface.parseLog(log);
+                        return parsed?.name === 'MultisigCreated';
+                    } catch {
+                        return false;
+                    }
+                });
+
+                if (!event) {
+                    console.error('[MultisigService] Failed to find MultisigCreated event');
+                    return;
+                }
+
+                const parsedEvent = factoryInterface.parseLog(event);
+                const deployedAddress = parsedEvent?.args[0];
+
+                // Update account to mark as deployed
+                await chrome.runtime.sendMessage({
+                    type: 'UPDATE_MULTISIG_DEPLOYED',
+                    address: account.address,
+                    deployedAddress: deployedAddress,
+                    chainId: chainId,
+                });
+            } catch (error) {
+                console.error('[MultisigService] Error waiting for deployment confirmation:', error);
             }
-        });
+        })();
 
-        if (!event) {
-            throw new Error('Failed to find MultisigCreated event');
-        }
-
-        const parsedEvent = factoryInterface.parseLog(event);
-        const deployedAddress = parsedEvent?.args[0];
-
-        // Update account to mark as deployed
-        await chrome.runtime.sendMessage({
-            type: 'UPDATE_MULTISIG_DEPLOYED',
-            address: account.address,
-            deployedAddress: deployedAddress,
-            chainId: chainId,
-        });
-
+        // Return immediately with transaction hash (address will be updated later)
         return {
-            address: deployedAddress,
-            txHash: receipt.hash,
+            address: expectedAddress, // Use computed address (will be confirmed when mined)
+            txHash: transactionHash,
         };
     }
 

@@ -16,7 +16,7 @@ function getTokenIcon(asset: OctavPortfolioAsset, chainKey?: string): string {
     // For native tokens (ETH, MATIC, etc.)
     if (!contractAddress || contractAddress === '0x0000000000000000000000000000000000000000') {
         const nativeTokenMap: Record<string, string> = {
-            'ETH': 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png',
+            'ETH': 'https://cryptologos.cc/logos/ethereum-eth-logo.png?v=040',
             'MATIC': 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png',
             'BNB': 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/smartchain/info/logo.png',
             'AVAX': 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/avalanchec/info/logo.png',

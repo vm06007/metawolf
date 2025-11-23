@@ -8,6 +8,24 @@ let signer = null;
 let provider = null;
 let transactionData = null;
 
+function getExplorerUrl(chainId, txHash) {
+    const explorers = {
+        1: 'https://etherscan.io/tx',
+        11155111: 'https://sepolia.etherscan.io/tx',
+        5: 'https://goerli.etherscan.io/tx',
+        137: 'https://polygonscan.com/tx',
+        42161: 'https://arbiscan.io/tx',
+        48900: 'https://explorer.zircuit.com/tx',
+        10: 'https://optimistic.etherscan.io/tx',
+        8453: 'https://basescan.org/tx',
+        56: 'https://bscscan.com/tx',
+        43114: 'https://snowtrace.io/tx',
+    };
+    
+    const baseUrl = explorers[chainId] || explorers[1];
+    return `${baseUrl}/${txHash}`;
+}
+
 function showStatus(message, type = 'info') {
     if (!statusDiv) return;
     statusDiv.className = type;
@@ -310,7 +328,19 @@ function attachEventListeners() {
                 throw new Error('Transaction sent but no hash received. Response: ' + JSON.stringify(txResponse));
             }
             
-            showStatus(`✅ Transaction signed and sent!<br><br><strong>Transaction Hash:</strong><br><span style="font-family: monospace; font-size: 12px; word-break: break-all;">${transactionHash}</span><br><br>You can close this window.`, 'success');
+            // Get explorer URL for transaction
+            const chainId = transactionData?.chainId || 1;
+            const explorerUrl = getExplorerUrl(chainId, transactionHash);
+            const truncatedHash = transactionHash.length > 16 
+                ? `${transactionHash.slice(0, 8)}...${transactionHash.slice(-8)}`
+                : transactionHash;
+            
+            showStatus(
+                `✅ Transaction signed and sent!<br><br><strong>Transaction Hash:</strong><br>` +
+                `<a href="${explorerUrl}" target="_blank" rel="noopener noreferrer" style="color: #4C65FF; text-decoration: underline; font-family: monospace; font-size: 12px; word-break: break-all; display: inline-block; margin-top: 4px;">${truncatedHash}</a>` +
+                `<br><br>You can close this window.`, 
+                'success'
+            );
             
             // Send result back to extension
             sendResultToExtension(true, null, transactionHash, null);

@@ -1,6 +1,7 @@
 import type { UserAsset } from '@avail-project/nexus-core';
 import { CHAIN_METADATA } from '@avail-project/nexus-core';
 import { getChainWhiteLogo } from '../utils/chain-icons';
+import { getTokenImageAttributes, getTokenIconFallbacks } from '../utils/token-icons';
 
 export interface SendScreenProps {
     accountName: string;
@@ -34,23 +35,21 @@ export function renderSendScreen(props: SendScreenProps): string {
         icon: asset.icon,
     }));
 
-    // ETH fallback icon URL
-    const ethFallbackIcon = 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png';
-    
     // Always include ETH as an option if not already present
     const hasETH = availableTokens.some(t => t.symbol === 'ETH' || t.symbol === 'WETH');
     if (!hasETH) {
+        const ethFallbacks = getTokenIconFallbacks('ETH');
         availableTokens.unshift({
             symbol: 'ETH',
             balance: '0',
             balanceInFiat: 0,
-            icon: ethFallbackIcon,
+            icon: ethFallbacks[0] || null,
         });
     }
 
     // Get default token (ETH)
     const defaultToken = availableTokens.find(t => t.symbol === 'ETH') || availableTokens[0];
-    const defaultTokenIcon = defaultToken?.icon || (defaultToken?.symbol === 'ETH' ? ethFallbackIcon : null);
+    const defaultTokenAttrs = defaultToken ? getTokenImageAttributes(defaultToken.symbol, defaultToken.icon) : null;
     const defaultTokenBalance = defaultToken ? parseFloat(defaultToken.balance) : 0;
 
     // Get available chains from CHAIN_METADATA
@@ -153,17 +152,20 @@ export function renderSendScreen(props: SendScreenProps): string {
                     <label class="send-form-label">Token</label>
                     <div class="send-token-selector" id="send-token-selector">
                         <div class="send-token-display" id="send-token-display">
-                            ${defaultToken ? `
-                                ${defaultTokenIcon ? `
-                                    <img src="${defaultTokenIcon}" 
-                                         ${defaultToken.symbol === 'ETH' ? `data-fallback="${ethFallbackIcon}"` : ''}
+                            ${defaultToken && defaultTokenAttrs ? `
+                                ${defaultTokenAttrs.src ? `
+                                    <img src="${defaultTokenAttrs.src}" 
+                                         ${defaultTokenAttrs.fallbacks.length > 0 ? `data-fallbacks='${JSON.stringify(defaultTokenAttrs.fallbacks)}'` : ''}
                                          alt="${defaultToken.symbol}" 
                                          class="send-token-display-icon"
-                                         onerror="if(this.dataset.fallback && !this.dataset.triedFallback) { this.src = this.dataset.fallback; this.dataset.triedFallback = 'true'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }">
+                                         onerror="if(this.dataset.fallbacks) { try { const fallbacks = JSON.parse(this.dataset.fallbacks); const currentIndex = parseInt(this.dataset.fallbackIndex || '0'); if(currentIndex < fallbacks.length) { this.src = fallbacks[currentIndex]; this.dataset.fallbackIndex = (currentIndex + 1).toString(); return; } } catch(e) {} } this.style.display='none'; this.nextElementSibling.style.display='flex';">
                                     <div class="send-token-display-icon-fallback" style="display: none;">${defaultToken.symbol.charAt(0)}</div>
                                 ` : `
                                     <div class="send-token-display-icon-fallback">${defaultToken.symbol.charAt(0)}</div>
                                 `}
+                                <span class="send-token-display-symbol">${defaultToken.symbol}</span>
+                            ` : defaultToken ? `
+                                <div class="send-token-display-icon-fallback">${defaultToken.symbol.charAt(0)}</div>
                                 <span class="send-token-display-symbol">${defaultToken.symbol}</span>
                             ` : `
                                 <div class="send-token-placeholder">Select token</div>
@@ -250,14 +252,16 @@ export function renderSendScreen(props: SendScreenProps): string {
                         </button>
                     </div>
                     <div class="send-token-modal-content">
-                        ${availableTokens.length > 0 ? availableTokens.map(token => `
+                        ${availableTokens.length > 0 ? availableTokens.map(token => {
+                            const tokenAttrs = getTokenImageAttributes(token.symbol, token.icon);
+                            return `
                             <div class="send-token-option" data-token="${token.symbol}">
-                                ${token.icon ? `
-                                    <img src="${token.icon}" 
-                                         ${token.symbol === 'ETH' ? `data-fallback="${ethFallbackIcon}"` : ''}
+                                ${tokenAttrs.src ? `
+                                    <img src="${tokenAttrs.src}" 
+                                         ${tokenAttrs.fallbacks.length > 0 ? `data-fallbacks='${JSON.stringify(tokenAttrs.fallbacks)}'` : ''}
                                          alt="${token.symbol}" 
                                          class="send-token-option-icon"
-                                         onerror="if(this.dataset.fallback && !this.dataset.triedFallback) { this.src = this.dataset.fallback; this.dataset.triedFallback = 'true'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }">
+                                         onerror="if(this.dataset.fallbacks) { try { const fallbacks = JSON.parse(this.dataset.fallbacks); const currentIndex = parseInt(this.dataset.fallbackIndex || '0'); if(currentIndex < fallbacks.length) { this.src = fallbacks[currentIndex]; this.dataset.fallbackIndex = (currentIndex + 1).toString(); return; } } catch(e) {} } this.style.display='none'; this.nextElementSibling.style.display='flex';">
                                     <div class="send-token-option-icon-fallback" style="display: none;">${token.symbol.charAt(0)}</div>
                                 ` : `
                                     <div class="send-token-option-icon-fallback">${token.symbol.charAt(0)}</div>
@@ -267,7 +271,8 @@ export function renderSendScreen(props: SendScreenProps): string {
                                     <div class="send-token-option-balance">${parseFloat(token.balance).toFixed(6)} ($${token.balanceInFiat.toFixed(2)})</div>
                                 </div>
                             </div>
-                        `).join('') : `
+                        `;
+                        }).join('') : `
                             <div class="send-token-option-empty">No tokens available</div>
                         `}
                     </div>

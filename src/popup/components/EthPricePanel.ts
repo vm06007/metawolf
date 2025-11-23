@@ -56,7 +56,7 @@ export function renderEthPricePanel(data: EthPriceData | null, loading: boolean 
                         ${(() => {
                             const ethLogos = getChainLogoFallbacks(1); // Chain ID 1 = Ethereum
                             const primaryLogo = ethLogos[0] || 'https://static.debank.com/image/chain/logo_url/eth/42ba589cd077e7bdd97db6480b0ff61d.png';
-                            const fallbackLogo = ethLogos[1] || 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png';
+                            const fallbackLogo = ethLogos[1] || 'https://cryptologos.cc/logos/ethereum-eth-logo.png?v=040';
                             return `
                                 <img src="${primaryLogo}" 
                                      data-fallback="${fallbackLogo}"

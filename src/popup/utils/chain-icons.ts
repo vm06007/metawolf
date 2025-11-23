@@ -219,7 +219,7 @@ const CHAIN_WHITE_LOGOS: Record<number, string> = {
 const FALLBACK_CHAIN_LOGOS: Record<number, string[]> = {
     1: [
         'https://static.debank.com/image/chain/logo_url/eth/42ba589cd077e7bdd97db6480b0ff61d.png',
-        'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png',
+        'https://cryptologos.cc/logos/ethereum-eth-logo.png?v=040',
         'https://cryptologos.cc/logos/ethereum-eth-logo.png',
         'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiM2MjcFRUEiLz4KPHBhdGggZD0iTTE2IDhMMjAgMTJIMTZWMjRIMTJWMjBIMTJWMTJIMTZWOE0xNiA4SDEyVjEySDE2VjhNMTYgMTJIMjBWMjBIMTZWMjBNMTYgMTJIMTJWMjBIMTZWMjAiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIvPgo8L3N2Zz4K'
     ],
