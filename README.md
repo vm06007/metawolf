@@ -43,6 +43,34 @@ A modern browser extension wallet with advanced features including EIP-7702, EIP
 - Zircuit Mainnet
 - And more...
 
+## Smart Contracts
+
+### Delegator on Zircuit
+
+The EIP-7702 Delegator contract is deployed on Zircuit Mainnet:
+
+- **Zircuit Mainnet (Chain 48900)**: [`0xFDcEdae8367942f22813AB078aA3569fabDe943F`](https://explorer.zircuit.com/address/0xFDcEdae8367942f22813AB078aA3569fabDe943F)
+
+### Multisig Factory
+
+The project includes Solidity contracts for deploying multisig wallets:
+
+- `MultisigFactory.sol`: Factory contract for deploying multisig wallets
+- `MultisigWallet.sol`: Multisig wallet implementation
+
+#### Deployed Factory Contracts
+
+Multisig factory contracts are deployed on the following networks:
+
+- **Ethereum Mainnet (Chain 1)**: [`0xfF25B865d75583FB77102De88901Bf9c1C51B6C0`](https://etherscan.io/address/0xfF25B865d75583FB77102De88901Bf9c1C51B6C0)
+- **Zircuit Mainnet (Chain 48900)**: [`0xAB869b003948c09F6b869B35545E9D535df36e12`](https://explorer.zircuit.com/address/0xAB869b003948c09F6b869B35545E9D535df36e12)
+
+Deploy scripts are available in `scripts/`:
+```bash
+bun run scripts/deploy-multisig-factory.ts
+bun run scripts/verify-multisig-factory.ts
+```
+
 ## Project Structure
 
 ```
@@ -171,34 +199,6 @@ bun run start    # Start production server
 - **Multisig Account**: Smart contract wallet requiring multiple signatures
 - **Standard Account**: Software wallet (seed phrase or private key)
 - **Watch-Only Account**: View-only address (cannot sign)
-
-## Smart Contracts
-
-### Delegator on Zircuit
-
-The EIP-7702 Delegator contract is deployed on Zircuit Mainnet:
-
-- **Zircuit Mainnet (Chain 48900)**: [`0xFDcEdae8367942f22813AB078aA3569fabDe943F`](https://explorer.zircuit.com/address/0xFDcEdae8367942f22813AB078aA3569fabDe943F)
-
-### Multisig Factory
-
-The project includes Solidity contracts for deploying multisig wallets:
-
-- `MultisigFactory.sol`: Factory contract for deploying multisig wallets
-- `MultisigWallet.sol`: Multisig wallet implementation
-
-#### Deployed Factory Contracts
-
-Multisig factory contracts are deployed on the following networks:
-
-- **Ethereum Mainnet (Chain 1)**: [`0xfF25B865d75583FB77102De88901Bf9c1C51B6C0`](https://etherscan.io/address/0xfF25B865d75583FB77102De88901Bf9c1C51B6C0)
-- **Zircuit Mainnet (Chain 48900)**: [`0xAB869b003948c09F6b869B35545E9D535df36e12`](https://explorer.zircuit.com/address/0xAB869b003948c09F6b869B35545E9D535df36e12)
-
-Deploy scripts are available in `scripts/`:
-```bash
-bun run scripts/deploy-multisig-factory.ts
-bun run scripts/verify-multisig-factory.ts
-```
 
 ## Configuration
 

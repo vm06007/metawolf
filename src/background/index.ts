@@ -2398,15 +2398,15 @@ function handleMessage(
                     try {
                         const provider = await wallet.getProvider();
                         const { HaloSigner } = await import('../halo/halo-signer.js');
-                        
+
                         // Create signer for the specific chip
                         const chipAddress = message.chipAddress;
                         const slot = message.slot || 1;
                         const haloSigner = new HaloSigner(chipAddress, slot, provider);
-                        
+
                         // Sign the transaction
                         const signedTx = await haloSigner.signTransaction(message.transaction);
-                        
+
                         safeSendResponse({
                             success: true,
                             signedTransaction: signedTx,
@@ -2427,7 +2427,7 @@ function handleMessage(
                     try {
                         const provider = await wallet.getProvider();
                         const txResponse = await provider.broadcastTransaction(message.signedTransaction);
-                        
+
                         safeSendResponse({
                             success: true,
                             transactionHash: txResponse.hash,
@@ -2450,15 +2450,15 @@ function handleMessage(
                             safeSendResponse({ success: false, error: 'Multisig account not found' });
                             break;
                         }
-                        
+
                         // Update multisig deployment status
                         account.multisig.deployed = true;
                         account.multisig.deployedAddress = message.deployedAddress;
                         account.multisig.deployedChainId = message.chainId;
-                        
+
                         // Save updated account
                         await wallet.saveState();
-                        
+
                         safeSendResponse({ success: true });
                     } catch (error: any) {
                         console.error('[UPDATE_MULTISIG_DEPLOYED] Error:', error);
