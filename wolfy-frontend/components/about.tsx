@@ -40,8 +40,8 @@ const collabContent = [
   },
   {
     id: "2",
-    title: "Multisig Built-In",
-    description: "Shared accounts, team treasury, or increased security.",
+    title: "Built-In Multisig ",
+    description: "Enhanced securiry, shared accounts, team treasury.",
   },
   {
     id: "3",
@@ -103,7 +103,7 @@ export const About = ({ onClose }: { onClose: () => void }) => {
           <div className="container lg:flex lg:gap-12">
             <div className="flex-1 lg:max-w-none xl:max-w-[60rem] w-full">
               <h2 className="text-3xl md:text-4xl lg:text-5xl font-bold mb-4 md:mb-8 text-white">
-                The Ultimate EIP-7702 Wallet
+                The Ultimate Smart Wallet
               </h2>
               <ul className="w-full mb-10 md:mb-14">
                 {collabContent.map((item) => {
