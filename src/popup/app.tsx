@@ -3212,10 +3212,13 @@ export class PopupApp {
         const threshold = account.multisig.threshold;
         const owners = chips.map((c: any) => ethers.getAddress(c.address)).sort();
 
-        // Create salt for deterministic address
+        // Create salt with randomness to ensure unique address each time
+        // This prevents CREATE2 reverts when trying to deploy the same multisig multiple times
+        const randomSalt = ethers.hexlify(ethers.randomBytes(32));
         const salt = ethers.keccak256(
-            ethers.toUtf8Bytes(owners.join('') + threshold.toString() + account.address.toLowerCase())
+            ethers.toUtf8Bytes(owners.join('') + threshold.toString() + randomSalt)
         );
+        console.log('[deployMultisig] Using random salt:', salt);
 
         // Deploy via factory using gas station
         const FACTORY_ABI = [
@@ -3227,12 +3230,12 @@ export class PopupApp {
         const factory = new ethers.Contract(factoryAddress, FACTORY_ABI, gasStationSigner);
         const data = factory.interface.encodeFunctionData('createMultisig', [owners, threshold, salt]);
 
-        // Get gas price (skip gas estimation and use hardcoded 4M gas limit)
+        // Get gas price (skip gas estimation and use hardcoded 2M gas limit)
         const feeData = await provider.getFeeData();
 
-        // Use hardcoded gas limit of 4,000,000 instead of estimating
-        // This allows the transaction to proceed even if estimation fails
-        const gasLimit = BigInt(4000000);
+        // Use hardcoded gas limit of 2,000,000 instead of estimating
+        // This is enough for successful deployment (~300k), but won't waste too much on reverts
+        const gasLimit = BigInt(2000000);
         console.log('[deployMultisig] Using hardcoded gas limit:', gasLimit.toString());
 
         const transaction = {

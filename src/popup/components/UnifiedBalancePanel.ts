@@ -46,7 +46,7 @@ export function renderUnifiedBalancePanel(props: UnifiedBalancePanelProps): stri
 
     if (!data || data.error) {
         const errorMessage = data?.error || 'Failed to load balances';
-        
+
         return `
             <div class="unified-balance-panel">
                 <div class="unified-balance-error">
@@ -79,7 +79,7 @@ export function renderUnifiedBalancePanel(props: UnifiedBalancePanelProps): stri
             });
         }
     });
-    
+
     console.log('[UnifiedBalancePanel] Extracted chains:', {
         chainIds: Array.from(chainIds),
         assetCount: data.assets.length,
@@ -111,7 +111,7 @@ export function renderUnifiedBalancePanel(props: UnifiedBalancePanelProps): stri
                     </div>
                 ` : ''}
             </div>
-            
+
             <div class="chain-logos-row">
                 <div class="chain-logos">
                     ${chainLogos.map(chainId => {
@@ -121,9 +121,9 @@ export function renderUnifiedBalancePanel(props: UnifiedBalancePanelProps): stri
                         return `
                             <div class="chain-logo clickable" data-chain-id="${chainId}" title="Click to view ${getChainName(chainId)} assets" style="cursor: pointer;">
                                 ${logo ? `
-                                    <img src="${logo}" 
+                                    <img src="${logo}"
                                          ${fallbackSrc ? `data-fallback="${fallbackSrc}"` : ''}
-                                         alt="${getChainName(chainId)}" 
+                                         alt="${getChainName(chainId)}"
                                          onerror="if(this.dataset.fallback && !this.dataset.triedFallback) { this.src = this.dataset.fallback; this.dataset.triedFallback = 'true'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }">
                                     <div class="chain-logo-fallback" style="display: none; width: 20px; height: 20px; border-radius: 50%; background: var(--r-neutral-line); align-items: center; justify-content: center; font-size: 10px; color: var(--r-neutral-foot);">
                                         ${getChainName(chainId).charAt(0)}
@@ -185,8 +185,8 @@ export function renderUnifiedBalancePanel(props: UnifiedBalancePanelProps): stri
                                             <div class="chain-balance-item">
                                                 <div class="chain-info">
                                                     ${getChainLogo(chainBalance.chain.id) ? `
-                                                        <img src="${getChainLogo(chainBalance.chain.id)}" 
-                                                             alt="${chainBalance.chain.name}" 
+                                                        <img src="${getChainLogo(chainBalance.chain.id)}"
+                                                             alt="${chainBalance.chain.name}"
                                                              class="chain-logo-small"
                                                              onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
                                                         <div class="chain-logo-small-fallback" style="display: none;">${chainBalance.chain.name.charAt(0)}</div>
