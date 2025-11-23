@@ -71,40 +71,6 @@ bun run scripts/deploy-multisig-factory.ts
 bun run scripts/verify-multisig-factory.ts
 ```
 
-## Project Structure
-
-```
-metawolf/
-├── src/
-│   ├── background/          # Service worker (background script)
-│   │   ├── handlers/        # Message handlers
-│   │   └── index.ts
-│   ├── content/             # Content scripts
-│   ├── core/                # Core wallet logic
-│   │   ├── wallet.ts        # Main wallet class
-│   │   ├── types.ts         # TypeScript interfaces
-│   │   ├── multisig-config.ts
-│   │   └── gas-station.ts
-│   ├── eips/                # EIP implementations
-│   │   ├── eip7702.ts       # EIP-7702 delegation
-│   │   └── eip5742.ts       # Batch transactions
-│   ├── firefly/             # Firefly wallet adapter
-│   ├── halo/                # HaLo chip integration
-│   ├── popup/               # Extension popup UI
-│   │   ├── components/      # React components
-│   │   ├── services/        # Business logic services
-│   │   └── modules/         # Feature modules
-│   ├── notification/        # Notification window UI
-│   ├── contracts/           # Solidity smart contracts
-│   │   ├── MultisigFactory.sol
-│   │   └── MultisigWallet.sol
-│   └── inpage.ts            # Injected provider script
-├── wolfy-frontend/          # Next.js frontend application
-├── dist/                    # Build output
-├── icons/                   # Extension icons
-└── scripts/                 # Build and deployment scripts
-```
-
 ## Prerequisites
 
 - **Bun** (v1.0+): This project uses Bun as the package manager and runtime
