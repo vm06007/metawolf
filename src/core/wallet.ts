@@ -709,6 +709,28 @@ export class Wallet {
                 },
             },
             {
+                chainId: 8453,
+                name: 'Base',
+                rpcUrl: 'https://mainnet.base.org',
+                blockExplorer: 'https://basescan.org',
+                currency: {
+                    name: 'Ether',
+                    symbol: 'ETH',
+                    decimals: 18,
+                },
+            },
+            {
+                chainId: 84532,
+                name: 'Base Sepolia',
+                rpcUrl: 'https://sepolia.base.org',
+                blockExplorer: 'https://sepolia-explorer.base.org',
+                currency: {
+                    name: 'Base Sepolia Ether',
+                    symbol: 'ETH',
+                    decimals: 18,
+                },
+            },
+            {
                 chainId: 42161,
                 name: 'Arbitrum One',
                 rpcUrl: 'https://arb1.arbitrum.io/rpc',

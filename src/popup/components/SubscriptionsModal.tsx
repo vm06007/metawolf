@@ -22,7 +22,7 @@ export function renderSubscriptionsModal(params: RenderSubscriptionsModalParams)
             name: 'Bankless Podcast',
             icon: '🎙️',
             description: 'Crypto and DeFi podcast',
-            price: '$20/month',
+            price: '$10/month',
             url: 'https://www.bankless.com/podcast',
         },
         {

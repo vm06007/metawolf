@@ -85,6 +85,7 @@ const CHAIN_COLORED_LOGOS: Record<number, string> = {
     81457: 'https://static.debank.com/image/chain/logo_url/blast/15132294afd38ce980639a381ee30149.png',
     8217: 'https://static.debank.com/image/chain/logo_url/klay/4182ee077031d843a57e42746c30c072.png',
     8453: 'https://static.debank.com/image/chain/logo_url/base/ccc1513e4f390542c4fb2f4b88ce9579.png',
+    84532: 'https://static.debank.com/image/chain/logo_url/base/ccc1513e4f390542c4fb2f4b88ce9579.png', // Base Sepolia (use Base logo)
     88888: 'https://static.debank.com/image/chain/logo_url/chiliz/548bc261b49eabea7227832374e1fcb0.png',
     9745: 'https://static.debank.com/image/chain/logo_url/plasma/baafefce3b9d43b12b0c016f30aff140.png',
     98866: 'https://static.debank.com/image/chain/logo_url/plume/f74d0d202dd8af7baf6940864ee79006.png',
@@ -189,6 +190,7 @@ const CHAIN_WHITE_LOGOS: Record<number, string> = {
     81457: 'https://static.debank.com/image/chain/white_logo_url/blast/828eb570083948e156a34ab8588e26b3.png',
     8217: 'https://static.debank.com/image/chain/white_logo_url/klay/9a89223ec7fcb2acf4bde5600fdd3153.png',
     8453: 'https://static.debank.com/image/chain/white_logo_url/base/025de9d02848e257740c14bdd1f9330b.png',
+    84532: 'https://static.debank.com/image/chain/white_logo_url/base/025de9d02848e257740c14bdd1f9330b.png', // Base Sepolia (use Base white logo)
     88888: 'https://static.debank.com/image/chain/white_logo_url/chiliz/48a3f9ae39cc1c78eb5ad7c41a7c4f79.png',
     9004: 'https://static.debank.com/image/chain/white_logo_url/starknet/8e44e643d6e2fd335a72b4cda6368e1a.png',
     9745: 'https://static.debank.com/image/chain/white_logo_url/plasma/ababa793ba3e472641d628b046223ae0.png',
@@ -236,6 +238,10 @@ const FALLBACK_CHAIN_LOGOS: Record<number, string[]> = {
         'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png'
     ],
     8453: [
+        'https://static.debank.com/image/chain/logo_url/base/ccc1513e4f390542c4fb2f4b88ce9579.png',
+        'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png'
+    ],
+    84532: [
         'https://static.debank.com/image/chain/logo_url/base/ccc1513e4f390542c4fb2f4b88ce9579.png',
         'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png'
     ],
