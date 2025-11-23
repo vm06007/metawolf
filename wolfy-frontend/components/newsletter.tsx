@@ -11,6 +11,7 @@ import { About } from "./about";
 import {
     Dialog,
     DialogContent,
+    DialogTitle,
 } from "./ui/dialog";
 
 // Typewriter component for line-by-line text animation
@@ -451,12 +452,35 @@ export const Newsletter = () => {
               />
             </svg>
           </a>
+          <a
+            href="https://ethglobal.com/showcase/wolfy-r87tb"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="w-10 h-10 rounded-full bg-black/30 backdrop-blur-sm border border-white/20 flex items-center justify-center hover:bg-black/50 transition-colors"
+            aria-label="ETHGlobal Showcase"
+          >
+            <svg
+              className="w-5 h-5 text-white"
+              fill="none"
+              stroke="currentColor"
+              viewBox="0 0 24 24"
+              aria-hidden="true"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M3.055 11H5a2 2 0 012 2v1a2 2 0 002 2 2 2 0 012 2v2.945M8 3.935V5.5A2.5 2.5 0 0010.5 8h.5a2 2 0 012 2 2 2 0 104 0 2 2 0 012-2h1.064M15 20.488V18a2 2 0 012-2h3.064M21 12a9 9 0 11-18 0 9 9 0 0118 0z"
+              />
+            </svg>
+          </a>
         </motion.div>
       )}
 
       {/* Video Demo Modal */}
       <Dialog open={isVideoOpen} onOpenChange={setIsVideoOpen}>
         <DialogContent className="max-w-4xl w-full bg-black/90 border-white/30 p-0 backdrop-blur-xl">
+          <DialogTitle className="sr-only">Wolfy Wallet Demo Video</DialogTitle>
           <div className="relative w-full aspect-video">
             <video
               src="https://ethglobal.storage/projects/r87tb/video/high.mp4?t=1763892727499"
