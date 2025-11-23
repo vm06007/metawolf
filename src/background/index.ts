@@ -2491,7 +2491,7 @@ function handleMessage(
                         const { exact } = await import('x402/schemes');
                         const { createWalletClient, http } = await import('viem');
                         const { privateKeyToAccount } = await import('viem/accounts');
-                        const { baseSepolia } = await import('viem/chains');
+                        const { mainnet, base, baseSepolia, sepolia, arbitrum, optimism, polygon, avalanche, bsc } = await import('viem/chains');
 
                         // Get private key
                         const privateKey = await wallet.getPrivateKey(account.address);
@@ -2506,8 +2506,25 @@ function handleMessage(
                         const paymentRequirements = message.paymentRequirements;
                         const network = paymentRequirements.network || 'base-sepolia';
 
-                        // Map network to viem chain (simplified - you may need more networks)
-                        const chain = network === 'base-sepolia' ? baseSepolia : baseSepolia;
+                        // Map network to viem chain
+                        const chainMap: Record<string, any> = {
+                            'ethereum': mainnet,
+                            'eth': mainnet,
+                            'base': base,
+                            'base-sepolia': baseSepolia,
+                            'sepolia': sepolia,
+                            'arbitrum': arbitrum,
+                            'arb': arbitrum,
+                            'optimism': optimism,
+                            'op': optimism,
+                            'polygon': polygon,
+                            'matic': polygon,
+                            'avalanche': avalanche,
+                            'avax': avalanche,
+                            'bsc': bsc,
+                            'binance': bsc,
+                        };
+                        const chain = chainMap[network.toLowerCase()] || baseSepolia;
 
                         // Create wallet client
                         const walletClient = createWalletClient({
