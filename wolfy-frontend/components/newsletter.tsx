@@ -11,6 +11,7 @@ import { About } from "./about";
 import {
     Dialog,
     DialogContent,
+    DialogTitle,
 } from "./ui/dialog";
 
 // Typewriter component for line-by-line text animation
@@ -479,6 +480,7 @@ export const Newsletter = () => {
       {/* Video Demo Modal */}
       <Dialog open={isVideoOpen} onOpenChange={setIsVideoOpen}>
         <DialogContent className="max-w-4xl w-full bg-black/90 border-white/30 p-0 backdrop-blur-xl">
+          <DialogTitle className="sr-only">Wolfy Wallet Demo Video</DialogTitle>
           <div className="relative w-full aspect-video">
             <video
               src="https://ethglobal.storage/projects/r87tb/video/high.mp4?t=1763892727499"
