@@ -138,14 +138,14 @@ interface FetchPortfolioParams {
 
 export async function fetchPortfolioFromOctav(params: FetchPortfolioParams): Promise<OctavPortfolio | OctavPortfolio[]> {
     const addresses = Array.isArray(params.addresses) ? params.addresses.join(',') : params.addresses;
-    
+
     if (!addresses) {
         throw new Error('No addresses provided');
     }
 
     const url = new URL(`${OCTAV_API_BASE}/portfolio`);
     url.searchParams.set('addresses', addresses);
-    
+
     if (params.includeNFTs) {
         url.searchParams.set('includeNFTs', 'true');
     }
@@ -170,7 +170,7 @@ export async function fetchPortfolioFromOctav(params: FetchPortfolioParams): Pro
     if (!response.ok) {
         const errorText = await response.text();
         let errorMessage = `Failed to load portfolio (${response.status}): ${errorText || response.statusText}`;
-        
+
         // Handle specific error cases
         if (response.status === 401) {
             errorMessage = 'Unauthorized: Please check your OCTAV API key';
@@ -179,7 +179,7 @@ export async function fetchPortfolioFromOctav(params: FetchPortfolioParams): Pro
         } else if (response.status === 429) {
             errorMessage = 'Rate limit exceeded: Please wait before retrying';
         }
-        
+
         throw new Error(errorMessage);
     }
 
@@ -247,7 +247,7 @@ export async function fetchHistoricalBalanceFromOctav(
     params: FetchHistoricalBalanceParams
 ): Promise<HistoricalBalancePoint[]> {
     const { address, hours = 24, points = 24 } = params;
-    
+
     if (!address) {
         throw new Error('No address provided');
     }
@@ -278,7 +278,7 @@ export async function fetchHistoricalBalanceFromOctav(
         // Try to fetch historical data from 24 hours ago
         const yesterday = new Date(startTime);
         const yesterdayStr = yesterday.toISOString().split('T')[0]; // YYYY-MM-DD format
-        
+
         const historicalPortfolio = await fetchHistoricalPortfolioFromOctav(address, yesterdayStr);
         const historicalBalance = historicalPortfolio ? parseFloat(historicalPortfolio.networth || '0') : null;
 
@@ -298,7 +298,7 @@ export async function fetchHistoricalBalanceFromOctav(
             for (let i = 0; i <= points; i++) {
                 const pointTime = startTime + (i * interval);
                 const hoursFromStart = (pointTime - startTime) / (60 * 60 * 1000);
-                
+
                 // Interpolate between historical balance and current balance
                 const balanceAtPoint = historicalBalance + (hourlyChange * hoursFromStart);
 
@@ -312,18 +312,18 @@ export async function fetchHistoricalBalanceFromOctav(
             // If daily income/expense are both 0, we'll create a slight variation based on
             // the assumption that asset prices fluctuate slightly over 24 hours
             let hourlyChange = netDailyChange / 24;
-            
+
             // If there's no daily change, add small variation (0.1% of balance) to show movement
             // This represents natural price fluctuations of assets
             if (Math.abs(netDailyChange) < 0.01 && currentBalance > 0) {
                 // Create a small sine wave variation (simulating price movements)
                 const variationPercent = 0.001; // 0.1% variation
                 const variationAmount = currentBalance * variationPercent;
-                
+
                 for (let i = 0; i <= points; i++) {
                     const pointTime = startTime + (i * interval);
                     const progress = i / points; // 0 to 1
-                    
+
                     // Create a smooth curve that starts slightly lower and ends at current
                     // Using a sine wave for natural-looking variation
                     const variation = Math.sin(progress * Math.PI * 2) * variationAmount * 0.5;
@@ -339,7 +339,7 @@ export async function fetchHistoricalBalanceFromOctav(
                 for (let i = 0; i <= points; i++) {
                     const pointTime = startTime + (i * interval);
                     const hoursFromNow = (endTime - pointTime) / (60 * 60 * 1000);
-                    
+
                     // Estimate balance at this point by working backwards
                     // If we're going back in time, subtract the estimated change
                     let balanceAtPoint = currentBalance - (hourlyChange * hoursFromNow);
@@ -375,19 +375,19 @@ export async function fetchHistoricalBalanceFromOctav(
             });
             const portfolioData = Array.isArray(currentPortfolio) ? currentPortfolio[0] : currentPortfolio;
             const currentBalance = parseFloat(portfolioData?.networth || '0');
-            
+
             const dataPoints: HistoricalBalancePoint[] = [];
             const interval = (hours * 60 * 60 * 1000) / points;
             const endTime = Date.now();
             const startTime = endTime - (hours * 60 * 60 * 1000);
-            
+
             for (let i = 0; i <= points; i++) {
                 dataPoints.push({
                     timestamp: startTime + (i * interval),
                     balance: currentBalance,
                 });
             }
-            
+
             return dataPoints;
         } catch (portfolioError: any) {
             console.error('[fetchHistoricalBalanceFromOctav] Error fetching portfolio for fallback:', portfolioError);

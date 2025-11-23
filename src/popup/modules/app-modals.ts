@@ -65,6 +65,10 @@ export function hideImportAccountForm(context: ModalContext): void {
 
 export function showCreateMultisigForm(context: ModalContext): void {
     const { state, render } = context;
+    // Prevent opening modal if it's already open
+    if (state.showCreateMultisigForm) {
+        return;
+    }
     state.showCreateMultisigForm = true;
     render();
 }

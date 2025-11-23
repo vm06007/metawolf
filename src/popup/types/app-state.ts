@@ -103,6 +103,12 @@ export interface AppState {
     transactionsAccountAddress?: string;
     showSubscriptionsModal: boolean;
     subscriptionsModalFirstRender: boolean;
+    subscriptionFlow: {
+        serviceId: string | null;
+        status: 'idle' | 'fetching' | 'signing' | 'processing' | 'success' | 'error';
+        paymentRequirements: any | null;
+        error?: string;
+    };
     portfolioData: OctavPortfolio | null;
     portfolioLoading: boolean;
     defiSelectedChainId: number | null;
@@ -183,6 +189,12 @@ export function createInitialState(): AppState {
         transactionsAccountAddress: undefined,
         showSubscriptionsModal: false,
         subscriptionsModalFirstRender: true,
+        subscriptionFlow: {
+            serviceId: null,
+            status: 'idle',
+            paymentRequirements: null,
+            error: undefined,
+        },
         portfolioData: null,
         portfolioLoading: false,
         defiSelectedChainId: null,

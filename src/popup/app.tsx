@@ -13,6 +13,7 @@ import { renderSmartAccountUpgrade } from './components/SmartAccountUpgrade';
 import { renderEip7702Modal } from './components/Eip7702Modal';
 import { renderDelegationModal } from './components/DelegationModal';
 import { renderSubscriptionsModal } from './components/SubscriptionsModal';
+import { renderSubscriptionSignModal } from './components/SubscriptionSignModal';
 import { renderPasswordModal } from './components/PasswordModal';
 import { renderAccountSidebar } from './components/AccountSidebar';
 import { renderTransactionList, Transaction } from './components/TransactionList';
@@ -1107,6 +1108,7 @@ export class PopupApp {
         
         // Keep the subscriptions modal in sync after any re-render
         this.updateSubscriptionsModal();
+        this.updateSubscriptionSignModal();
     }
 
     private attachLockScreenListeners() {
@@ -3212,33 +3214,37 @@ export class PopupApp {
         const threshold = account.multisig.threshold;
         const owners = chips.map((c: any) => ethers.getAddress(c.address)).sort();
 
-        // Create salt for deterministic address
+        // Create salt with randomness to ensure unique address each time
+        // This prevents CREATE2 reverts when trying to deploy the same multisig multiple times
+        const randomSalt = ethers.hexlify(ethers.randomBytes(32));
         const salt = ethers.keccak256(
-            ethers.toUtf8Bytes(owners.join('') + threshold.toString() + account.address.toLowerCase())
+            ethers.toUtf8Bytes(owners.join('') + threshold.toString() + randomSalt)
         );
+        console.log('[deployMultisig] Using random salt:', salt);
 
         // Deploy via factory using gas station
         const FACTORY_ABI = [
             'function createMultisig(address[] calldata owners, uint256 threshold, bytes32 salt) external returns (address)',
+            'function computeAddress(address[] calldata owners, uint256 threshold, bytes32 salt) external view returns (address)',
             'event MultisigCreated(address indexed multisig, address[] owners, uint256 threshold)',
         ];
 
         const factory = new ethers.Contract(factoryAddress, FACTORY_ABI, gasStationSigner);
         const data = factory.interface.encodeFunctionData('createMultisig', [owners, threshold, salt]);
 
-        // Get gas price and estimate gas
+        // Get gas price (skip gas estimation and use hardcoded 2M gas limit)
         const feeData = await provider.getFeeData();
-        const gasEstimate = await provider.estimateGas({
-            to: factoryAddress,
-            data: data,
-            from: await gasStationSigner.getAddress(),
-        });
+
+        // Use hardcoded gas limit of 2,000,000 instead of estimating
+        // This is enough for successful deployment (~300k), but won't waste too much on reverts
+        const gasLimit = BigInt(2000000);
+        console.log('[deployMultisig] Using hardcoded gas limit:', gasLimit.toString());
 
         const transaction = {
             to: factoryAddress,
             data: data,
             value: '0x0',
-            gasLimit: (gasEstimate * BigInt(120)) / BigInt(100),
+            gasLimit: gasLimit,
             maxFeePerGas: feeData.maxFeePerGas?.toString(),
             maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
             chainId: chainId,
@@ -4201,6 +4207,7 @@ export class PopupApp {
         this.state.showSubscriptionsModal = true;
         this.state.subscriptionsModalFirstRender = !modalExists;
         this.updateSubscriptionsModal();
+        this.updateSubscriptionSignModal();
         if (this.state.subscriptionsModalFirstRender) {
             this.state.subscriptionsModalFirstRender = false;
         }
@@ -4210,6 +4217,7 @@ export class PopupApp {
         this.state.showSubscriptionsModal = false;
         this.state.subscriptionsModalFirstRender = true;
         this.updateSubscriptionsModal();
+        this.updateSubscriptionSignModal();
     }
 
     private updateSubscriptionsModal() {
@@ -4262,11 +4270,265 @@ export class PopupApp {
         subscriptionServices.forEach(serviceId => {
             const serviceBtn = document.getElementById(`subscription-${serviceId}`);
             serviceBtn?.addEventListener('click', () => {
-                console.log(`Subscription service clicked: ${serviceId}`);
-                // TODO: Implement subscription setup functionality
-                // This could open a payment flow or subscription management interface
+                if (serviceId === 'bankless') {
+                    this.handleBanklessSubscription();
+                } else {
+                    console.log(`Subscription service clicked: ${serviceId}`);
+                    // TODO: Implement subscription setup functionality for other services
+                }
             });
         });
+    }
+
+    private async handleBanklessSubscription() {
+        try {
+            // Reset state
+            this.state.subscriptionFlow = {
+                serviceId: 'bankless',
+                status: 'fetching',
+                paymentRequirements: null,
+            };
+            this.updateSubscriptionSignModal();
+
+            // Call the endpoint
+            const response = await fetch('https://express-ern9krf5s-emanherawys-projects.vercel.app/api/verify', {
+                method: 'GET',
+                headers: {
+                    'Accept': 'application/json',
+                },
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            
+            // Update state with payment requirements
+            this.state.subscriptionFlow = {
+                serviceId: 'bankless',
+                status: 'signing',
+                paymentRequirements: data,
+            };
+            this.updateSubscriptionSignModal();
+        } catch (error: any) {
+            console.error('Error fetching subscription requirements:', error);
+            // Don't show error state, just reset
+            this.hideSubscriptionSignModal();
+        }
+    }
+
+    private async handleSubscriptionSign() {
+        try {
+            const account = this.state.selectedAccount;
+            if (!account) {
+                return;
+            }
+
+            // Check if this is a Halo chip account
+            const isHaloChipAccount = account.isChipAccount && account.chipInfo;
+            
+            if (isHaloChipAccount) {
+                // Sign with Halo chip
+                await this.handleHaloSubscriptionSign(account);
+            } else {
+                // Regular account signing
+                await this.handleRegularSubscriptionSign(account);
+            }
+        } catch (error: any) {
+            console.error('Error signing subscription:', error);
+            // Don't show error state, just reset to idle
+            this.hideSubscriptionSignModal();
+        }
+    }
+
+    private async handleHaloSubscriptionSign(account: any) {
+        try {
+            // Update to processing state
+            this.state.subscriptionFlow.status = 'processing';
+            this.updateSubscriptionSignModal();
+
+            // Import HaloUI and HaloChip
+            const { HaloUI } = await import('./halo-ui.js');
+            const { HaloChip } = await import('../halo/halo.js');
+            
+            let qrCodeUI: { remove: () => void; updateStatus: (status: string) => void } | null = null;
+
+            // Sign the payment requirements message
+            const messageToSign = JSON.stringify(this.state.subscriptionFlow.paymentRequirements);
+            
+            // Use LibHaLoAdapter directly for EIP-191 message signing
+            const { LibHaLoAdapter } = await import('../halo/libhalo-adapter.js');
+            
+            // Sign with Halo chip (EIP-191 message signing, not digest)
+            const signResponse = await LibHaLoAdapter.signMessage(
+                messageToSign,
+                account.chipInfo.slot,
+                undefined, // password
+                (pairInfo) => {
+                    console.log('[handleHaloSubscriptionSign] Pairing started, showing QR code:', pairInfo);
+                    // Show QR code when pairing starts
+                    qrCodeUI = HaloUI.showQRCode(pairInfo.qrCode, pairInfo.execURL, () => {
+                        // Cancel handler
+                        console.log('[handleHaloSubscriptionSign] QR code cancelled');
+                        if (qrCodeUI) {
+                            qrCodeUI.remove();
+                            qrCodeUI = null;
+                        }
+                        this.hideSubscriptionSignModal();
+                    });
+                    if (qrCodeUI) {
+                        qrCodeUI.updateStatus('Waiting for phone to scan QR code...');
+                    }
+                },
+                false // useDigest = false for EIP-191 messages
+            );
+
+            // Wait a bit for QR code to be shown, then update status
+            if (qrCodeUI) {
+                setTimeout(() => {
+                    if (qrCodeUI) {
+                        qrCodeUI.updateStatus('Phone connected! Tap your HaLo chip to your phone when prompted...');
+                    }
+                }, 2000);
+            }
+
+            if (!signResponse || !signResponse.signature) {
+                throw new Error('Failed to sign with Halo chip');
+            }
+
+            // Clean up QR code UI
+            if (qrCodeUI) {
+                qrCodeUI.remove();
+                qrCodeUI = null;
+            }
+
+            // Simulate processing delay
+            await new Promise(resolve => setTimeout(resolve, 1000));
+
+            // Update to success state
+            this.state.subscriptionFlow.status = 'success';
+            this.updateSubscriptionSignModal();
+        } catch (error: any) {
+            console.error('Error signing with Halo chip:', error);
+            // Clean up QR code UI if it exists
+            // Don't show error, just reset
+            this.hideSubscriptionSignModal();
+        }
+    }
+
+    private async handleRegularSubscriptionSign(account: any) {
+        try {
+            // Update to processing state
+            this.state.subscriptionFlow.status = 'processing';
+            this.updateSubscriptionSignModal();
+
+            // Sign the payment requirements (mock signing - in real implementation, this would create x402 payment)
+            const messageToSign = JSON.stringify(this.state.subscriptionFlow.paymentRequirements);
+            
+            // Send sign message request to background
+            const signResponse = await chrome.runtime.sendMessage({
+                type: 'SIGN_MESSAGE',
+                message: messageToSign,
+                address: account.address,
+            });
+
+            if (!signResponse.success) {
+                throw new Error(signResponse.error || 'Failed to sign message');
+            }
+
+            // Simulate processing delay
+            await new Promise(resolve => setTimeout(resolve, 2000));
+
+            // Update to success state
+            this.state.subscriptionFlow.status = 'success';
+            this.updateSubscriptionSignModal();
+        } catch (error: any) {
+            console.error('Error signing subscription:', error);
+            // Don't show error, just reset
+            this.hideSubscriptionSignModal();
+        }
+    }
+
+    private updateSubscriptionSignModal() {
+        const app = document.getElementById('app');
+        if (!app) {
+            return;
+        }
+
+        const existingModal = document.getElementById('subscription-sign-modal-root');
+        const isVisible = this.state.subscriptionFlow.status !== 'idle';
+
+        if (!isVisible) {
+            if (existingModal) {
+                existingModal.remove();
+            }
+            return;
+        }
+
+        const serviceName = this.state.subscriptionFlow.serviceId === 'bankless' 
+            ? 'Bankless Podcast' 
+            : 'Subscription Service';
+
+        const modalHTML = renderSubscriptionSignModal({
+            visible: isVisible,
+            serviceName,
+            paymentRequirements: this.state.subscriptionFlow.paymentRequirements,
+            status: this.state.subscriptionFlow.status as 'signing' | 'processing' | 'success',
+            error: undefined,
+        });
+
+        if (existingModal) {
+            existingModal.outerHTML = modalHTML;
+        } else {
+            app.insertAdjacentHTML('beforeend', modalHTML);
+        }
+
+        setTimeout(() => {
+            this.attachSubscriptionSignModalListeners();
+        }, 50);
+    }
+
+    private attachSubscriptionSignModalListeners() {
+        const overlay = document.getElementById('subscription-sign-modal-overlay');
+        const closeBtn = document.getElementById('subscription-sign-modal-close');
+        const cancelBtn = document.getElementById('subscription-sign-modal-cancel');
+        const signBtn = document.getElementById('subscription-sign-modal-sign');
+        const doneBtn = document.getElementById('subscription-sign-modal-done');
+
+        overlay?.addEventListener('click', (event) => {
+            if (event.target === overlay && this.state.subscriptionFlow.status !== 'processing' && this.state.subscriptionFlow.status !== 'success') {
+                this.hideSubscriptionSignModal();
+            }
+        });
+
+        closeBtn?.addEventListener('click', () => {
+            this.hideSubscriptionSignModal();
+        });
+
+        cancelBtn?.addEventListener('click', () => {
+            this.hideSubscriptionSignModal();
+        });
+
+        signBtn?.addEventListener('click', () => {
+            this.handleSubscriptionSign();
+        });
+
+        doneBtn?.addEventListener('click', () => {
+            this.hideSubscriptionSignModal();
+            // Also close the subscriptions modal
+            this.hideSubscriptionsModal();
+        });
+    }
+
+    private hideSubscriptionSignModal() {
+        this.state.subscriptionFlow = {
+            serviceId: null,
+            status: 'idle',
+            paymentRequirements: null,
+            error: undefined,
+        };
+        this.updateSubscriptionSignModal();
     }
 
     /**

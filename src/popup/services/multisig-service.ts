@@ -61,10 +61,13 @@ export class MultisigService {
         // Normalize and sort owner addresses
         const owners = chips.map((c: any) => ethers.getAddress(c.address)).sort();
 
-        // Create salt for deterministic address
+        // Create salt with randomness to ensure unique address each time
+        // This prevents CREATE2 reverts when trying to deploy the same multisig multiple times
+        const randomSalt = ethers.hexlify(ethers.randomBytes(32));
         const salt = ethers.keccak256(
-            ethers.toUtf8Bytes(owners.join('') + threshold.toString() + account.address.toLowerCase())
+            ethers.toUtf8Bytes(owners.join('') + threshold.toString() + randomSalt)
         );
+        console.log('[MultisigService] Using random salt:', salt);
 
         // Compute expected address
         const factory = new ethers.Contract(factoryAddress, FACTORY_ABI, provider);
@@ -77,19 +80,19 @@ export class MultisigService {
         const factoryContract = new ethers.Contract(factoryAddress, FACTORY_ABI);
         const data = factoryContract.interface.encodeFunctionData('createMultisig', [owners, threshold, salt]);
 
-        // Get gas price and estimate gas
+        // Get gas price (use hardcoded gas limit instead of estimation)
         const feeData = await provider.getFeeData();
-        const gasEstimate = await provider.estimateGas({
-            to: factoryAddress,
-            data: data,
-            from: firstChip.address,
-        });
+
+        // Use hardcoded gas limit of 2,000,000
+        // This is enough for successful deployment (~300k), but won't waste too much on reverts
+        const gasLimit = BigInt(2000000);
+        console.log('[MultisigService] Using hardcoded gas limit for deployment:', gasLimit.toString());
 
         const transaction = {
             to: factoryAddress,
             data: data,
             value: '0x0',
-            gasLimit: (gasEstimate * BigInt(120)) / BigInt(100),
+            gasLimit: gasLimit,
             maxFeePerGas: feeData.maxFeePerGas?.toString(),
             maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
             chainId: chainId,
@@ -228,19 +231,16 @@ export class MultisigService {
             data
         ]);
 
-        // Estimate gas for submit
-        const submitGasEstimate = await provider.estimateGas({
-            to: multisigAddress,
-            data: submitData,
-            from: firstChip.address,
-        });
+        // Use hardcoded gas limit for submit transaction
+        const submitGasLimit = BigInt(500000); // 500k should be enough for submit
+        console.log('[MultisigService] Using hardcoded gas limit for submit:', submitGasLimit.toString());
 
         const feeData = await provider.getFeeData();
         const submitTransaction = {
             to: multisigAddress,
             data: submitData,
             value: '0x0',
-            gasLimit: (submitGasEstimate * BigInt(120)) / BigInt(100),
+            gasLimit: submitGasLimit,
             maxFeePerGas: feeData.maxFeePerGas?.toString(),
             maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
             chainId: chainId,
@@ -306,17 +306,15 @@ export class MultisigService {
                 const chip = account.multisig.chips[i];
                 const confirmData = multisigContract.interface.encodeFunctionData('confirmTransaction', [txNonce]);
 
-                const confirmGasEstimate = await provider.estimateGas({
-                    to: multisigAddress,
-                    data: confirmData,
-                    from: chip.address,
-                });
+                // Use hardcoded gas limit for confirm transaction
+                const confirmGasLimit = BigInt(200000); // 200k should be enough for confirm
+                console.log(`[MultisigService] Using hardcoded gas limit for confirm (chip ${i}):`, confirmGasLimit.toString());
 
                 const confirmTransaction = {
                     to: multisigAddress,
                     data: confirmData,
                     value: '0x0',
-                    gasLimit: (confirmGasEstimate * BigInt(120)) / BigInt(100),
+                    gasLimit: confirmGasLimit,
                     maxFeePerGas: feeData.maxFeePerGas?.toString(),
                     maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
                     chainId: chainId,
@@ -391,17 +389,16 @@ export class MultisigService {
         // If threshold is 1, transaction should have been executed already
         // If not, manually execute (shouldn't happen, but handle edge case)
         const executeData = multisigContract.interface.encodeFunctionData('executeTransaction', [txNonce]);
-        const executeGasEstimate = await provider.estimateGas({
-            to: multisigAddress,
-            data: executeData,
-            from: firstChip.address,
-        });
+
+        // Use hardcoded gas limit for execute transaction
+        const executeGasLimit = BigInt(300000); // 300k should be enough for execute
+        console.log('[MultisigService] Using hardcoded gas limit for execute:', executeGasLimit.toString());
 
         const executeTransaction = {
             to: multisigAddress,
             data: executeData,
             value: '0x0',
-            gasLimit: (executeGasEstimate * BigInt(120)) / BigInt(100),
+            gasLimit: executeGasLimit,
             maxFeePerGas: feeData.maxFeePerGas?.toString(),
             maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
             chainId: chainId,

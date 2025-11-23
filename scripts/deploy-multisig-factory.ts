@@ -40,6 +40,7 @@ const CHAIN_NAMES: Record<number, string> = {
     10: 'Optimism',
     43114: 'Avalanche',
     56: 'BSC',
+    48900: 'Zircuit Mainnet',
 };
 
 console.log(`\n🚀 Deploying MultisigFactory to ${CHAIN_NAMES[chainId] || `Chain ${chainId}`}\n`);
