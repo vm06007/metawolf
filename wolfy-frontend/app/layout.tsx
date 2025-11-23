@@ -29,12 +29,17 @@ const isV0 = process.env["VERCEL_URL"]?.includes("vusercontent.net") ?? false
 
 export const metadata: Metadata = {
   title: {
-    template: "%s | Synecdoche®",
-    default: "Synecdoche®",
+    template: "%s | Wolfy Wallet",
+    default: "Wolfy Wallet",
   },
   description:
     "We stand at the forefront of a new era, where creativity meets technology to redefine what's possible. Our mission is to empower individuals and businesses alike with groundbreaking solutions that inspire change and drive progress.",
-    generator: 'v0.app'
+  generator: 'v0.app',
+  icons: {
+    icon: '/icon.png',
+    shortcut: '/favicon.ico',
+    apple: '/icon.png',
+  },
 }
 
 export default function RootLayout({

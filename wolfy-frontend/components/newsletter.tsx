@@ -317,8 +317,7 @@ export const Newsletter = () => {
                   boxShadow: '0 4px 20px rgba(0,0,0,0.3), 0 0 40px rgba(255,255,255,0.1)'
                 }}
                 onClick={() => {
-                  // Add Try Now functionality here
-                  console.log("Try Now clicked");
+                  window.open("https://github.com/vm06007/metawolf", "_blank", "noopener,noreferrer");
                 }}
               >
                 Try Now
