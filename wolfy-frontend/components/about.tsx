@@ -153,7 +153,7 @@ export const About = ({ onClose }: { onClose: () => void }) => {
                 })}
               </ul>
 
-              <Button>Try it now</Button>
+              <Button onClick={() => window.open("https://github.com/vm06007/metawolf", "_blank", "noopener,noreferrer")}>Try it now</Button>
             </div>
 
             <div className="lg:ml-auto xl:w-[38rem] mt-4">

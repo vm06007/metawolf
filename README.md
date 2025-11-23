@@ -62,7 +62,7 @@ The project includes Solidity contracts for deploying multisig wallets:
 
 Multisig factory contracts are deployed on the following networks:
 
-- **Ethereum Mainnet (Chain 1)**: [`0xfF25B865d75583FB77102De88901Bf9c1C51B6C0`](https://etherscan.io/address/0xfF25B865d75583FB77102De88901Bf9c1C51B6C0)
+- **Ethereum Mainnet (Chain 1)**: [`0xfF25B865d75583FB77102De88901Bf9c1C51B6C0`](https://etherscan.io/address/0xfF25B865d75583FB77102De88901Bf9c1C51B6C0#code)
 - **Zircuit Mainnet (Chain 48900)**: [`0xAB869b003948c09F6b869B35545E9D535df36e12`](https://explorer.zircuit.com/address/0xAB869b003948c09F6b869B35545E9D535df36e12)
 
 Deploy scripts are available in `scripts/`:

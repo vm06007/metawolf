@@ -8,6 +8,10 @@ import { Cross1Icon } from "@radix-ui/react-icons";
 import { useIsV0 } from "@/lib/context";
 import Image from "next/image";
 import { About } from "./about";
+import {
+    Dialog,
+    DialogContent,
+} from "./ui/dialog";
 
 // Typewriter component for line-by-line text animation
 const TypewriterText = ({
@@ -174,6 +178,7 @@ const SPRING = {
 export const Newsletter = () => {
   const [isOpen, setIsOpen] = useState(false);
   const [isAboutOpen, setIsAboutOpen] = useState(false);
+  const [isVideoOpen, setIsVideoOpen] = useState(false);
 
   const isInitialRender = useRef(true);
 
@@ -317,10 +322,10 @@ export const Newsletter = () => {
                   boxShadow: '0 4px 20px rgba(0,0,0,0.3), 0 0 40px rgba(255,255,255,0.1)'
                 }}
                 onClick={() => {
-                  window.open("https://github.com/vm06007/metawolf", "_blank", "noopener,noreferrer");
+                  setIsVideoOpen(true);
                 }}
               >
-                Try Now
+                See Demo
               </Button>
             </motion.div>
           )}
@@ -413,7 +418,7 @@ export const Newsletter = () => {
           className="absolute bottom-8 left-1/2 transform -translate-x-1/2 flex gap-4 items-center"
         >
           <a
-            href="https://x.com"
+            href="https://x.com/EthVitally"
             target="_blank"
             rel="noopener noreferrer"
             className="w-10 h-10 rounded-full bg-black/30 backdrop-blur-sm border border-white/20 flex items-center justify-center hover:bg-black/50 transition-colors"
@@ -448,6 +453,23 @@ export const Newsletter = () => {
           </a>
         </motion.div>
       )}
+
+      {/* Video Demo Modal */}
+      <Dialog open={isVideoOpen} onOpenChange={setIsVideoOpen}>
+        <DialogContent className="max-w-4xl w-full bg-black/90 border-white/30 p-0 backdrop-blur-xl">
+          <div className="relative w-full aspect-video">
+            <video
+              src="https://ethglobal.storage/projects/r87tb/video/high.mp4?t=1763892727499"
+              controls
+              autoPlay
+              className="w-full h-full rounded-lg"
+              style={{ maxHeight: '90vh' }}
+            >
+              Your browser does not support the video tag.
+            </video>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 };
