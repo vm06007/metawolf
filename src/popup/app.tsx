@@ -3,6 +3,7 @@ import { HaloService } from './services/halo-service';
 import { FireflyService } from './services/firefly-service';
 import { multisigService } from './services/multisig-service';
 import { formatAddress, getDisplayName } from './utils/account';
+import { getTokenImageAttributes } from './utils/token-icons';
 import { renderDashboardHeader } from './components/DashboardHeader';
 import { renderDashboardPanel, DEFAULT_PANEL_ITEMS, getPanelItems } from './components/DashboardPanel';
 import { renderLockScreen } from './components/LockScreen';
@@ -1818,8 +1819,7 @@ export class PopupApp {
                     if (token) {
                         sendScreenState.selectedToken = token;
                         const asset = this.state.unifiedBalanceData?.assets.find(a => a.symbol === token);
-                        const ethFallbackIcon = 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png';
-                        const tokenIcon = asset?.icon || (token === 'ETH' ? ethFallbackIcon : null);
+                        const tokenAttrs = getTokenImageAttributes(token, asset?.icon || null);
 
                         // For Firefly accounts with ETH selected, fetch balance for selected chain if available
                         if (this.state.selectedAccount?.isFireflyAccount && token === 'ETH' && sendScreenState.selectedChainId) {
@@ -1839,12 +1839,12 @@ export class PopupApp {
 
                         if (tokenDisplay) {
                             tokenDisplay.innerHTML = `
-                                ${tokenIcon ? `
-                                    <img src="${tokenIcon}" 
-                                         ${token === 'ETH' ? `data-fallback="${ethFallbackIcon}"` : ''}
+                                ${tokenAttrs.src ? `
+                                    <img src="${tokenAttrs.src}" 
+                                         ${tokenAttrs.fallbacks.length > 0 ? `data-fallbacks='${JSON.stringify(tokenAttrs.fallbacks)}'` : ''}
                                          alt="${token}" 
                                          class="send-token-display-icon"
-                                         onerror="if(this.dataset.fallback && !this.dataset.triedFallback) { this.src = this.dataset.fallback; this.dataset.triedFallback = 'true'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }">
+                                         onerror="if(this.dataset.fallbacks) { try { const fallbacks = JSON.parse(this.dataset.fallbacks); const currentIndex = parseInt(this.dataset.fallbackIndex || '0'); if(currentIndex < fallbacks.length) { this.src = fallbacks[currentIndex]; this.dataset.fallbackIndex = (currentIndex + 1).toString(); return; } } catch(e) {} } this.style.display='none'; this.nextElementSibling.style.display='flex';">
                                     <div class="send-token-display-icon-fallback" style="display: none;">${token.charAt(0)}</div>
                                 ` : `
                                     <div class="send-token-display-icon-fallback">${token.charAt(0)}</div>
@@ -2142,7 +2142,7 @@ export class PopupApp {
                             chain: {
                                 id: chainId,
                                 name: network.name || 'Unknown',
-                                logo: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png',
+                                logo: 'https://cryptologos.cc/logos/ethereum-eth-logo.png?v=040',
                             },
                             balance: balanceEth,
                             balanceInFiat: 0, // Will be calculated if needed
@@ -2997,9 +2997,9 @@ export class PopupApp {
                     await this.loadAccounts();
                     this.render();
 
-                    // Show success with transaction hash
+                    // Show success with transaction hash immediately after broadcast
                     this.showSuccessMessage(
-                        `✅ Multisig Deployed! Address: ${formatAddress(deployment.address)}`,
+                        `✅ Multisig deployment submitted! Address: ${formatAddress(deployment.address)}`,
                         deployment.txHash,
                         chainId
                     );
@@ -3085,9 +3085,9 @@ export class PopupApp {
             this.state.parallelScanState = undefined;
             this.render();
 
-            // Show success
+            // Show success with transaction hash immediately after broadcast
             this.showSuccessMessage(
-                `✅ Multisig Deployed! Address: ${formatAddress(deployment.address)}`,
+                `✅ Multisig deployment submitted! Address: ${formatAddress(deployment.address)}`,
                 deployment.txHash,
                 chainId
             );
@@ -3247,41 +3247,59 @@ export class PopupApp {
 
         // Send transaction
         const txResponse = await gasStationSigner.sendTransaction(transaction);
-        const receipt = await provider.waitForTransaction(txResponse.hash, 1);
+        const transactionHash = txResponse.hash;
 
-        if (!receipt || receipt.status !== 1) {
-            throw new Error('Deployment transaction failed');
-        }
+        // Compute expected address (will be confirmed when transaction is mined)
+        const factoryContract = new ethers.Contract(factoryAddress, FACTORY_ABI, provider);
+        const expectedAddress = await factoryContract.computeAddress(owners, threshold, salt);
 
-        // Extract deployed address from event
-        const factoryInterface = new ethers.Interface(FACTORY_ABI);
-        const event = receipt.logs.find((log: any) => {
+        // Return transaction hash immediately, then wait for confirmation in background
+        // This allows UI to show the transaction right away
+        (async () => {
             try {
-                const parsed = factoryInterface.parseLog(log);
-                return parsed?.name === 'MultisigCreated';
-            } catch {
-                return false;
+                // Wait for transaction receipt in background
+                const receipt = await provider.waitForTransaction(transactionHash, 1);
+
+                if (!receipt || receipt.status !== 1) {
+                    console.error('[PopupApp] Deployment transaction failed:', transactionHash);
+                    return;
+                }
+
+                // Extract deployed address from event
+                const factoryInterface = new ethers.Interface(FACTORY_ABI);
+                const event = receipt.logs.find((log: any) => {
+                    try {
+                        const parsed = factoryInterface.parseLog(log);
+                        return parsed?.name === 'MultisigCreated';
+                    } catch {
+                        return false;
+                    }
+                });
+
+                if (!event) {
+                    console.error('[PopupApp] Failed to find MultisigCreated event');
+                    return;
+                }
+
+                const parsedEvent = factoryInterface.parseLog(event);
+                const deployedAddress = parsedEvent?.args[0];
+
+                // Update account to mark as deployed
+                await chrome.runtime.sendMessage({
+                    type: 'UPDATE_MULTISIG_DEPLOYED',
+                    address: account.address,
+                    deployedAddress: deployedAddress,
+                    chainId: chainId,
+                });
+            } catch (error) {
+                console.error('[PopupApp] Error waiting for deployment confirmation:', error);
             }
-        });
+        })();
 
-        if (!event) {
-            throw new Error('Failed to find MultisigCreated event');
-        }
-
-        const parsedEvent = factoryInterface.parseLog(event);
-        const deployedAddress = parsedEvent?.args[0];
-
-        // Update account to mark as deployed
-        await chrome.runtime.sendMessage({
-            type: 'UPDATE_MULTISIG_DEPLOYED',
-            address: account.address,
-            deployedAddress: deployedAddress,
-            chainId: chainId,
-        });
-
+        // Return immediately with transaction hash (address will be updated later)
         return {
-            address: deployedAddress,
-            txHash: receipt.hash,
+            address: expectedAddress, // Use computed address (will be confirmed when mined)
+            txHash: transactionHash,
         };
     }
 
@@ -4240,7 +4258,7 @@ export class PopupApp {
         });
 
         // Add click listeners for subscription service cards
-        const subscriptionServices = ['spotify', 'netflix', 'youtube', 'amazon', 'apple', 'disney'];
+        const subscriptionServices = ['bankless', 'spotify', 'netflix', 'youtube', 'amazon', 'apple', 'disney'];
         subscriptionServices.forEach(serviceId => {
             const serviceBtn = document.getElementById(`subscription-${serviceId}`);
             serviceBtn?.addEventListener('click', () => {
