@@ -45,4 +45,3 @@ export function isFactoryConfigured(chainId: number): boolean {
     const address = MULTISIG_FACTORY_ADDRESSES[chainId];
     return !!address && address !== '0x0000000000000000000000000000000000000000';
 }
-

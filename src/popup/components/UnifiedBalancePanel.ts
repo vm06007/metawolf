@@ -1,7 +1,7 @@
 import { CHAIN_METADATA } from '@avail-project/nexus-core';
 import type { UserAsset } from '@avail-project/nexus-core';
 import type { UnifiedBalanceData } from '../services/unified-balance-service';
-import { getChainWhiteLogo } from '../utils/chain-icons';
+import { getChainWhiteLogo, getChainLogoFallbacks } from '../utils/chain-icons';
 import type { HistoricalBalancePoint } from '../services/transactions-service';
 
 export interface UnifiedBalancePanelProps {
@@ -116,11 +116,15 @@ export function renderUnifiedBalancePanel(props: UnifiedBalancePanelProps): stri
                 <div class="chain-logos">
                     ${chainLogos.map(chainId => {
                         const logo = getChainLogo(chainId);
+                        const fallbacks = getChainLogoFallbacks(chainId);
+                        const fallbackSrc = fallbacks.length > 1 ? fallbacks[1] : '';
                         return `
-                            <div class="chain-logo" title="${getChainName(chainId)}">
+                            <div class="chain-logo clickable" data-chain-id="${chainId}" title="Click to view ${getChainName(chainId)} assets" style="cursor: pointer;">
                                 ${logo ? `
-                                    <img src="${logo}" alt="${getChainName(chainId)}" 
-                                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                    <img src="${logo}" 
+                                         ${fallbackSrc ? `data-fallback="${fallbackSrc}"` : ''}
+                                         alt="${getChainName(chainId)}" 
+                                         onerror="if(this.dataset.fallback && !this.dataset.triedFallback) { this.src = this.dataset.fallback; this.dataset.triedFallback = 'true'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }">
                                     <div class="chain-logo-fallback" style="display: none; width: 20px; height: 20px; border-radius: 50%; background: var(--r-neutral-line); align-items: center; justify-content: center; font-size: 10px; color: var(--r-neutral-foot);">
                                         ${getChainName(chainId).charAt(0)}
                                     </div>

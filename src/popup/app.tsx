@@ -11,6 +11,7 @@ import { renderAccountDetailModal } from './components/AccountDetailModal';
 import { renderSmartAccountUpgrade } from './components/SmartAccountUpgrade';
 import { renderEip7702Modal } from './components/Eip7702Modal';
 import { renderDelegationModal } from './components/DelegationModal';
+import { renderSubscriptionsModal } from './components/SubscriptionsModal';
 import { renderPasswordModal } from './components/PasswordModal';
 import { renderAccountSidebar } from './components/AccountSidebar';
 import { renderTransactionList, Transaction } from './components/TransactionList';
@@ -33,9 +34,10 @@ import { renderReceiveScreen, initReceiveScreenQRCode } from './components/Recei
 import { renderSendScreen } from './components/SendScreen';
 import { renderTransactionsScreen } from './components/TransactionsScreen';
 import { renderNetworkSelectorModal } from './components/NetworkSelectorModal';
+import { renderDeFiPositions } from './components/DeFiPositions';
 import { ethPriceService } from './services/eth-price-service';
 import { unifiedBalanceService } from './services/unified-balance-service';
-import { fetchTransactionsFromOctav, OctavTransaction } from './services/transactions-service';
+import { fetchTransactionsFromOctav, fetchPortfolioFromOctav, OctavTransaction } from './services/transactions-service';
 import { HaloUI } from './halo-ui';
 import { isAddress, getAddress } from '@ethersproject/address';
 import { loadEthers } from './ethers-loader';
@@ -143,6 +145,9 @@ export class PopupApp {
 
     async loadUnifiedBalances() {
         await BalanceModule.loadUnifiedBalances(this.getBalanceContext());
+        
+        // Also load portfolio data for DeFi positions
+        await this.loadPortfolioData();
 
         // If send screen is open, update the balance display for the selected token
         if (this.state.showSendScreen) {
@@ -160,6 +165,73 @@ export class PopupApp {
                 this.render();
             }
         }
+    }
+
+    async loadPortfolioData() {
+        const account = this.state.selectedAccount;
+        if (!account || !account.address) {
+            this.state.portfolioData = null;
+            this.state.portfolioLoading = false;
+            return;
+        }
+
+        try {
+            this.state.portfolioLoading = true;
+            this.render();
+
+            const portfolio = await fetchPortfolioFromOctav({
+                addresses: account.address,
+                includeImages: true,
+            });
+
+            // Handle case where response might be an array (multiple addresses)
+            const portfolioData = Array.isArray(portfolio) ? portfolio[0] : portfolio;
+            
+            console.log('[PopupApp] Portfolio data loaded:', {
+                hasData: !!portfolioData,
+                hasProtocols: !!(portfolioData?.assetByProtocols),
+                protocolCount: portfolioData?.assetByProtocols ? Object.keys(portfolioData.assetByProtocols).length : 0,
+                chains: portfolioData?.chains ? Object.keys(portfolioData.chains) : [],
+            });
+            
+            // Log detailed protocol info for debugging
+            if (portfolioData?.assetByProtocols) {
+                Object.entries(portfolioData.assetByProtocols).forEach(([key, protocol]: [string, any]) => {
+                    console.log(`[PopupApp] Protocol ${key}:`, {
+                        name: protocol.name,
+                        value: protocol.value,
+                        assetCount: protocol.assets?.length || 0,
+                        assets: protocol.assets?.map((a: any) => ({
+                            symbol: a.symbol,
+                            value: a.value,
+                            balance: a.balance,
+                            chain: a.chain,
+                            hasImage: !!a.image,
+                        })) || [],
+                    });
+                });
+            }
+            
+            this.state.portfolioData = portfolioData;
+        } catch (error: any) {
+            console.error('[PopupApp] Error loading portfolio data:', error);
+            this.state.portfolioData = null;
+            
+            // Log detailed error for debugging
+            if (error.message?.includes('401')) {
+                console.error('[PopupApp] OCTAV API authentication failed. Please check API key.');
+            } else if (error.message?.includes('402')) {
+                console.error('[PopupApp] OCTAV API credits required. Please purchase credits.');
+            }
+        } finally {
+            this.state.portfolioLoading = false;
+            this.render();
+        }
+    }
+
+    handleDefiChainClick(chainId: number | null) {
+        this.state.defiSelectedChainId = chainId;
+        this.render();
     }
 
     async loadHistoricalBalances() {
@@ -688,7 +760,12 @@ export class PopupApp {
             })}
                             ${renderDashboardPanel(getPanelItems(true), true, this.state.selectedAccount?.isWatchOnly || false)}
                             <div class="transaction-section">
-                                ${renderTransactionList(this.getTransactionsForAccount(selectedAccount), selectedAccount)}
+                                ${renderDeFiPositions({
+                                    portfolio: this.state.portfolioData,
+                                    loading: this.state.portfolioLoading,
+                                    selectedChainId: this.state.defiSelectedChainId,
+                                    onChainClick: (chainId) => this.handleDefiChainClick(chainId),
+                                })}
                             </div>
                             <div class="current-connection-wrapper">
                                 ${renderCurrentConnection(
@@ -980,6 +1057,11 @@ export class PopupApp {
         }
 
         this.attachDashboardListeners();
+        
+        // Attach DeFi positions listeners after a short delay to ensure DOM is ready
+        setTimeout(() => {
+            this.attachDeFiPositionsListeners();
+        }, 50);
 
         // Attach parallel scan listeners if visible
         if (this.state.showParallelMultisigScan) {
@@ -1021,6 +1103,9 @@ export class PopupApp {
 
         // Keep the standalone EIP-7702 modal in sync after any re-render
         this.updateEip7702Modal();
+        
+        // Keep the subscriptions modal in sync after any re-render
+        this.updateSubscriptionsModal();
     }
 
     private attachLockScreenListeners() {
@@ -1520,8 +1605,7 @@ export class PopupApp {
         document.getElementById('panel-approvals')?.addEventListener('click', () => console.log('Approvals clicked'));
         document.getElementById('panel-settings')?.addEventListener('click', () => this.handleSettings());
         document.getElementById('panel-x402')?.addEventListener('click', () => {
-            // TODO: Implement x402 functionality
-            console.log('x402 clicked');
+            this.showSubscriptionsModal();
         });
         document.getElementById('panel-nft')?.addEventListener('click', () => console.log('NFT clicked'));
         document.getElementById('panel-eip7702')?.addEventListener('click', (e) => {
@@ -1530,6 +1614,70 @@ export class PopupApp {
             console.log('[attachDashboardListeners] EIP-7702 button clicked');
             this.showEip7702Modal();
         });
+    }
+
+    private attachDeFiPositionsListeners() {
+        // Chain icon clicks in UnifiedBalancePanel - use event delegation for better reliability
+        const chainLogosContainer = document.querySelector('.chain-logos');
+        if (chainLogosContainer) {
+            // Remove any existing listener to avoid duplicates
+            const existingHandler = (chainLogosContainer as any)._defiChainClickHandler;
+            if (existingHandler) {
+                chainLogosContainer.removeEventListener('click', existingHandler);
+            }
+            
+            const handler = (e: Event) => {
+                const target = e.target as HTMLElement;
+                const chainLogo = target.closest('.chain-logo.clickable');
+                if (chainLogo) {
+                    const chainId = parseInt(chainLogo.getAttribute('data-chain-id') || '0', 10);
+                    if (chainId > 0) {
+                        e.stopPropagation();
+                        console.log('[attachDeFiPositionsListeners] Chain icon clicked:', chainId);
+                        this.handleDefiChainClick(chainId);
+                    }
+                }
+            };
+            
+            (chainLogosContainer as any)._defiChainClickHandler = handler;
+            chainLogosContainer.addEventListener('click', handler);
+        }
+
+        // DeFi positions back button
+        const backBtn = document.getElementById('defi-positions-back-btn');
+        if (backBtn) {
+            const newBackBtn = backBtn.cloneNode(true) as HTMLElement;
+            backBtn.parentNode?.replaceChild(newBackBtn, backBtn);
+            newBackBtn.addEventListener('click', () => {
+                this.handleDefiChainClick(null);
+            });
+        }
+
+        // DeFi positions filter clear button
+        const filterClearBtn = document.getElementById('defi-positions-filter-clear');
+        if (filterClearBtn) {
+            const newFilterClearBtn = filterClearBtn.cloneNode(true) as HTMLElement;
+            filterClearBtn.parentNode?.replaceChild(newFilterClearBtn, filterClearBtn);
+            newFilterClearBtn.addEventListener('click', () => {
+                this.handleDefiChainClick(null);
+            });
+        }
+
+        // Chain icon clicks in DeFi positions protocol items - use event delegation
+        const defiPositionsContainer = document.querySelector('.defi-positions');
+        if (defiPositionsContainer) {
+            defiPositionsContainer.addEventListener('click', (e) => {
+                const target = e.target as HTMLElement;
+                const chainIcon = target.closest('.defi-chain-icon[data-chain-id]');
+                if (chainIcon) {
+                    const chainId = parseInt(chainIcon.getAttribute('data-chain-id') || '0', 10);
+                    if (chainId > 0) {
+                        e.stopPropagation();
+                        this.handleDefiChainClick(chainId);
+                    }
+                }
+            });
+        }
     }
 
     private attachReceiveScreenListeners() {
@@ -1670,7 +1818,8 @@ export class PopupApp {
                     if (token) {
                         sendScreenState.selectedToken = token;
                         const asset = this.state.unifiedBalanceData?.assets.find(a => a.symbol === token);
-                        const tokenIcon = asset?.icon || (token === 'ETH' ? 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png' : null);
+                        const ethFallbackIcon = 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png';
+                        const tokenIcon = asset?.icon || (token === 'ETH' ? ethFallbackIcon : null);
 
                         // For Firefly accounts with ETH selected, fetch balance for selected chain if available
                         if (this.state.selectedAccount?.isFireflyAccount && token === 'ETH' && sendScreenState.selectedChainId) {
@@ -1691,7 +1840,12 @@ export class PopupApp {
                         if (tokenDisplay) {
                             tokenDisplay.innerHTML = `
                                 ${tokenIcon ? `
-                                    <img src="${tokenIcon}" alt="${token}" class="send-token-display-icon">
+                                    <img src="${tokenIcon}" 
+                                         ${token === 'ETH' ? `data-fallback="${ethFallbackIcon}"` : ''}
+                                         alt="${token}" 
+                                         class="send-token-display-icon"
+                                         onerror="if(this.dataset.fallback && !this.dataset.triedFallback) { this.src = this.dataset.fallback; this.dataset.triedFallback = 'true'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }">
+                                    <div class="send-token-display-icon-fallback" style="display: none;">${token.charAt(0)}</div>
                                 ` : `
                                     <div class="send-token-display-icon-fallback">${token.charAt(0)}</div>
                                 `}
@@ -2499,8 +2653,16 @@ export class PopupApp {
 
         this.render(); // Render immediately with cleared data
 
+        // Clear portfolio data for previous account
+        this.state.portfolioData = null;
+        this.state.portfolioLoading = false;
+        this.state.defiSelectedChainId = null;
+
         // Reinitialize unified balance for the new account
         await this.initializeUnifiedBalance(account);
+        
+        // Load portfolio data for DeFi positions
+        await this.loadPortfolioData();
 
         await this.loadAccounts();
 
@@ -2672,7 +2834,7 @@ export class PopupApp {
             };
 
             const handleConfirm = async () => {
-                const address = addressInput?.value?.trim() || '';
+                let address = addressInput?.value?.trim() || '';
                 const nameInput = document.getElementById('contact-name-input') as HTMLInputElement;
                 const name = nameInput?.value?.trim() || undefined;
 
@@ -2682,6 +2844,22 @@ export class PopupApp {
                         errorDiv.style.display = 'block';
                     }
                     return;
+                }
+
+                // If it's an ENS name and we haven't resolved it yet, try to resolve it first
+                if (!isAddress(address) && this.isEnsName(address)) {
+                    try {
+                        const ethersModule = await loadEthers();
+                        const ethers = ethersModule.ethers || ethersModule.default || ethersModule;
+                        const provider = new ethers.JsonRpcProvider('https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73');
+                        const resolved = await provider.resolveName(address);
+                        if (resolved) {
+                            address = resolved; // Use the resolved address
+                        }
+                    } catch (e) {
+                        // If resolution fails, let the wallet method handle the error
+                        console.warn('[ContactModal] Failed to pre-resolve ENS:', e);
+                    }
                 }
 
                 await this.handleAddContactConfirm(address, name);
@@ -3997,6 +4175,79 @@ export class PopupApp {
                 // Update the modal to reflect the new network (this will update the icon)
                 this.updateEip7702Modal();
             }
+        });
+    }
+
+    private showSubscriptionsModal() {
+        const modalExists = document.getElementById('subscriptions-modal-root') !== null;
+        this.state.showSubscriptionsModal = true;
+        this.state.subscriptionsModalFirstRender = !modalExists;
+        this.updateSubscriptionsModal();
+        if (this.state.subscriptionsModalFirstRender) {
+            this.state.subscriptionsModalFirstRender = false;
+        }
+    }
+
+    private hideSubscriptionsModal() {
+        this.state.showSubscriptionsModal = false;
+        this.state.subscriptionsModalFirstRender = true;
+        this.updateSubscriptionsModal();
+    }
+
+    private updateSubscriptionsModal() {
+        const app = document.getElementById('app');
+        if (!app) {
+            return;
+        }
+
+        const existingModal = document.getElementById('subscriptions-modal-root');
+
+        if (!this.state.showSubscriptionsModal) {
+            if (existingModal) {
+                existingModal.remove();
+            }
+            return;
+        }
+
+        const modalHTML = renderSubscriptionsModal({
+            visible: this.state.showSubscriptionsModal,
+            isFirstRender: this.state.subscriptionsModalFirstRender,
+        });
+
+        if (existingModal) {
+            existingModal.outerHTML = modalHTML;
+        } else {
+            app.insertAdjacentHTML('beforeend', modalHTML);
+        }
+
+        setTimeout(() => {
+            this.attachSubscriptionsModalListeners();
+        }, 50);
+    }
+
+    private attachSubscriptionsModalListeners() {
+        const overlay = document.getElementById('subscriptions-modal-overlay');
+        const closeBtn = document.getElementById('subscriptions-modal-close');
+
+        overlay?.addEventListener('click', (event) => {
+            if (event.target === overlay) {
+                this.hideSubscriptionsModal();
+            }
+        });
+
+        closeBtn?.addEventListener('click', () => {
+            this.hideSubscriptionsModal();
+        });
+
+        // Add click listeners for subscription service cards
+        const subscriptionServices = ['spotify', 'netflix', 'youtube', 'amazon', 'apple', 'disney'];
+        subscriptionServices.forEach(serviceId => {
+            const serviceBtn = document.getElementById(`subscription-${serviceId}`);
+            serviceBtn?.addEventListener('click', () => {
+                console.log(`Subscription service clicked: ${serviceId}`);
+                // TODO: Implement subscription setup functionality
+                // This could open a payment flow or subscription management interface
+            });
         });
     }
 

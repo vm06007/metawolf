@@ -94,6 +94,8 @@ export interface OctavPortfolioAsset {
     value: string;
     contractAddress?: string;
     chain?: string;
+    image?: string; // Token icon URL when includeImages=true
+    name?: string; // Token name
 }
 
 export interface OctavPortfolioProtocol {
@@ -167,7 +169,18 @@ export async function fetchPortfolioFromOctav(params: FetchPortfolioParams): Pro
 
     if (!response.ok) {
         const errorText = await response.text();
-        throw new Error(`Failed to load portfolio (${response.status}): ${errorText || response.statusText}`);
+        let errorMessage = `Failed to load portfolio (${response.status}): ${errorText || response.statusText}`;
+        
+        // Handle specific error cases
+        if (response.status === 401) {
+            errorMessage = 'Unauthorized: Please check your OCTAV API key';
+        } else if (response.status === 402) {
+            errorMessage = 'Payment required: Please purchase credits at data.octav.fi';
+        } else if (response.status === 429) {
+            errorMessage = 'Rate limit exceeded: Please wait before retrying';
+        }
+        
+        throw new Error(errorMessage);
     }
 
     const data = await response.json();
@@ -209,9 +222,9 @@ async function fetchHistoricalPortfolioFromOctav(
         });
 
         if (!response.ok) {
-            // If subscription is not set up, return null
-            if (response.status === 400 || response.status === 404) {
-                console.warn(`[fetchHistoricalPortfolioFromOctav] Historical data not available for ${date} (subscription may be required)`);
+            // Historical endpoint requires PRO subscription - handle gracefully
+            if (response.status === 400 || response.status === 401 || response.status === 404) {
+                console.warn(`[fetchHistoricalPortfolioFromOctav] Historical data not available for ${date} (PRO subscription may be required)`);
                 return null;
             }
             const errorText = await response.text();

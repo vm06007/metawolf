@@ -29,7 +29,7 @@ export function getPanelItems(isExpanded: boolean = false): PanelItem[] {
             { icon: 'transactions', label: 'Transactions', id: 'panel-transactions' },
             { icon: 'approvals', label: 'Approvals', id: 'panel-approvals', badge: 0 },
             { icon: 'settings', label: 'Settings', id: 'panel-settings' },
-            { icon: 'x402', label: 'x402', id: 'panel-x402' },
+            { icon: 'x402', label: 'Subscriptions', id: 'panel-x402' },
             { icon: 'nft', label: 'NFT', id: 'panel-nft' },
             { icon: 'eip7702', label: 'EIP-7702', id: 'panel-eip7702' },
         ];
@@ -42,7 +42,7 @@ export function getPanelItems(isExpanded: boolean = false): PanelItem[] {
             { icon: 'bridge', label: 'Bridge', id: 'panel-bridge' },
             { icon: 'transactions', label: 'Transactions', id: 'panel-transactions' },
             { icon: 'approvals', label: 'Approvals', id: 'panel-approvals', badge: 0 },
-            { icon: 'x402', label: 'x402', id: 'panel-x402' },
+            { icon: 'x402', label: 'Subscriptions', id: 'panel-x402' },
             { icon: 'nft', label: 'NFT', id: 'panel-nft' },
             { icon: 'eip7702', label: 'EIP-7702', id: 'panel-eip7702' },
         ];

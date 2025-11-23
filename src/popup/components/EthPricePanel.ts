@@ -1,3 +1,5 @@
+import { getChainLogoFallbacks } from '../utils/chain-icons';
+
 export interface EthPriceData {
     price: number;
     change24h: number;
@@ -49,17 +51,25 @@ export function renderEthPricePanel(data: EthPriceData | null, loading: boolean 
     return `
         <div class="eth-price-panel">
             <div class="eth-price-content">
-                <div class="eth-price-left">
+                    <div class="eth-price-left">
                     <div class="eth-logo">
-                        <img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png" 
-                             alt="ETH" 
-                             class="eth-logo-img"
-                             onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                        <svg class="eth-logo-fallback" width="20" height="20" viewBox="0 0 24 24" fill="none" style="display: none;">
-                            <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#627EEA"/>
-                            <path d="M2 17L12 22L22 17" fill="#627EEA"/>
-                            <path d="M2 12L12 17L22 12" fill="#627EEA"/>
-                        </svg>
+                        ${(() => {
+                            const ethLogos = getChainLogoFallbacks(1); // Chain ID 1 = Ethereum
+                            const primaryLogo = ethLogos[0] || 'https://static.debank.com/image/chain/logo_url/eth/42ba589cd077e7bdd97db6480b0ff61d.png';
+                            const fallbackLogo = ethLogos[1] || 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png';
+                            return `
+                                <img src="${primaryLogo}" 
+                                     data-fallback="${fallbackLogo}"
+                                     alt="ETH" 
+                                     class="eth-logo-img"
+                                     onerror="if(this.dataset.fallback && !this.dataset.triedFallback) { this.src = this.dataset.fallback; this.dataset.triedFallback = 'true'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }">
+                                <svg class="eth-logo-fallback" width="20" height="20" viewBox="0 0 24 24" fill="none" style="display: none;">
+                                    <path d="M12 2L2 7L12 12L22 7L12 2Z" fill="#627EEA"/>
+                                    <path d="M2 17L12 22L22 17" fill="#627EEA"/>
+                                    <path d="M2 12L12 17L22 12" fill="#627EEA"/>
+                                </svg>
+                            `;
+                        })()}
                     </div>
                     <div class="eth-price-info">
                         <div class="eth-price-amount">${formattedPrice}</div>

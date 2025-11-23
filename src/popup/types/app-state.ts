@@ -1,7 +1,7 @@
 import type { ConnectedDApp } from '../components/CurrentConnection';
 import type { EthPriceData } from '../components/EthPricePanel';
 import type { UnifiedBalanceData } from '../services/unified-balance-service';
-import type { OctavTransaction } from '../services/transactions-service';
+import type { OctavTransaction, OctavPortfolio } from '../services/transactions-service';
 
 export const TRANSACTIONS_PAGE_SIZE = 20;
 
@@ -101,6 +101,11 @@ export interface AppState {
     transactionsHasMore: boolean;
     transactionsHideSpam: boolean;
     transactionsAccountAddress?: string;
+    showSubscriptionsModal: boolean;
+    subscriptionsModalFirstRender: boolean;
+    portfolioData: OctavPortfolio | null;
+    portfolioLoading: boolean;
+    defiSelectedChainId: number | null;
 }
 
 export function createInitialState(): AppState {
@@ -176,6 +181,11 @@ export function createInitialState(): AppState {
         transactionsHasMore: false,
         transactionsHideSpam: true,
         transactionsAccountAddress: undefined,
+        showSubscriptionsModal: false,
+        subscriptionsModalFirstRender: true,
+        portfolioData: null,
+        portfolioLoading: false,
+        defiSelectedChainId: null,
     };
 }
 
