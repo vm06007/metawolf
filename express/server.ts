@@ -2,7 +2,6 @@ import express from 'express';
 import { subscriptionMiddleware } from './index.js';
 
 const app = express();
-const PORT = process.env.PORT || 3000;
 
 // Example: Protect all /api routes with subscription
 app.use(subscriptionMiddleware(
@@ -30,9 +29,16 @@ app.get('/health', (req, res) => {
   res.json({ status: 'ok' });
 });
 
-app.listen(PORT, () => {
-  console.log(`🚀 Server running on http://localhost:${PORT}`);
-  console.log(`📝 Protected routes: /api/*`);
-  console.log(`💚 Health check: http://localhost:${PORT}/health`);
-});
+// Export for Vercel serverless functions
+export default app;
+
+// For local development
+if (process.env.NODE_ENV !== 'production') {
+  const PORT = process.env.PORT || 3000;
+  app.listen(PORT, () => {
+    console.log(`🚀 Server running on http://localhost:${PORT}`);
+    console.log(`📝 Protected routes: /api/*`);
+    console.log(`💚 Health check: http://localhost:${PORT}/health`);
+  });
+}
 
