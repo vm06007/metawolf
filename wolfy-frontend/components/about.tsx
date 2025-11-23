@@ -172,7 +172,12 @@ export const About = ({ onClose }: { onClose: () => void }) => {
                   </div>
                 </div>
 
-                <ul>
+                <ul
+                  className="absolute inset-0"
+                  style={{
+                    animation: 'rotate-wheel 20s linear infinite'
+                  }}
+                >
                   {collabApps.map((app, index) => (
                     <li
                       key={app.id}
@@ -180,16 +185,26 @@ export const About = ({ onClose }: { onClose: () => void }) => {
                       style={{ transform: `rotate(${index * 45}deg)` }}
                     >
                       <div
-                        className={`relative -top-[1.6rem] flex w-[3.2rem] h-[3.2rem] bg-black/50 border border-white/15 rounded-xl`}
-                        style={{ transform: `rotate(-${index * 45}deg)` }}
+                        className="relative -top-[1.6rem]"
+                        style={{
+                          transform: `rotate(-${index * 45}deg)`,
+                        }}
                       >
-                        <Image
-                          className="m-auto"
-                          width={app.width}
-                          height={app.height}
-                          alt={app.title}
-                          src={app.icon}
-                        />
+                        <div
+                          className={`flex items-center justify-center w-[3.2rem] h-[3.2rem] bg-black/50 border border-white/15 rounded-full overflow-hidden`}
+                          style={{
+                            animation: 'counter-rotate-logo 20s linear infinite'
+                          }}
+                        >
+                          <Image
+                            className="object-contain w-full h-full"
+                            width={app.width}
+                            height={app.height}
+                            alt={app.title}
+                            src={app.icon}
+                            style={{ transform: 'scale(1.3)' }}
+                          />
+                        </div>
                       </div>
                     </li>
                   ))}

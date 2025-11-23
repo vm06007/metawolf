@@ -64,6 +64,24 @@
   }
 }
 
+@keyframes rotate-wheel {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes counter-rotate-logo {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(-360deg);
+  }
+}
+
 /* Codepunk background gradient */
 .codepunk-bg-gradient {
   background: radial-gradient(ellipse 1000px 800px at center bottom, #0f1a0f 0%, #0a0a0a 60%, #0a0a0a 100%);

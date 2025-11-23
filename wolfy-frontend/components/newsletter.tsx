@@ -214,7 +214,12 @@ export const Newsletter = () => {
             Introducing Wolfy
           </h1>
         ) : (
-          <h1 className="font-serif text-5xl italic short:lg:text-8xl sm:text-8xl lg:text-9xl text-white drop-shadow-[0_4px_20px_rgba(0,0,0,0.8)] shadow-[0_0_40px_rgba(0,0,0,0.5)]">
+          <h1 
+            className="font-serif text-5xl italic short:lg:text-8xl sm:text-8xl lg:text-9xl text-white"
+            style={{
+              filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.7)) drop-shadow(0 4px 12px rgba(0,0,0,0.6)) drop-shadow(0 0 40px rgba(0,0,0,0.5))'
+            }}
+          >
             Wolfy Wallet
           </h1>
         )}
@@ -230,13 +235,16 @@ export const Newsletter = () => {
               ease: EASE_OUT,
               delay: DELAY,
             }}
-            className="relative w-24 h-24 short:lg:w-32 short:lg:h-32 sm:w-32 sm:h-32 lg:w-40 lg:h-40 drop-shadow-[0_4px_20px_rgba(0,0,0,0.8)] shadow-[0_0_40px_rgba(0,0,0,0.5)]"
+            className="relative w-24 h-24 short:lg:w-32 short:lg:h-32 sm:w-32 sm:h-32 lg:w-40 lg:h-40"
           >
             <Image
               src="/wolf-logo.png"
               alt="Wolfy Wallet Logo"
               fill
               className="object-contain"
+              style={{
+                filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.7)) drop-shadow(0 4px 12px rgba(0,0,0,0.6)) drop-shadow(0 0 40px rgba(0,0,0,0.5))'
+              }}
               priority
             />
           </motion.div>
@@ -274,7 +282,11 @@ export const Newsletter = () => {
               className="flex flex-row gap-4 items-center"
             >
               <Button
-                className={cn("relative px-6 py-3 backdrop-blur-sm bg-white/10 border-white/20 text-white hover:bg-white/20")}
+                className={cn("relative px-6 py-3 backdrop-blur-md bg-white/20 border-white/40 text-white hover:bg-white/30 hover:border-white/60 transition-all duration-300 shadow-lg hover:shadow-xl")}
+                style={{
+                  filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.3)) drop-shadow(0 4px 16px rgba(0,0,0,0.2))',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.3), 0 0 40px rgba(255,255,255,0.1)'
+                }}
                 onClick={() => {
                   setIsAboutOpen(false);
                   setIsOpen(!isOpen);
@@ -285,7 +297,11 @@ export const Newsletter = () => {
               </Button>
               
               <Button
-                className={cn("relative px-6 py-3 backdrop-blur-sm bg-white/10 border-white/20 text-white hover:bg-white/20")}
+                className={cn("relative px-6 py-3 backdrop-blur-md bg-white/20 border-white/40 text-white hover:bg-white/30 hover:border-white/60 transition-all duration-300 shadow-lg hover:shadow-xl")}
+                style={{
+                  filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.3)) drop-shadow(0 4px 16px rgba(0,0,0,0.2))',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.3), 0 0 40px rgba(255,255,255,0.1)'
+                }}
                 onClick={() => {
                   setIsOpen(false);
                   setIsAboutOpen(true);
@@ -295,7 +311,11 @@ export const Newsletter = () => {
               </Button>
               
               <Button
-                className={cn("relative px-6 py-3 backdrop-blur-sm bg-white/10 border-white/20 text-white hover:bg-white/20")}
+                className={cn("relative px-6 py-3 backdrop-blur-md bg-white/20 border-white/40 text-white hover:bg-white/30 hover:border-white/60 transition-all duration-300 shadow-lg hover:shadow-xl")}
+                style={{
+                  filter: 'drop-shadow(0 2px 8px rgba(0,0,0,0.3)) drop-shadow(0 4px 16px rgba(0,0,0,0.2))',
+                  boxShadow: '0 4px 20px rgba(0,0,0,0.3), 0 0 40px rgba(255,255,255,0.1)'
+                }}
                 onClick={() => {
                   // Add Try Now functionality here
                   console.log("Try Now clicked");
