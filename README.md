@@ -242,10 +242,6 @@ bd close bd-42 --reason "Done"  # Complete issue
 6. Commit changes (including `.beads/issues.jsonl` if issue state changed)
 7. Submit a pull request
 
-## License
-
-[Add your license here]
-
 ## Support
 
 For issues and questions, please use the project's issue tracker (via `bd`).
