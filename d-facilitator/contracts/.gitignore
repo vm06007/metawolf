@@ -1,3 +1,5 @@
 lib/
 out/
 cache/
+.env
+.env.local
