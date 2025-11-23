@@ -252,7 +252,10 @@ function getX402NetworkFromChainSelector(chainSelectorName: string): SettleRespo
 /// @param settleResponse The settlement response to send
 async function sendEventCallback(runtime: Runtime<Config>, settleResponse: SettleResponse): Promise<void> {
   try {
-    runtime.log(`Sending settlement callback to: ${runtime.config.callbackUrl}`);
+    // Append /settlement-callback to the base callback URL
+    const baseUrl = runtime.config.callbackUrl!.replace(/\/$/, ''); // Remove trailing slash if present
+    const callbackUrl = `${baseUrl}/settlement-callback`;
+    runtime.log(`Sending settlement callback to: ${callbackUrl}`);
     
     const httpClient = new cre.capabilities.HTTPClient();
     
@@ -266,7 +269,7 @@ async function sendEventCallback(runtime: Runtime<Config>, settleResponse: Settl
       
       // 3. Construct the POST request with cacheSettings
       const req = {
-        url: config.callbackUrl!,
+        url: callbackUrl,
         method: "POST" as const,
         body,
         headers: {

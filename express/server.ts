@@ -3,6 +3,35 @@ import { subscriptionMiddleware } from './index.js';
 
 const app = express();
 
+// Parse JSON bodies
+app.use(express.json());
+
+// Callback endpoint for CRE workflow (no payment required)
+// This receives verification results from the CRE d-verify workflow
+// Using /callback instead of /api/callback to avoid /api/* middleware
+app.post('/callback', (req, res) => {
+  console.log('📥 Received verification callback:', JSON.stringify(req.body, null, 2));
+  // You can process the verification result here
+  // For now, just acknowledge receipt
+  res.status(200).json({ 
+    received: true, 
+    timestamp: new Date().toISOString() 
+  });
+});
+
+// Settlement callback endpoint for CRE workflow (no payment required)
+// This receives settlement results from the CRE d-settlement workflow
+// Using /settlement-callback instead of /api/settlement-callback to avoid /api/* middleware
+app.post('/settlement-callback', (req, res) => {
+  console.log('💰 Received settlement callback:', JSON.stringify(req.body, null, 2));
+  // You can process the settlement result here
+  // For now, just acknowledge receipt
+  res.status(200).json({ 
+    received: true, 
+    timestamp: new Date().toISOString() 
+  });
+});
+
 // Verify-only endpoint (must be BEFORE general /api/* middleware)
 // Use exact path matching - Express will strip /api/verify prefix, so use '/' in config
 app.use('/api/verify', subscriptionMiddleware(

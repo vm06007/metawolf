@@ -58,10 +58,14 @@ echo "RPC URL: $RPC_URL"
 echo "Is Simulation: $IS_SIMULATION"
 echo ""
 
-# Run deployment
+# Run deployment with slow mode for more accurate gas estimates
+# --slow: More accurate gas estimation (slower but more precise)
+# --gas-limit: Optional override if estimates are too high (uncomment and set if needed)
 forge script script/Deploy.s.sol:Deploy \
     --rpc-url "$RPC_URL" \
     --private-key "$PRIVATE_KEY" \
+    --slow \
     --broadcast \
     "$@"
+    # --gas-limit 5000000 \  # Uncomment and adjust if needed for Base Sepolia
 

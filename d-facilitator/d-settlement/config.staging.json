@@ -5,5 +5,5 @@
   "settlementReceiverAddress": "0xA02539DFb35bF1561d19061F5975bBfAC85b2031",
   "executionProxyAddress": "0xdDc178F24094480Fa2f20efE0a05cB6687456Fab",
   "gasLimit": "500000",
-  "callbackUrl": "https://express-jg8osw3xp-emanherawys-projects.vercel.app/"
+  "callbackUrl": "http://localhost:3000/"
 }

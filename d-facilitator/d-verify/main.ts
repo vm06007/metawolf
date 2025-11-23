@@ -115,7 +115,10 @@ const onHttpTrigger = async (runtime: Runtime<Config>, payload: HTTPPayload): Pr
     // Send verification result to callback URL if configured
     if (runtime.config.callbackUrl) {
       try {
-        runtime.log(`Sending verification result to callback URL: ${runtime.config.callbackUrl}`);
+        // Append /callback to the base callback URL
+        const baseUrl = runtime.config.callbackUrl.replace(/\/$/, ''); // Remove trailing slash if present
+        const callbackUrl = `${baseUrl}/callback`;
+        runtime.log(`Sending verification result to callback URL: ${callbackUrl}`);
         
         const httpClient = new cre.capabilities.HTTPClient();
         
@@ -129,7 +132,7 @@ const onHttpTrigger = async (runtime: Runtime<Config>, payload: HTTPPayload): Pr
           
           // 3. Construct the POST request with cacheSettings
           const req = {
-            url: config.callbackUrl!,
+            url: callbackUrl,
             method: "POST" as const,
             body,
             headers: {
