@@ -1,0 +1,21 @@
+{
+  "name": "typescript-simple-template",
+  "version": "1.0.0",
+  "main": "dist/main.js",
+  "private": true,
+  "scripts": {
+    "postinstall": "bunx cre-setup",
+    "generate-mock-payloads": "bun run generate-mock-payloads.ts"
+  },
+  "license": "UNLICENSED",
+  "dependencies": {
+    "@chainlink/cre-sdk": "^1.0.0",
+    "x402": "^0.7.3",
+    "viem": "^2.0.0",
+    "dotenv": "^16.0.0"
+  },
+  "devDependencies": {
+    "@types/bun": "1.2.21",
+    "@types/node": "^20.0.0"
+  }
+}
