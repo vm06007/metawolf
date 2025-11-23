@@ -52,7 +52,8 @@
     "react-is": "^19.2.0",
     "recharts": "^3.4.1",
     "rlp": "^3.0.0",
-    "viem": "^2.39.0"
+    "viem": "^2.39.0",
+    "x402": "^0.7.3"
   },
   "devDependencies": {
     "@types/chrome": "^0.0.268",

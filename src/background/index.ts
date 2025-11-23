@@ -2445,7 +2445,11 @@ function handleMessage(
                         break;
                     }
                     try {
-                        const account = wallet.getAccountByAddress(message.address);
+                        const accounts = wallet.getAccounts();
+                        const account = accounts.find((acc: any) => acc.address.toLowerCase() === message.address.toLowerCase());
+                        if (!account) {
+                            throw new Error('Account not found');
+                        }
                         if (!account || !account.multisig) {
                             safeSendResponse({ success: false, error: 'Multisig account not found' });
                             break;
@@ -2463,6 +2467,72 @@ function handleMessage(
                     } catch (error: any) {
                         console.error('[UPDATE_MULTISIG_DEPLOYED] Error:', error);
                         safeSendResponse({ success: false, error: error.message || 'Failed to update multisig' });
+                    }
+                    break;
+
+                case 'CREATE_X402_PAYMENT':
+                    if (!wallet.isUnlocked()) {
+                        safeSendResponse({ success: false, error: 'Wallet is locked' });
+                        break;
+                    }
+                    try {
+                        const accounts = wallet.getAccounts();
+                        const account = accounts.find((acc: any) => acc.address.toLowerCase() === message.address.toLowerCase());
+                        if (!account) {
+                            throw new Error('Account not found');
+                        }
+
+                        // Check if this is a watch-only account
+                        if (account.isWatchOnly) {
+                            throw new Error('Cannot create payment with a watch-only address');
+                        }
+
+                        // Import x402 and viem
+                        const { exact } = await import('x402/schemes');
+                        const { createWalletClient, http } = await import('viem');
+                        const { privateKeyToAccount } = await import('viem/accounts');
+                        const { baseSepolia } = await import('viem/chains');
+
+                        // Get private key
+                        const privateKey = await wallet.getPrivateKey(account.address);
+                        if (!privateKey) {
+                            throw new Error('Private key not found');
+                        }
+
+                        // Create viem account from private key
+                        const viemAccount = privateKeyToAccount(privateKey as `0x${string}`);
+
+                        // Get network from payment requirements
+                        const paymentRequirements = message.paymentRequirements;
+                        const network = paymentRequirements.network || 'base-sepolia';
+
+                        // Map network to viem chain (simplified - you may need more networks)
+                        const chain = network === 'base-sepolia' ? baseSepolia : baseSepolia;
+
+                        // Create wallet client
+                        const walletClient = createWalletClient({
+                            account: viemAccount,
+                            chain: chain,
+                            transport: http(),
+                        });
+
+                        // Create and sign the payment using x402's exact.evm.createPayment
+                        const paymentPayload = await exact.evm.createPayment(
+                            walletClient as any,
+                            1, // x402Version
+                            paymentRequirements
+                        );
+
+                        // Encode the payment for X-PAYMENT header
+                        const encodedPayment = exact.evm.encodePayment(paymentPayload);
+
+                        safeSendResponse({
+                            success: true,
+                            encodedPayment: encodedPayment,
+                        });
+                    } catch (error: any) {
+                        console.error('[CREATE_X402_PAYMENT] Error:', error);
+                        safeSendResponse({ success: false, error: error.message || 'Failed to create x402 payment' });
                     }
                     break;
 

@@ -4282,6 +4282,11 @@ export class PopupApp {
 
     private async handleBanklessSubscription() {
         try {
+            const account = this.state.selectedAccount;
+            if (!account) {
+                return;
+            }
+
             // Reset state
             this.state.subscriptionFlow = {
                 serviceId: 'bankless',
@@ -4290,27 +4295,34 @@ export class PopupApp {
             };
             this.updateSubscriptionSignModal();
 
-            // Call the endpoint
-            const response = await fetch('https://express-ern9krf5s-emanherawys-projects.vercel.app/api/verify', {
-                method: 'GET',
-                headers: {
-                    'Accept': 'application/json',
-                },
-            });
+            // Use X402Client to handle 402 payment flow properly
+            const { X402Client } = await import('./services/x402-client.js');
 
-            if (!response.ok) {
-                throw new Error(`HTTP error! status: ${response.status}`);
+            const response = await X402Client.get('https://express-ern9krf5s-emanherawys-projects.vercel.app/api/verify');
+
+            if (!response.success) {
+                throw new Error(response.error || 'Failed to fetch payment requirements');
             }
 
-            const data = await response.json();
-            
+            // Check if payment is required (402)
+            if (!response.paymentRequired || !response.paymentRequirements) {
+                // If no payment required, we're done
+                console.log('[handleBanklessSubscription] No payment required, subscription verified');
+                this.state.subscriptionFlow.status = 'success';
+                this.updateSubscriptionSignModal();
+                return;
+            }
+
+            console.log('[handleBanklessSubscription] Payment required:', response.paymentRequirements);
+
             // Update state with payment requirements
             this.state.subscriptionFlow = {
                 serviceId: 'bankless',
                 status: 'signing',
-                paymentRequirements: data,
+                paymentRequirements: response.paymentRequirements,
             };
             this.updateSubscriptionSignModal();
+            this.attachSubscriptionSignModalListeners();
         } catch (error: any) {
             console.error('Error fetching subscription requirements:', error);
             // Don't show error state, just reset
@@ -4332,8 +4344,8 @@ export class PopupApp {
                 // Sign with Halo chip
                 await this.handleHaloSubscriptionSign(account);
             } else {
-                // Regular account signing
-                await this.handleRegularSubscriptionSign(account);
+                // Regular account signing with x402
+                await this.handleX402SubscriptionSign(account);
             }
         } catch (error: any) {
             console.error('Error signing subscription:', error);
@@ -4393,7 +4405,7 @@ export class PopupApp {
                 }, 2000);
             }
 
-            if (!signResponse || !signResponse.signature) {
+            if (!signResponse) {
                 throw new Error('Failed to sign with Halo chip');
             }
 
@@ -4417,34 +4429,56 @@ export class PopupApp {
         }
     }
 
-    private async handleRegularSubscriptionSign(account: any) {
+    private async handleX402SubscriptionSign(account: any) {
         try {
             // Update to processing state
             this.state.subscriptionFlow.status = 'processing';
             this.updateSubscriptionSignModal();
 
-            // Sign the payment requirements (mock signing - in real implementation, this would create x402 payment)
-            const messageToSign = JSON.stringify(this.state.subscriptionFlow.paymentRequirements);
-            
-            // Send sign message request to background
-            const signResponse = await chrome.runtime.sendMessage({
-                type: 'SIGN_MESSAGE',
-                message: messageToSign,
-                address: account.address,
-            });
-
-            if (!signResponse.success) {
-                throw new Error(signResponse.error || 'Failed to sign message');
+            // Get payment requirements
+            const paymentRequirements = this.state.subscriptionFlow.paymentRequirements;
+            if (!paymentRequirements) {
+                throw new Error('No payment requirements available');
             }
 
+            console.log('[handleX402SubscriptionSign] Creating x402 payment...');
+
+            // Create x402 payment in background script (for security - private keys stay in background)
+            const paymentResponse = await chrome.runtime.sendMessage({
+                type: 'CREATE_X402_PAYMENT',
+                address: account.address,
+                paymentRequirements: paymentRequirements,
+            });
+
+            if (!paymentResponse.success || !paymentResponse.encodedPayment) {
+                throw new Error(paymentResponse.error || 'Failed to create x402 payment');
+            }
+
+            const encodedPayment = paymentResponse.encodedPayment;
+            console.log('[handleX402SubscriptionSign] Payment created, submitting...');
+
+            // Use X402Client to submit payment
+            const { X402Client } = await import('./services/x402-client.js');
+
+            const verifyResponse = await X402Client.getWithPayment(
+                'https://express-ern9krf5s-emanherawys-projects.vercel.app/api/verify',
+                encodedPayment
+            );
+
+            if (!verifyResponse.success) {
+                throw new Error(verifyResponse.error || 'Verification failed');
+            }
+
+            console.log('[handleX402SubscriptionSign] Payment verified successfully:', verifyResponse.data);
+
             // Simulate processing delay
-            await new Promise(resolve => setTimeout(resolve, 2000));
+            await new Promise(resolve => setTimeout(resolve, 1000));
 
             // Update to success state
             this.state.subscriptionFlow.status = 'success';
             this.updateSubscriptionSignModal();
         } catch (error: any) {
-            console.error('Error signing subscription:', error);
+            console.error('Error signing subscription with x402:', error);
             // Don't show error, just reset
             this.hideSubscriptionSignModal();
         }
@@ -4497,7 +4531,10 @@ export class PopupApp {
         const doneBtn = document.getElementById('subscription-sign-modal-done');
 
         overlay?.addEventListener('click', (event) => {
-            if (event.target === overlay && this.state.subscriptionFlow.status !== 'processing' && this.state.subscriptionFlow.status !== 'success') {
+            if (event.target === overlay && 
+                this.state.subscriptionFlow.status !== 'processing' && 
+                this.state.subscriptionFlow.status !== 'success' &&
+                this.state.subscriptionFlow.status !== 'signing') {
                 this.hideSubscriptionSignModal();
             }
         });
