@@ -1,0 +1,73 @@
+{
+    "manifest_version": 3,
+    "name": "Wolfy Wallet",
+    "version": "1.0.0",
+    "description": "Wallet extension with EIP-7702, EIP-5792, and Arx HaLo chip support",
+    "permissions": [
+        "storage",
+        "activeTab",
+        "scripting",
+        "nfc",
+        "alarms",
+        "tabs",
+        "system.display"
+    ],
+    "host_permissions": [
+        "<all_urls>"
+    ],
+    "background": {
+        "service_worker": "background/index.js"
+    },
+    "content_scripts": [
+        {
+            "matches": [
+                "<all_urls>"
+            ],
+            "js": [
+                "content/index.js"
+            ],
+            "run_at": "document_start",
+            "all_frames": true
+        }
+    ],
+    "action": {
+        "default_popup": "popup/index.html",
+        "default_title": "Wolfy Wallet",
+        "default_icon": {
+            "16": "icons/icon16.png",
+            "32": "icons/icon32.png",
+            "48": "icons/icon48.png",
+            "128": "icons/icon128.png"
+        }
+    },
+    "icons": {
+        "16": "icons/icon16.png",
+        "32": "icons/icon32.png",
+        "48": "icons/icon48.png",
+        "128": "icons/icon128.png"
+    },
+    "web_accessible_resources": [
+        {
+            "resources": [
+                "inpage.js",
+                "popup/lib/libhalo.js",
+                "popup/lib/firefly.js",
+                "popup/lib/ethers.js",
+                "popup/firefly-connect.html",
+                "popup/firefly-connect.js",
+                "popup/firefly-sign.html",
+                "popup/firefly-sign.js",
+                "popup/expanded.html",
+                "popup/wolfy-logo.png",
+                "popup/lock.svg",
+                "notification/index.html"
+            ],
+            "matches": [
+                "<all_urls>"
+            ]
+        }
+    ],
+    "content_security_policy": {
+        "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'"
+    }
+}

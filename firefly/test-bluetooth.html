@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Web Bluetooth Test</title>
+    <style>
+        body { font-family: Arial, sans-serif; padding: 20px; }
+        button { padding: 10px 20px; font-size: 16px; margin: 10px 0; }
+        #result { margin-top: 20px; padding: 10px; border: 1px solid #ccc; }
+        .success { color: green; }
+        .error { color: red; }
+    </style>
+</head>
+<body>
+    <h1>Web Bluetooth API Test</h1>
+    <p>This page tests if Web Bluetooth is enabled in your browser.</p>
+    <button id="test-btn">Test Web Bluetooth</button>
+    <div id="result"></div>
+    
+    <h2>Instructions:</h2>
+    <ol>
+        <li>Open Chrome and go to: <code>chrome://flags/#enable-experimental-web-platform-features</code></li>
+        <li>Set it to <strong>Enabled</strong></li>
+        <li>Click <strong>Relaunch</strong> to restart Chrome</li>
+        <li>Come back to this page and click the test button</li>
+    </ol>
+    
+    <script>
+        document.getElementById('test-btn').addEventListener('click', async () => {
+            const result = document.getElementById('result');
+            result.innerHTML = 'Testing...';
+            
+            try {
+                // Check if Web Bluetooth is available
+                if (!('bluetooth' in navigator)) {
+                    result.innerHTML = '<span class="error">❌ Web Bluetooth API not available in navigator</span><br>Make sure you enabled the Chrome flags and restarted Chrome.';
+                    return;
+                }
+                
+                if (!navigator.bluetooth) {
+                    result.innerHTML = '<span class="error">❌ navigator.bluetooth is null/undefined</span><br>Web Bluetooth is disabled. Enable Chrome flags and restart.';
+                    return;
+                }
+                
+                result.innerHTML = '<span class="success">✅ Web Bluetooth API is available!</span><br>';
+                
+                // Try to get already paired devices
+                if (navigator.bluetooth.getDevices) {
+                    const devices = await navigator.bluetooth.getDevices();
+                    result.innerHTML += `Found ${devices.length} previously paired device(s)<br>`;
+                }
+                
+                // Try to request a device (this will show the dialog)
+                result.innerHTML += '<br>Requesting device... (check for Bluetooth dialog)<br>';
+                const device = await navigator.bluetooth.requestDevice({
+                    filters: [{ services: [0xfff0] }] // Generic service for testing
+                });
+                result.innerHTML += `<span class="success">✅ Device selected: ${device.name || 'Unknown'}</span>`;
+            } catch (error) {
+                result.innerHTML = `<span class="error">❌ Error: ${error.message}</span><br>Error code: ${error.code || 'N/A'}<br><br>`;
+                if (error.message.includes('globally disabled')) {
+                    result.innerHTML += '<strong>Solution:</strong><br>';
+                    result.innerHTML += '1. Go to chrome://flags/#enable-experimental-web-platform-features<br>';
+                    result.innerHTML += '2. Enable it and restart Chrome<br>';
+                    result.innerHTML += '3. Make sure you\'re accessing via http://localhost or https://';
+                }
+                console.error(error);
+            }
+        });
+    </script>
+</body>
+</html>

@@ -1,0 +1,214 @@
+import { sendMessageWithRetry } from '../utils/messaging';
+
+export class WalletService {
+    async checkUnlocked(): Promise<boolean> {
+        try {
+            const response = await sendMessageWithRetry({
+                type: 'CHECK_UNLOCKED',
+            }, 2, 2000);
+            return response?.unlocked || false;
+        } catch (error: any) {
+            console.error('Error checking unlock status:', error);
+            return false;
+        }
+    }
+
+    async getAccounts(): Promise<any[]> {
+        try {
+            const response = await sendMessageWithRetry({
+                type: 'GET_ACCOUNTS',
+            }, 2, 2000);
+            if (response && response.success) {
+                return response.accounts || [];
+            }
+            return [];
+        } catch (error: any) {
+            console.error('Error loading accounts:', error);
+            return [];
+        }
+    }
+
+    async getSelectedAccount(): Promise<any | null> {
+        try {
+            const response = await sendMessageWithRetry({
+                type: 'GET_SELECTED_ACCOUNT',
+            }, 2, 2000);
+            if (response && response.success && response.account) {
+                return response.account;
+            }
+            return null;
+        } catch (error: any) {
+            console.error('Error loading selected account:', error);
+            return null;
+        }
+    }
+
+    async getNetworks(): Promise<any[]> {
+        try {
+            const response = await sendMessageWithRetry({
+                type: 'GET_NETWORKS',
+            }, 2, 2000);
+            if (response && response.success) {
+                return response.networks || [];
+            }
+            return this.getDefaultNetworks();
+        } catch (error: any) {
+            console.error('Error loading networks:', error);
+            return this.getDefaultNetworks();
+        }
+    }
+
+    async getSelectedNetwork(): Promise<number | null> {
+        try {
+            const response = await sendMessageWithRetry({
+                type: 'GET_SELECTED_NETWORK',
+            }, 2, 2000);
+            if (response && response.success && response.chainId !== undefined) {
+                return response.chainId;
+            }
+            return null;
+        } catch (error: any) {
+            console.error('Error loading selected network:', error);
+            return null;
+        }
+    }
+
+    private getDefaultNetworks(): any[] {
+        return [
+            {
+                chainId: 1,
+                name: 'Ethereum Mainnet',
+                rpcUrl: 'https://mainnet.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73',
+                currency: { name: 'Ether', symbol: 'ETH', decimals: 18 }
+            },
+            {
+                chainId: 11155111,
+                name: 'Sepolia',
+                rpcUrl: 'https://sepolia.infura.io/v3/b17509e0e2ce45f48a44289ff1aa3c73',
+                currency: { name: 'Sepolia Ether', symbol: 'SEP', decimals: 18 }
+            },
+            {
+                chainId: 42161,
+                name: 'Arbitrum One',
+                rpcUrl: 'https://arb1.arbitrum.io/rpc',
+                currency: { name: 'Ether', symbol: 'ETH', decimals: 18 }
+            },
+            {
+                chainId: 48900,
+                name: 'Zircuit Mainnet',
+                rpcUrl: 'https://zircuit-mainnet.drpc.org',
+                currency: { name: 'Ether', symbol: 'ETH', decimals: 18 }
+            },
+            {
+                chainId: 5115,
+                name: 'Citrea Testnet',
+                rpcUrl: 'https://rpc.testnet.citrea.xyz',
+                currency: { name: 'cBTC', symbol: 'cBTC', decimals: 18 }
+            },
+            {
+                chainId: 62298,
+                name: 'Citrea Devnet',
+                rpcUrl: 'https://rpc.devnet.citrea.xyz',
+                currency: { name: 'cBTC', symbol: 'cBTC', decimals: 18 }
+            }
+        ];
+    }
+
+    async unlock(password: string): Promise<boolean> {
+        try {
+            const response = await chrome.runtime.sendMessage({
+                type: 'UNLOCK',
+                password,
+            });
+            if (chrome.runtime.lastError) {
+                throw new Error(chrome.runtime.lastError.message);
+            }
+            return response?.success || false;
+        } catch (error) {
+            console.error('Error unlocking:', error);
+            return false;
+        }
+    }
+
+    async lock(): Promise<void> {
+        try {
+            await chrome.runtime.sendMessage({ type: 'LOCK' });
+            if (chrome.runtime.lastError) {
+                console.error('Error:', chrome.runtime.lastError.message);
+            }
+        } catch (error) {
+            console.error('Error locking:', error);
+        }
+    }
+
+    async createAccount(name?: string): Promise<any> {
+        const response = await sendMessageWithRetry({
+            type: 'CREATE_ACCOUNT',
+            name: name || undefined,
+        }, 5, 3000);
+        if (!response) {
+            throw new Error('No response from background script');
+        }
+        if (!response.success) {
+            throw new Error(response.error || 'Failed to create account');
+        }
+        return response;
+    }
+
+    async importAccount(privateKey: string, name?: string): Promise<any> {
+        const response = await sendMessageWithRetry({
+            type: 'IMPORT_ACCOUNT',
+            privateKey: privateKey.trim(),
+            name: name || undefined,
+        });
+        if (!response) {
+            throw new Error('No response from background script');
+        }
+        if (!response.success) {
+            throw new Error(response.error || 'Failed to import account');
+        }
+        return response;
+    }
+
+    async selectAccount(address: string): Promise<void> {
+        try {
+            await chrome.runtime.sendMessage({
+                type: 'SET_SELECTED_ACCOUNT',
+                address: address,
+            });
+            if (chrome.runtime.lastError) {
+                console.error('Error:', chrome.runtime.lastError.message);
+            }
+        } catch (error) {
+            console.error('Error selecting account:', error);
+        }
+    }
+
+    async deleteAccount(address: string): Promise<void> {
+        const response = await sendMessageWithRetry({
+            type: 'DELETE_ACCOUNT',
+            address: address,
+        }, 5, 3000);
+        if (!response) {
+            throw new Error('No response from background script');
+        }
+        if (!response.success) {
+            throw new Error(response.error || 'Failed to delete account');
+        }
+    }
+
+    async switchNetwork(chainId: number): Promise<void> {
+        try {
+            await chrome.runtime.sendMessage({
+                type: 'SET_NETWORK',
+                chainId: chainId,
+            });
+            if (chrome.runtime.lastError) {
+                console.error('Error:', chrome.runtime.lastError.message);
+            }
+        } catch (error) {
+            console.error('Error switching network:', error);
+        }
+    }
+}
+

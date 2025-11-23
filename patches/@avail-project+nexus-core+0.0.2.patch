@@ -1,0 +1,19 @@
+diff --git a/node_modules/@avail-project/nexus-core/dist/index.esm.js b/node_modules/@avail-project/nexus-core/dist/index.esm.js
+index 0000000..1111111 100644
+--- a/node_modules/@avail-project/nexus-core/dist/index.esm.js
++++ b/node_modules/@avail-project/nexus-core/dist/index.esm.js
+@@ -10470,7 +10470,11 @@ class CA {
+             throw new Error('EVM provider is not set');
+         }
+         const scheme = window.location.protocol.slice(0, -1);
+-        const domain = window.location.host;
+-        const origin = window.location.origin;
++        // Patch for browser extensions: use 'localhost' instead of extension ID
++        // Extension IDs are not RFC 3986 compliant, causing SIWE validation to fail
++        const rawDomain = window.location.host;
++        const isExtension = rawDomain && rawDomain.length > 20 && !rawDomain.includes('.');
++        const domain = isExtension ? 'localhost' : rawDomain;
++        const origin = isExtension ? 'https://localhost' : window.location.origin;
+         const address = await this._getEVMAddress();
+         const message = createSiweMessage({
+             address,

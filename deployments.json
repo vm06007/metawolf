@@ -1,0 +1,11 @@
+{
+  "1": {
+    "chainId": 1,
+    "chainName": "Ethereum Mainnet",
+    "contractAddress": "0xfF25B865d75583FB77102De88901Bf9c1C51B6C0",
+    "transactionHash": "0x17fc4c1486ea0127e230e0f1c0566842011cc8c68b48aed204f3636a4643ca71",
+    "deployer": "0x6bd4324Bf06aB3F86E31F6b490eE899670566d6D",
+    "timestamp": "2025-11-22T22:52:01.060Z",
+    "rpcUrl": "https://1rpc.io/eth"
+  }
+}
