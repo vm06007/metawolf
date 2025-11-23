@@ -429,7 +429,7 @@ export const Newsletter = () => {
             </svg>
           </a>
           <a
-            href="https://github.com"
+            href="https://github.com/vm06007/metawolf"
             target="_blank"
             rel="noopener noreferrer"
             className="w-10 h-10 rounded-full bg-black/30 backdrop-blur-sm border border-white/20 flex items-center justify-center hover:bg-black/50 transition-colors"
