@@ -1,3 +1,8 @@
 {
-  "schedule": "*/30 * * * * *"
+  "authorizedEVMAddress": "0xYourAuthorizedEVMAddress",
+  "chainSelectorName": "ethereum-mainnet",
+  "isTestnet": false,
+  "settlementReceiverAddress": "0xYourSettlementReceiverContractAddress",
+  "executionProxyAddress": "0xYourExecutionProxyContractAddress",
+  "gasLimit": "500000"
 }

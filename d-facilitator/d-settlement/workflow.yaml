@@ -21,7 +21,10 @@ staging-settings:
   workflow-artifacts:
     workflow-path: "./main.ts"
     config-path: "./config.staging.json"
-    secrets-path: ""
+    # secrets-path: ""  # Empty = use environment variables from .env file
+    # For simulation: Set EVM_PRIVATE_KEY_ALL in .env file
+    # For production: Set secrets-path: "../secrets.yaml" and use CRE secrets
+    secrets-path: "../secrets.yaml"  # Use .env file for local simulation
     
 
 # ==========================================================================
@@ -31,4 +34,4 @@ production-settings:
   workflow-artifacts:
     workflow-path: "./main.ts"
     config-path: "./config.production.json"
-    secrets-path: ""
+    secrets-path: "../secrets.yaml"  # Use CRE secrets for production

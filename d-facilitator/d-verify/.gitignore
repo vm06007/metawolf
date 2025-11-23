@@ -1,0 +1,14 @@
+# Generated payloads
+generated-payloads/
+
+# Environment files
+.env
+.env.local
+
+# Build outputs
+dist/
+*.js
+*.wasm
+tmp.js
+tmp.wasm
+

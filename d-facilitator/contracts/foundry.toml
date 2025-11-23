@@ -1,0 +1,31 @@
+[profile.default]
+src = "src"
+out = "out"
+libs = ["lib"]
+
+# See more config options https://github.com/foundry-rs/foundry/blob/master/crates/config/README.md#all-options
+
+# RPC Endpoints Configuration
+# The API key is loaded from .env file (ALCHEMY_API_KEY)
+# RPC URLs are constructed dynamically using the deploy.sh script or manual commands below
+
+# Deployment Instructions:
+# 
+# Option 1: Use the deploy.sh script (recommended)
+#   1. Copy .env.example to .env and add your ALCHEMY_API_KEY and PRIVATE_KEY
+#   2. Run: ./deploy.sh eth_sepolia ethereum-testnet-sepolia
+#   3. Or: ./deploy.sh eth_mainnet ethereum-mainnet
+#   4. Or: ./deploy.sh base_sepolia ethereum-testnet-sepolia-base-1
+#
+# Option 2: Manual deployment with environment variables
+#   1. Load .env: source .env (or export ALCHEMY_API_KEY="your-key")
+#   2. Set other variables:
+#      export PRIVATE_KEY="your-private-key"
+#      export CHAIN_NAME="ethereum-testnet-sepolia"  # Options: "ethereum-testnet-sepolia", "ethereum-mainnet", "ethereum-testnet-sepolia-base-1"
+#      export IS_SIMULATION=true  # true for testnet, false for production
+#   3. Deploy:
+#      forge script script/Deploy.s.sol:Deploy --rpc-url "https://eth-sepolia.g.alchemy.com/v2/$ALCHEMY_API_KEY" --broadcast
+#      forge script script/Deploy.s.sol:Deploy --rpc-url "https://eth-mainnet.g.alchemy.com/v2/$ALCHEMY_API_KEY" --broadcast
+#      forge script script/Deploy.s.sol:Deploy --rpc-url "https://base-sepolia.g.alchemy.com/v2/$ALCHEMY_API_KEY" --broadcast
+#
+# Note: Add --verify --etherscan-api-key YOUR_API_KEY if you want to verify contracts on Etherscan

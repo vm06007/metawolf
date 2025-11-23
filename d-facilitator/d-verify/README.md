@@ -1,53 +1,55 @@
-# Typescript Simple Workflow Example
+# d-verify Workflow
 
-This template provides a simple Typescript workflow example. It shows how to create a simple "Hello World" workflow using Typescript.
+Payment verification workflow for x402 protocol using Chainlink CRE.
 
-Steps to run the example
+This workflow verifies payment payloads against payment requirements using CRE EVM capabilities.
 
-## 1. Update .env file
+## Setup
 
-You need to add a private key to env file. This is specifically required if you want to simulate chain writes. For that to work the key should be valid and funded.
-If your workflow does not do any chain write then you can just put any dummy key as a private key. e.g.
+**Important**: This project uses a shared code architecture. See the [main README](../README.md) for complete setup instructions.
 
-```
-CRE_ETH_PRIVATE_KEY=0000000000000000000000000000000000000000000000000000000000000001
-```
+### Quick Setup
 
-Note: Make sure your `workflow.yaml` file is pointing to the config.json, example:
+1. **Install shared dependencies** (from project root):
+   ```bash
+   cd ../shared && bun install
+   ```
 
-```yaml
-staging-settings:
-  user-workflow:
-    workflow-name: "hello-world"
-  workflow-artifacts:
-    workflow-path: "./main.ts"
-    config-path: "./config.json"
-```
+2. **Install workflow dependencies**:
+   ```bash
+   cd d-verify && bun install
+   ```
 
-## 2. Install dependencies
+3. **Configure environment**:
+   Create `.env` file with:
+   ```
+   CRE_ETH_PRIVATE_KEY=your_private_key_here
+   ```
 
-If `bun` is not already installed, see https://bun.com/docs/installation for installing in your environment.
+4. **Update configuration**:
+   Edit `config.staging.json` with your settings.
 
-```bash
-cd <workflow-name> && bun install
-```
+## Running
 
-Example: For a workflow directory named `hello-world` the command would be:
-
-```bash
-cd hello-world && bun install
-```
-
-## 3. Simulate the workflow
-
-Run the command from <b>project root directory</b>
+### Simulate from Project Root
 
 ```bash
-cre workflow simulate <path-to-workflow-directory> --target=staging-settings
+cre workflow simulate ./d-verify --target=staging-settings
 ```
 
-Example: For workflow named `hello-world` the command would be:
+### Simulate with HTTP Payload
 
 ```bash
-cre workflow simulate ./hello-world --target=staging-settings
+cre workflow simulate ./d-verify \
+  --http-payload d-verify/test-verify-payload.json \
+  --non-interactive \
+  --trigger-index 0
 ```
+
+## Architecture
+
+This workflow imports shared utilities from `../shared/`:
+- `verify-payment.ts`: Payment verification logic
+- `network.ts`: Network mapping utilities
+
+See [main README](../README.md) for architecture details.
