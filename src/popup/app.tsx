@@ -3212,33 +3212,37 @@ export class PopupApp {
         const threshold = account.multisig.threshold;
         const owners = chips.map((c: any) => ethers.getAddress(c.address)).sort();
 
-        // Create salt for deterministic address
+        // Create salt with randomness to ensure unique address each time
+        // This prevents CREATE2 reverts when trying to deploy the same multisig multiple times
+        const randomSalt = ethers.hexlify(ethers.randomBytes(32));
         const salt = ethers.keccak256(
-            ethers.toUtf8Bytes(owners.join('') + threshold.toString() + account.address.toLowerCase())
+            ethers.toUtf8Bytes(owners.join('') + threshold.toString() + randomSalt)
         );
+        console.log('[deployMultisig] Using random salt:', salt);
 
         // Deploy via factory using gas station
         const FACTORY_ABI = [
             'function createMultisig(address[] calldata owners, uint256 threshold, bytes32 salt) external returns (address)',
+            'function computeAddress(address[] calldata owners, uint256 threshold, bytes32 salt) external view returns (address)',
             'event MultisigCreated(address indexed multisig, address[] owners, uint256 threshold)',
         ];
 
         const factory = new ethers.Contract(factoryAddress, FACTORY_ABI, gasStationSigner);
         const data = factory.interface.encodeFunctionData('createMultisig', [owners, threshold, salt]);
 
-        // Get gas price and estimate gas
+        // Get gas price (skip gas estimation and use hardcoded 2M gas limit)
         const feeData = await provider.getFeeData();
-        const gasEstimate = await provider.estimateGas({
-            to: factoryAddress,
-            data: data,
-            from: await gasStationSigner.getAddress(),
-        });
+
+        // Use hardcoded gas limit of 2,000,000 instead of estimating
+        // This is enough for successful deployment (~300k), but won't waste too much on reverts
+        const gasLimit = BigInt(2000000);
+        console.log('[deployMultisig] Using hardcoded gas limit:', gasLimit.toString());
 
         const transaction = {
             to: factoryAddress,
             data: data,
             value: '0x0',
-            gasLimit: (gasEstimate * BigInt(120)) / BigInt(100),
+            gasLimit: gasLimit,
             maxFeePerGas: feeData.maxFeePerGas?.toString(),
             maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
             chainId: chainId,

@@ -28,6 +28,9 @@ const instrumentSerif = Instrument_Serif({
 const isV0 = process.env["VERCEL_URL"]?.includes("vusercontent.net") ?? false
 
 export const metadata: Metadata = {
+  metadataBase: process.env.VERCEL_URL
+    ? new URL(`https://${process.env.VERCEL_URL}`)
+    : new URL('https://metawolf.vercel.app'),
   title: {
     template: "%s | Wolfy Wallet",
     default: "Wolfy Wallet",

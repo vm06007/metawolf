@@ -7,5 +7,14 @@
     "deployer": "0x6bd4324Bf06aB3F86E31F6b490eE899670566d6D",
     "timestamp": "2025-11-22T22:52:01.060Z",
     "rpcUrl": "https://1rpc.io/eth"
+  },
+  "48900": {
+    "chainId": 48900,
+    "chainName": "Zircuit Mainnet",
+    "contractAddress": "0xAB869b003948c09F6b869B35545E9D535df36e12",
+    "transactionHash": "0x2062a14cdc580004dca937f442ccab1304241a7f93e95082eb03fb89cf5d62f9",
+    "deployer": "0x6bd4324Bf06aB3F86E31F6b490eE899670566d6D",
+    "timestamp": "2025-11-23T07:51:18.829Z",
+    "rpcUrl": "https://zircuit-mainnet.drpc.org"
   }
 }

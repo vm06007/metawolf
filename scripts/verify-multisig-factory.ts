@@ -36,6 +36,7 @@ const ETHERSCAN_APIS: Record<number, string> = {
     10: 'https://api-optimistic.etherscan.io/v2/api',
     43114: 'https://api.snowtrace.io/v2/api',
     56: 'https://api.bscscan.com/v2/api',
+    48900: 'https://explorer.zircuit.com/api', // Zircuit uses Blockscout
 };
 
 const CHAIN_NAMES: Record<number, string> = {
@@ -47,6 +48,7 @@ const CHAIN_NAMES: Record<number, string> = {
     10: 'Optimism',
     43114: 'Avalanche',
     56: 'BSC',
+    48900: 'Zircuit Mainnet',
 };
 
 const etherscanApi = ETHERSCAN_APIS[chainId];

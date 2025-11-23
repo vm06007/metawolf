@@ -160,21 +160,11 @@ export class Wallet {
                 throw new Error(`Threshold must be between 1 and ${chips.length}`);
             }
 
-            // Compute deterministic address (will be deployed later)
-            const { computeMultisigAddress } = await import('./multisig-deployer.js');
-
-            // Use a placeholder factory address (in production, use real factory)
-            const FACTORY_ADDRESS = '0x0000000000000000000000000000000000000000'; // TODO: Deploy factory
-            const salt = ethers.keccak256(
-                ethers.toUtf8Bytes(chips.map((c: any) => c.address.toLowerCase()).sort().join('') + threshold.toString())
-            );
-
-            const smartAccountAddress = computeMultisigAddress(
-                FACTORY_ADDRESS,
-                chips.map((c: any) => c.address),
-                threshold,
-                salt
-            );
+            // Generate a temporary placeholder address
+            // The actual deployment address will be determined by the random salt during deployment
+            // We create a unique identifier for this multisig account
+            const randomBytes = ethers.randomBytes(20); // 20 bytes = 160 bits for an address
+            const smartAccountAddress = ethers.getAddress(ethers.hexlify(randomBytes));
 
             const account: Account = {
                 address: smartAccountAddress,
@@ -190,12 +180,21 @@ export class Wallet {
                 haloLinked: true,
             };
 
-            // Check for duplicates
-            if (this.state.accounts.some(acc => acc.address.toLowerCase() === account.address.toLowerCase())) {
-                throw new Error('Multisig account already exists');
+            // Check if account already exists - if so, update it instead of throwing error
+            const existingIndex = this.state.accounts.findIndex(
+                acc => acc.address.toLowerCase() === account.address.toLowerCase()
+            );
+
+            if (existingIndex >= 0) {
+                // Update existing account with new info (chips might have changed)
+                console.log('[Wallet] Updating existing multisig account:', account.address);
+                this.state.accounts[existingIndex] = account;
+            } else {
+                // Add new account
+                console.log('[Wallet] Adding new multisig account:', account.address);
+                this.state.accounts.push(account);
             }
 
-            this.state.accounts.push(account);
             if (!this.state.selectedAccount) {
                 this.state.selectedAccount = account.address;
             }
