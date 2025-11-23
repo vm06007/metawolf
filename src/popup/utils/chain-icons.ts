@@ -215,11 +215,55 @@ const CHAIN_WHITE_LOGOS: Record<number, string> = {
     1666600000: 'https://static.debank.com/image/chain/white_logo_url/harmony/8e44e643d6e2fd335a72b4cda6368e1a.png',
 };
 
+// Fallback logo sources for common chains
+const FALLBACK_CHAIN_LOGOS: Record<number, string[]> = {
+    1: [
+        'https://static.debank.com/image/chain/logo_url/eth/42ba589cd077e7bdd97db6480b0ff61d.png',
+        'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png',
+        'https://cryptologos.cc/logos/ethereum-eth-logo.png',
+        'data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzIiIGhlaWdodD0iMzIiIHZpZXdCb3g9IjAgMCAzMiAzMiIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPGNpcmNsZSBjeD0iMTYiIGN5PSIxNiIgcj0iMTYiIGZpbGw9IiM2MjcFRUEiLz4KPHBhdGggZD0iTTE2IDhMMjAgMTJIMTZWMjRIMTJWMjBIMTJWMTJIMTZWOE0xNiA4SDEyVjEySDE2VjhNMTYgMTJIMjBWMjBIMTZWMjBNMTYgMTJIMTJWMjBIMTZWMjAiIHN0cm9rZT0id2hpdGUiIHN0cm9rZS13aWR0aD0iMiIvPgo8L3N2Zz4K'
+    ],
+    10: [
+        'https://static.debank.com/image/chain/logo_url/op/68bef0c9f75488f4e302805ef9c8fc84.png',
+        'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/optimism/info/logo.png'
+    ],
+    137: [
+        'https://static.debank.com/image/chain/logo_url/matic/52ca152c08831e4765506c9bd75767e8.png',
+        'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png'
+    ],
+    42161: [
+        'https://static.debank.com/image/chain/logo_url/arb/854f629937ce94bebeb2cd38fb336de7.png',
+        'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png'
+    ],
+    8453: [
+        'https://static.debank.com/image/chain/logo_url/base/ccc1513e4f390542c4fb2f4b88ce9579.png',
+        'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png'
+    ],
+    56: [
+        'https://static.debank.com/image/chain/logo_url/bsc/bc73fa84b7fc5337905e527dadcbc854.png',
+        'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/smartchain/info/logo.png'
+    ],
+    43114: [
+        'https://static.debank.com/image/chain/logo_url/avax/4d1649e8a0c7dec9de3491b81807d402.png',
+        'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/avalanchec/info/logo.png'
+    ]
+};
+
 /**
  * Get colored logo URL for a chain ID (for use on light backgrounds like modals)
+ * Includes fallback sources if primary logo fails
  */
 export function getChainColoredLogo(chainId: number, fallbackLogo?: string): string {
-    return CHAIN_COLORED_LOGOS[chainId] || fallbackLogo || '';
+    const primaryLogo = CHAIN_COLORED_LOGOS[chainId];
+    if (primaryLogo) return primaryLogo;
+    
+    // Try fallback sources
+    const fallbacks = FALLBACK_CHAIN_LOGOS[chainId];
+    if (fallbacks && fallbacks.length > 0) {
+        return fallbacks[0];
+    }
+    
+    return fallbackLogo || '';
 }
 
 /**
@@ -227,7 +271,14 @@ export function getChainColoredLogo(chainId: number, fallbackLogo?: string): str
  * Falls back to colored logo if white logo not available
  */
 export function getChainWhiteLogo(chainId: number, fallbackLogo?: string): string {
-    return CHAIN_WHITE_LOGOS[chainId] || fallbackLogo || '';
+    const whiteLogo = CHAIN_WHITE_LOGOS[chainId];
+    if (whiteLogo) return whiteLogo;
+    
+    // Fallback to colored logo
+    const coloredLogo = getChainColoredLogo(chainId, fallbackLogo);
+    if (coloredLogo) return coloredLogo;
+    
+    return fallbackLogo || '';
 }
 
 /**
@@ -243,4 +294,16 @@ export function getChainLogo(chainId: number, fallbackLogo?: string, useWhite: b
         if (coloredLogo) return coloredLogo;
     }
     return fallbackLogo || '';
+}
+
+/**
+ * Get all fallback logo URLs for a chain (for use in img srcset or fallback chain)
+ */
+export function getChainLogoFallbacks(chainId: number): string[] {
+    const fallbacks = FALLBACK_CHAIN_LOGOS[chainId] || [];
+    const primary = CHAIN_COLORED_LOGOS[chainId];
+    if (primary && !fallbacks.includes(primary)) {
+        return [primary, ...fallbacks];
+    }
+    return fallbacks.length > 0 ? fallbacks : [primary || ''].filter(Boolean);
 }

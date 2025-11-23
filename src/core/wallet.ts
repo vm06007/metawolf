@@ -620,16 +620,43 @@ export class Wallet {
             if (ethers.isAddress(address)) {
                 normalizedAddress = address.toLowerCase();
             } else {
-                // Try to resolve ENS name
-                const provider = await this.getProvider();
+                // Check if input looks like an ENS name
+                const ensPattern = /^[a-z0-9-]+\.(eth|xyz|app|luxe|kred|art|club|design|fashion|game|group|law|media|music|news|online|photo|pics|pink|racing|realestate|restaurant|shop|site|space|tech|travel|vip|website|win|wtf)$/i;
+                const looksLikeEns = ensPattern.test(address.trim());
+                
+                if (!looksLikeEns) {
+                    throw new Error(`Invalid address or ENS name: ${address}. ENS names must end with a valid TLD (e.g., .eth)`);
+                }
+
+                // ENS names can only be resolved on Ethereum mainnet
+                // Use mainnet provider specifically for ENS resolution
+                const { rpcService } = await import('./rpc-service.js');
+                const mainnetRpcUrl = rpcService.getRPCUrl(1); // Chain ID 1 = Ethereum mainnet
+                const mainnetProvider = new ethers.JsonRpcProvider(mainnetRpcUrl);
+                
                 try {
-                    const resolvedAddress = await provider.resolveName(address);
+                    // Add timeout for ENS resolution (10 seconds)
+                    const timeoutPromise = new Promise<never>((_, reject) => {
+                        setTimeout(() => reject(new Error('ENS resolution timeout')), 10000);
+                    });
+                    
+                    const resolvedAddress = await Promise.race([
+                        mainnetProvider.resolveName(address.trim()),
+                        timeoutPromise,
+                    ]);
+                    
                     if (!resolvedAddress) {
-                        throw new Error('ENS name could not be resolved');
+                        throw new Error(`ENS name "${address}" could not be resolved. It may not exist or may not be configured.`);
                     }
                     normalizedAddress = resolvedAddress.toLowerCase();
-                } catch (ensError) {
-                    throw new Error(`Invalid address or ENS name: ${address}`);
+                } catch (ensError: any) {
+                    if (ensError.message?.includes('timeout')) {
+                        throw new Error(`ENS resolution timed out for "${address}". Please check your connection and try again.`);
+                    } else if (ensError.message?.includes('could not be resolved')) {
+                        throw ensError; // Re-throw the specific error
+                    } else {
+                        throw new Error(`Failed to resolve ENS name "${address}": ${ensError.message || 'Unknown error'}`);
+                    }
                 }
             }
 
@@ -701,6 +728,28 @@ export class Wallet {
                 currency: {
                     name: 'Ether',
                     symbol: 'ETH',
+                    decimals: 18,
+                },
+            },
+            {
+                chainId: 5115,
+                name: 'Citrea Testnet',
+                rpcUrl: 'https://rpc.testnet.citrea.xyz',
+                blockExplorer: 'https://explorer.testnet.citrea.xyz',
+                currency: {
+                    name: 'cBTC',
+                    symbol: 'cBTC',
+                    decimals: 18,
+                },
+            },
+            {
+                chainId: 62298,
+                name: 'Citrea Devnet',
+                rpcUrl: 'https://rpc.devnet.citrea.xyz',
+                blockExplorer: 'https://explorer.devnet.citrea.xyz',
+                currency: {
+                    name: 'cBTC',
+                    symbol: 'cBTC',
                     decimals: 18,
                 },
             },

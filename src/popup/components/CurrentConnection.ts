@@ -1,6 +1,6 @@
 import { formatAddress } from '../utils/account';
 import { EthPriceData } from './EthPricePanel';
-import { getChainColoredLogo } from '../utils/chain-icons';
+import { getChainColoredLogo, getChainLogoFallbacks } from '../utils/chain-icons';
 
 export interface ConnectedDApp {
     origin: string;
@@ -98,15 +98,23 @@ export function renderCurrentConnection(
                         <div class="current-connection-empty-right">
                             <div class="current-connection-price-info">
                                 <div class="eth-logo" style="width: 20px; height: 20px; flex-shrink: 0;">
-                                    <img src="https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png" 
-                                         alt="ETH" 
-                                         style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;"
-                                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
-                                    <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style="display: none;">
-                                        <path d="M12 2L2 8L12 12L22 8L12 2Z" fill="#627EEA"/>
-                                        <path d="M2 17L12 22L22 17" fill="#627EEA"/>
-                                        <path d="M2 12L12 17L22 12" fill="#627EEA"/>
-                                    </svg>
+                                    ${(() => {
+                                        const ethLogos = getChainLogoFallbacks(1); // Chain ID 1 = Ethereum
+                                        const primaryLogo = ethLogos[0] || 'https://static.debank.com/image/chain/logo_url/eth/42ba589cd077e7bdd97db6480b0ff61d.png';
+                                        const fallbackLogo = ethLogos[1] || 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png';
+                                        return `
+                                            <img src="${primaryLogo}" 
+                                                 data-fallback="${fallbackLogo}"
+                                                 alt="ETH" 
+                                                 style="width: 20px; height: 20px; border-radius: 50%; object-fit: cover;"
+                                                 onerror="if(this.dataset.fallback && !this.dataset.triedFallback) { this.src = this.dataset.fallback; this.dataset.triedFallback = 'true'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }">
+                                            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" style="display: none;">
+                                                <path d="M12 2L2 8L12 12L22 8L12 2Z" fill="#627EEA"/>
+                                                <path d="M2 17L12 22L22 17" fill="#627EEA"/>
+                                                <path d="M2 12L12 17L22 12" fill="#627EEA"/>
+                                            </svg>
+                                        `;
+                                    })()}
                                 </div>
                                 <div class="eth-price-info" style="display: flex; align-items: center; gap: 3px;">
                                     <div class="eth-price-amount" style="font-size: 13px; font-weight: 500; color: var(--r-neutral-title1); line-height: 16px;">${formattedPrice}</div>
