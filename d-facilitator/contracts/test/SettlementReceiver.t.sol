@@ -35,12 +35,14 @@ contract SettlementReceiverTest is Test {
         // Deploy forwarder helper for testing
         forwarderHelper = new ForwarderHelper();
         
-        receiver = new SettlementReceiver(
-            EXPECTED_AUTHOR,
-            EXPECTED_WORKFLOW_NAME,
-            KEYSTONE_FORWARDER,
-            EXPECTED_WORKFLOW_ID
-        );
+        // Deploy SettlementReceiver with no constructor parameters
+        receiver = new SettlementReceiver();
+        
+        // Configure all parameters via setters
+        receiver.addKeystoneForwarder(KEYSTONE_FORWARDER);
+        receiver.addExpectedWorkflowId(EXPECTED_WORKFLOW_ID);
+        receiver.addExpectedAuthor(EXPECTED_AUTHOR);
+        receiver.addExpectedWorkflowName(EXPECTED_WORKFLOW_NAME);
         
         // Deploy ExecutionProxy
         executionProxy = new ExecutionProxy(address(receiver));
@@ -53,10 +55,26 @@ contract SettlementReceiverTest is Test {
     }
 
     function test_Constructor() public {
-        assertEq(receiver.EXPECTED_AUTHOR(), EXPECTED_AUTHOR);
-        assertEq(receiver.EXPECTED_WORKFLOW_NAME(), EXPECTED_WORKFLOW_NAME);
-        assertEq(receiver.keystoneForwarderAddress(), KEYSTONE_FORWARDER);
-        assertEq(receiver.expectedWorkflowId(), EXPECTED_WORKFLOW_ID);
+        // After setUp, check that we added all values via setters
+        assertEq(receiver.getKeystoneForwarderCount(), 1);
+        assertEq(receiver.keystoneForwarderAddresses(0), KEYSTONE_FORWARDER);
+        assertEq(receiver.getExpectedWorkflowIdCount(), 1);
+        assertEq(receiver.expectedWorkflowIds(0), EXPECTED_WORKFLOW_ID);
+        assertEq(receiver.getExpectedAuthorCount(), 1);
+        assertEq(receiver.expectedAuthors(0), EXPECTED_AUTHOR);
+        assertEq(receiver.getExpectedWorkflowNameCount(), 1);
+        assertEq(receiver.expectedWorkflowNames(0), EXPECTED_WORKFLOW_NAME);
+    }
+    
+    function test_Constructor_EmptyArrays() public {
+        // Deploy a new receiver without configuration to test empty arrays
+        SettlementReceiver newReceiver = new SettlementReceiver();
+        
+        // Check that arrays are initialized empty
+        assertEq(newReceiver.getExpectedAuthorCount(), 0);
+        assertEq(newReceiver.getExpectedWorkflowNameCount(), 0);
+        assertEq(newReceiver.getKeystoneForwarderCount(), 0);
+        assertEq(newReceiver.getExpectedWorkflowIdCount(), 0);
     }
 
     function test_RevertWhen_CalledByNonForwarder() public {
@@ -157,17 +175,18 @@ contract SettlementReceiverTest is Test {
         assertEq(mockTarget.callCount(), 1);
     }
 
-    function test_SetKeystoneForwarder() public {
+    function test_AddKeystoneForwarder() public {
         address newForwarder = address(0x999);
         
-        vm.expectEmit(true, true, false, false);
-        emit SettlementReceiver.KeystoneForwarderUpdated(KEYSTONE_FORWARDER, newForwarder);
+        vm.expectEmit(true, false, false, false);
+        emit SettlementReceiver.KeystoneForwarderAdded(newForwarder);
         
-        receiver.setKeystoneForwarder(newForwarder);
-        assertEq(receiver.keystoneForwarderAddress(), newForwarder);
+        receiver.addKeystoneForwarder(newForwarder);
+        assertEq(receiver.getKeystoneForwarderCount(), 2);
+        assertEq(receiver.keystoneForwarderAddresses(1), newForwarder);
     }
 
-    function test_RevertWhen_SetKeystoneForwarder_NotOwner() public {
+    function test_RevertWhen_AddKeystoneForwarder_NotOwner() public {
         address attacker = address(0x666);
         address newForwarder = address(0x999);
         
@@ -179,30 +198,36 @@ contract SettlementReceiverTest is Test {
                 address(this)
             )
         );
-        receiver.setKeystoneForwarder(newForwarder);
+        receiver.addKeystoneForwarder(newForwarder);
     }
 
-    function test_RevertWhen_SetKeystoneForwarder_ZeroAddress() public {
+    function test_RevertWhen_AddKeystoneForwarder_ZeroAddress() public {
         vm.expectRevert(
             abi.encodeWithSelector(
                 SettlementReceiver.InvalidAddress.selector,
                 address(0)
             )
         );
-        receiver.setKeystoneForwarder(address(0));
+        receiver.addKeystoneForwarder(address(0));
     }
 
-    function test_SetExpectedWorkflowId() public {
+    function test_RevertWhen_AddKeystoneForwarder_Duplicate() public {
+        vm.expectRevert(SettlementReceiver.DuplicateValue.selector);
+        receiver.addKeystoneForwarder(KEYSTONE_FORWARDER);
+    }
+
+    function test_AddExpectedWorkflowId() public {
         bytes32 newWorkflowId = keccak256("new-workflow-id");
         
-        vm.expectEmit(true, true, false, false);
-        emit SettlementReceiver.WorkflowIdUpdated(EXPECTED_WORKFLOW_ID, newWorkflowId);
+        vm.expectEmit(true, false, false, false);
+        emit SettlementReceiver.WorkflowIdAdded(newWorkflowId);
         
-        receiver.setExpectedWorkflowId(newWorkflowId);
-        assertEq(receiver.expectedWorkflowId(), newWorkflowId);
+        receiver.addExpectedWorkflowId(newWorkflowId);
+        assertEq(receiver.getExpectedWorkflowIdCount(), 2);
+        assertEq(receiver.expectedWorkflowIds(1), newWorkflowId);
     }
 
-    function test_RevertWhen_SetExpectedWorkflowId_NotOwner() public {
+    function test_RevertWhen_AddExpectedWorkflowId_NotOwner() public {
         address attacker = address(0x666);
         bytes32 newWorkflowId = keccak256("new-workflow-id");
         
@@ -214,30 +239,36 @@ contract SettlementReceiverTest is Test {
                 address(this)
             )
         );
-        receiver.setExpectedWorkflowId(newWorkflowId);
+        receiver.addExpectedWorkflowId(newWorkflowId);
     }
 
-    function test_RevertWhen_SetExpectedWorkflowId_Zero() public {
+    function test_RevertWhen_AddExpectedWorkflowId_Zero() public {
         vm.expectRevert(
             abi.encodeWithSelector(
                 SettlementReceiver.InvalidWorkflowId.selector,
                 bytes32(0)
             )
         );
-        receiver.setExpectedWorkflowId(bytes32(0));
+        receiver.addExpectedWorkflowId(bytes32(0));
     }
 
-    function test_SetExpectedAuthor() public {
+    function test_RevertWhen_AddExpectedWorkflowId_Duplicate() public {
+        vm.expectRevert(SettlementReceiver.DuplicateValue.selector);
+        receiver.addExpectedWorkflowId(EXPECTED_WORKFLOW_ID);
+    }
+
+    function test_AddExpectedAuthor() public {
         address newAuthor = address(0x888);
         
-        vm.expectEmit(true, true, false, false);
-        emit SettlementReceiver.ExpectedAuthorUpdated(EXPECTED_AUTHOR, newAuthor);
+        vm.expectEmit(true, false, false, false);
+        emit SettlementReceiver.ExpectedAuthorAdded(newAuthor);
         
-        receiver.setExpectedAuthor(newAuthor);
-        assertEq(receiver.EXPECTED_AUTHOR(), newAuthor);
+        receiver.addExpectedAuthor(newAuthor);
+        assertEq(receiver.getExpectedAuthorCount(), 2);
+        assertEq(receiver.expectedAuthors(1), newAuthor);
     }
 
-    function test_RevertWhen_SetExpectedAuthor_NotOwner() public {
+    function test_RevertWhen_AddExpectedAuthor_NotOwner() public {
         address attacker = address(0x666);
         address newAuthor = address(0x888);
         
@@ -249,30 +280,36 @@ contract SettlementReceiverTest is Test {
                 address(this)
             )
         );
-        receiver.setExpectedAuthor(newAuthor);
+        receiver.addExpectedAuthor(newAuthor);
     }
 
-    function test_RevertWhen_SetExpectedAuthor_ZeroAddress() public {
+    function test_RevertWhen_AddExpectedAuthor_ZeroAddress() public {
         vm.expectRevert(
             abi.encodeWithSelector(
                 SettlementReceiver.InvalidAddress.selector,
                 address(0)
             )
         );
-        receiver.setExpectedAuthor(address(0));
+        receiver.addExpectedAuthor(address(0));
     }
 
-    function test_SetExpectedWorkflowName() public {
+    function test_RevertWhen_AddExpectedAuthor_Duplicate() public {
+        vm.expectRevert(SettlementReceiver.DuplicateValue.selector);
+        receiver.addExpectedAuthor(EXPECTED_AUTHOR);
+    }
+
+    function test_AddExpectedWorkflowName() public {
         bytes10 newName = "new-name";
         
-        vm.expectEmit(true, true, false, false);
-        emit SettlementReceiver.ExpectedWorkflowNameUpdated(EXPECTED_WORKFLOW_NAME, newName);
+        vm.expectEmit(true, false, false, false);
+        emit SettlementReceiver.ExpectedWorkflowNameAdded(newName);
         
-        receiver.setExpectedWorkflowName(newName);
-        assertEq(receiver.EXPECTED_WORKFLOW_NAME(), newName);
+        receiver.addExpectedWorkflowName(newName);
+        assertEq(receiver.getExpectedWorkflowNameCount(), 2);
+        assertEq(receiver.expectedWorkflowNames(1), newName);
     }
 
-    function test_RevertWhen_SetExpectedWorkflowName_NotOwner() public {
+    function test_RevertWhen_AddExpectedWorkflowName_NotOwner() public {
         address attacker = address(0x666);
         bytes10 newName = "new-name";
         
@@ -284,20 +321,25 @@ contract SettlementReceiverTest is Test {
                 address(this)
             )
         );
-        receiver.setExpectedWorkflowName(newName);
+        receiver.addExpectedWorkflowName(newName);
     }
 
-    function test_UpdateConfiguration_ThenAcceptReport() public {
-        // Update configuration
+    function test_RevertWhen_AddExpectedWorkflowName_Duplicate() public {
+        vm.expectRevert(SettlementReceiver.DuplicateValue.selector);
+        receiver.addExpectedWorkflowName(EXPECTED_WORKFLOW_NAME);
+    }
+
+    function test_AddConfiguration_ThenAcceptReport() public {
+        // Add new configuration (keeping old ones)
         address newForwarder = address(0x777);
         bytes32 newWorkflowId = keccak256("new-workflow-id");
         address newAuthor = address(0x888);
         bytes10 newName = "new-name";
         
-        receiver.setKeystoneForwarder(newForwarder);
-        receiver.setExpectedWorkflowId(newWorkflowId);
-        receiver.setExpectedAuthor(newAuthor);
-        receiver.setExpectedWorkflowName(newName);
+        receiver.addKeystoneForwarder(newForwarder);
+        receiver.addExpectedWorkflowId(newWorkflowId);
+        receiver.addExpectedAuthor(newAuthor);
+        receiver.addExpectedWorkflowName(newName);
         
         // Create metadata with new values
         bytes memory metadata = _createMetadata(newWorkflowId, newAuthor, newName);
@@ -332,6 +374,13 @@ contract SettlementReceiverTest is Test {
         
         // Verify the execution happened
         assertEq(mockTarget.callCount(), 1);
+        
+        // Verify old configuration still works
+        bytes memory oldMetadata = _createMetadata(EXPECTED_WORKFLOW_ID, EXPECTED_AUTHOR, EXPECTED_WORKFLOW_NAME);
+        bytes memory oldReport = abi.encode(address(mockTarget), data, uint256(0));
+        vm.prank(KEYSTONE_FORWARDER);
+        receiver.onReport(oldMetadata, oldReport);
+        assertEq(mockTarget.callCount(), 2);
     }
 
     /// @notice Helper function to create metadata bytes

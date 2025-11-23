@@ -7,20 +7,12 @@ import {IReceiver} from "./IReceiver.sol";
 /// @title IReceiverTemplate - Abstract receiver with workflow validation and metadata decoding
 abstract contract IReceiverTemplate is IReceiver {
 
-    // Updatable expected values
-    address public EXPECTED_AUTHOR;
-    bytes10 public EXPECTED_WORKFLOW_NAME;
-
     // Custom errors
     error InvalidAuthor(address received, address expected);
     error InvalidWorkflowName(bytes10 received, bytes10 expected);
 
-    constructor(
-        address expectedAuthor,
-        bytes10 expectedWorkflowName
-    ) {
-        EXPECTED_AUTHOR = expectedAuthor;
-        EXPECTED_WORKFLOW_NAME = expectedWorkflowName;
+    constructor() {
+        // No initialization needed - child contracts handle their own validation
     }
 
     /// @inheritdoc IReceiver
@@ -34,19 +26,14 @@ abstract contract IReceiverTemplate is IReceiver {
     /// @notice Validates metadata and processes the report
     /// @param metadata Report metadata
     /// @param report Report data
+    /// @dev Child contracts should override this or override onReport to implement their own validation
     function _validateAndProcess(
         bytes calldata metadata,
         bytes calldata report
-    ) internal {
-        (address workflowOwner, bytes10 workflowName) = _decodeMetadata(metadata);
-
-        if (workflowOwner != EXPECTED_AUTHOR) {
-            revert InvalidAuthor(workflowOwner, EXPECTED_AUTHOR);
-        }
-        if (workflowName != EXPECTED_WORKFLOW_NAME) {
-            revert InvalidWorkflowName(workflowName, EXPECTED_WORKFLOW_NAME);
-        }
-
+    ) internal virtual {
+        // Child contracts must implement their own validation logic
+        // This is a no-op here - child contracts override onReport or _validateAndProcess
+        // _decodeMetadata is available for child contracts to use
         _processReport(report);
     }
 

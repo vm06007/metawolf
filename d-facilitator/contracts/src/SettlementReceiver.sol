@@ -7,49 +7,39 @@ import { ExecutionProxy } from "./ExecutionProxy.sol";
 
 /// @title SettlementReceiver - Secure consumer contract for Chainlink CRE settlement reports
 /// @notice This contract implements the most secure pattern with:
-///   - Forwarder address validation
-///   - Workflow ID validation
-///   - Workflow owner and name validation (from IReceiverTemplate)
+///   - Forwarder address validation (array-based)
+///   - Workflow ID validation (array-based)
+///   - Workflow owner and name validation (array-based, overriding IReceiverTemplate)
 ///   - Updatable configuration with owner access control
 contract SettlementReceiver is IReceiverTemplate, Ownable {
 
-    // Updatable security parameters
-    address public keystoneForwarderAddress;
-    bytes32 public expectedWorkflowId;
+    // Array-based security parameters
+    address[] public keystoneForwarderAddresses;
+    bytes32[] public expectedWorkflowIds;
+    address[] public expectedAuthors;
+    bytes10[] public expectedWorkflowNames;
     
     // ExecutionProxy for executing arbitrary signed data
     address public executionProxy;
 
     // Custom errors
-    error InvalidSender(address sender, address expected);
-    error UnauthorizedWorkflow(bytes32 received, bytes32 expected);
+    error InvalidSender(address sender);
+    error UnauthorizedWorkflow(bytes32 received);
     error InvalidAddress(address addr);
     error InvalidWorkflowId(bytes32 workflowId);
+    error DuplicateValue();
 
     // Events
-    event KeystoneForwarderUpdated(address indexed oldForwarder, address indexed newForwarder);
-    event WorkflowIdUpdated(bytes32 indexed oldWorkflowId, bytes32 indexed newWorkflowId);
-    event ExpectedAuthorUpdated(address indexed oldAuthor, address indexed newAuthor);
-    event ExpectedWorkflowNameUpdated(bytes10 indexed oldName, bytes10 indexed newName);
+    event KeystoneForwarderAdded(address indexed forwarder);
+    event WorkflowIdAdded(bytes32 indexed workflowId);
+    event ExpectedAuthorAdded(address indexed author);
+    event ExpectedWorkflowNameAdded(bytes10 indexed workflowName);
     event ExecutionProxyUpdated(address indexed oldProxy, address indexed newProxy);
     event ExecutionSucceeded(address indexed target, bytes data, uint256 value, bool success);
 
-    /// @notice Constructor sets all security parameters
-    /// @param expectedAuthor The expected workflow owner address
-    /// @param expectedWorkflowName The expected workflow name (bytes10)
-    /// @param _keystoneForwarderAddress The Chainlink KeystoneForwarder contract address
-    /// @param _expectedWorkflowId The specific workflow ID to accept reports from
-    constructor(
-        address expectedAuthor,
-        bytes10 expectedWorkflowName,
-        address _keystoneForwarderAddress,
-        bytes32 _expectedWorkflowId
-    ) IReceiverTemplate(expectedAuthor, expectedWorkflowName) {
-        if (_keystoneForwarderAddress == address(0)) {
-            revert InvalidAddress(address(0));
-        }
-        keystoneForwarderAddress = _keystoneForwarderAddress;
-        expectedWorkflowId = _expectedWorkflowId;
+    /// @notice Constructor with no parameters - configuration is done via setter functions
+    constructor() IReceiverTemplate() {
+        // Arrays are initialized empty - use add* functions to configure
     }
 
     /// @notice Override to add forwarder and workflow ID checks before parent validation
@@ -59,36 +49,74 @@ contract SettlementReceiver is IReceiverTemplate, Ownable {
         bytes calldata metadata,
         bytes calldata report
     ) external override {
-        // First check: Ensure the call is from the trusted KeystoneForwarder
-        if (msg.sender != keystoneForwarderAddress) {
-            revert InvalidSender(msg.sender, keystoneForwarderAddress);
+        // First check: Ensure the call is from a trusted KeystoneForwarder
+        bool isAuthorizedForwarder = false;
+        for (uint256 i = 0; i < keystoneForwarderAddresses.length; i++) {
+            if (msg.sender == keystoneForwarderAddresses[i]) {
+                isAuthorizedForwarder = true;
+                break;
+            }
+        }
+        if (!isAuthorizedForwarder) {
+            revert InvalidSender(msg.sender);
         }
 
         // Second check: Validate workflow ID
-        (bytes32 workflowId, , ) = _getWorkflowMetaData(metadata);
-        if (workflowId != expectedWorkflowId) {
-            revert UnauthorizedWorkflow(workflowId, expectedWorkflowId);
+        bytes32 workflowId = _getWorkflowId(metadata);
+        bool isAuthorizedWorkflowId = false;
+        for (uint256 i = 0; i < expectedWorkflowIds.length; i++) {
+            if (workflowId == expectedWorkflowIds[i]) {
+                isAuthorizedWorkflowId = true;
+                break;
+            }
+        }
+        if (!isAuthorizedWorkflowId) {
+            revert UnauthorizedWorkflow(workflowId);
         }
 
-        // Third check: Call parent validation for workflow owner/name validation
-        _validateAndProcess(metadata, report);
+        // Third check: Validate workflow owner (array-based) - using parent's _decodeMetadata
+        (address workflowOwner, bytes10 workflowName) = _decodeMetadata(metadata);
+        bool isAuthorizedAuthor = false;
+        for (uint256 i = 0; i < expectedAuthors.length; i++) {
+            if (workflowOwner == expectedAuthors[i]) {
+                isAuthorizedAuthor = true;
+                break;
+            }
+        }
+        if (!isAuthorizedAuthor) {
+            // Use first expected author as reference for error message
+            address expectedAuthorRef = expectedAuthors.length > 0 ? expectedAuthors[0] : address(0);
+            revert InvalidAuthor(workflowOwner, expectedAuthorRef);
+        }
+
+        // Fourth check: Validate workflow name (array-based) - using parent's _decodeMetadata
+        bool isAuthorizedName = false;
+        for (uint256 i = 0; i < expectedWorkflowNames.length; i++) {
+            if (workflowName == expectedWorkflowNames[i]) {
+                isAuthorizedName = true;
+                break;
+            }
+        }
+        if (!isAuthorizedName) {
+            // Use first expected workflow name as reference for error message
+            bytes10 expectedNameRef = expectedWorkflowNames.length > 0 ? expectedWorkflowNames[0] : bytes10(0);
+            revert InvalidWorkflowName(workflowName, expectedNameRef);
+        }
+
+        // All validations passed, process the report
+        _processReport(report);
     }
 
-    /// @notice Extracts metadata from the onReport `metadata` parameter
+    /// @notice Extracts workflow ID from the onReport `metadata` parameter
     /// @param metadata The metadata bytes
-    /// @return workflowId The workflow ID
-    /// @return workflowOwner The workflow owner address
-    /// @return workflowName The workflow name
-    function _getWorkflowMetaData(
+    /// @return workflowId The workflow ID (workflow_cid)
+    /// @dev Uses parent's _decodeMetadata for workflowOwner and workflowName to avoid duplication
+    function _getWorkflowId(
         bytes memory metadata
-    ) internal pure returns (bytes32 workflowId, address workflowOwner, bytes10 workflowName) {
+    ) internal pure returns (bytes32 workflowId) {
         assembly {
             // workflow_cid (workflowId) is at offset 32, size 32
             workflowId := mload(add(metadata, 32))
-            // workflow_name is at offset 64, size 10
-            workflowName := mload(add(metadata, 64))
-            // workflow_owner is at offset 74, size 20 (shift right by 12 bytes)
-            workflowOwner := shr(mul(12, 8), mload(add(metadata, 74)))
         }
     }
 
@@ -153,45 +181,92 @@ contract SettlementReceiver is IReceiverTemplate, Ownable {
         return (success, result);
     }
 
-    /// @notice Updates the KeystoneForwarder address (owner only)
-    /// @param _newForwarderAddress The new KeystoneForwarder contract address
-    function setKeystoneForwarder(address _newForwarderAddress) external onlyOwner {
-        if (_newForwarderAddress == address(0)) {
+    /// @notice Adds a new KeystoneForwarder address to the allowed list (owner only)
+    /// @param _forwarderAddress The KeystoneForwarder contract address to add
+    function addKeystoneForwarder(address _forwarderAddress) external onlyOwner {
+        if (_forwarderAddress == address(0)) {
             revert InvalidAddress(address(0));
         }
-        address oldForwarder = keystoneForwarderAddress;
-        keystoneForwarderAddress = _newForwarderAddress;
-        emit KeystoneForwarderUpdated(oldForwarder, _newForwarderAddress);
+        // Check for duplicates
+        for (uint256 i = 0; i < keystoneForwarderAddresses.length; i++) {
+            if (keystoneForwarderAddresses[i] == _forwarderAddress) {
+                revert DuplicateValue();
+            }
+        }
+        keystoneForwarderAddresses.push(_forwarderAddress);
+        emit KeystoneForwarderAdded(_forwarderAddress);
     }
 
-    /// @notice Updates the expected workflow ID (owner only)
-    /// @param _newWorkflowId The new workflow ID to accept reports from
-    function setExpectedWorkflowId(bytes32 _newWorkflowId) external onlyOwner {
-        if (_newWorkflowId == bytes32(0)) {
+    /// @notice Adds a new expected workflow ID to the allowed list (owner only)
+    /// @param _workflowId The workflow ID to add
+    function addExpectedWorkflowId(bytes32 _workflowId) external onlyOwner {
+        if (_workflowId == bytes32(0)) {
             revert InvalidWorkflowId(bytes32(0));
         }
-        bytes32 oldWorkflowId = expectedWorkflowId;
-        expectedWorkflowId = _newWorkflowId;
-        emit WorkflowIdUpdated(oldWorkflowId, _newWorkflowId);
+        // Check for duplicates
+        for (uint256 i = 0; i < expectedWorkflowIds.length; i++) {
+            if (expectedWorkflowIds[i] == _workflowId) {
+                revert DuplicateValue();
+            }
+        }
+        expectedWorkflowIds.push(_workflowId);
+        emit WorkflowIdAdded(_workflowId);
     }
 
-    /// @notice Updates the expected workflow author (owner only)
-    /// @param _newAuthor The new expected workflow owner address
-    function setExpectedAuthor(address _newAuthor) external onlyOwner {
-        if (_newAuthor == address(0)) {
+    /// @notice Adds a new expected workflow author to the allowed list (owner only)
+    /// @param _author The expected workflow owner address to add
+    function addExpectedAuthor(address _author) external onlyOwner {
+        if (_author == address(0)) {
             revert InvalidAddress(address(0));
         }
-        address oldAuthor = EXPECTED_AUTHOR;
-        EXPECTED_AUTHOR = _newAuthor;
-        emit ExpectedAuthorUpdated(oldAuthor, _newAuthor);
+        // Check for duplicates
+        for (uint256 i = 0; i < expectedAuthors.length; i++) {
+            if (expectedAuthors[i] == _author) {
+                revert DuplicateValue();
+            }
+        }
+        expectedAuthors.push(_author);
+        emit ExpectedAuthorAdded(_author);
     }
 
-    /// @notice Updates the expected workflow name (owner only)
-    /// @param _newWorkflowName The new expected workflow name
-    function setExpectedWorkflowName(bytes10 _newWorkflowName) external onlyOwner {
-        bytes10 oldName = EXPECTED_WORKFLOW_NAME;
-        EXPECTED_WORKFLOW_NAME = _newWorkflowName;
-        emit ExpectedWorkflowNameUpdated(oldName, _newWorkflowName);
+    /// @notice Adds a new expected workflow name to the allowed list (owner only)
+    /// @param _workflowName The expected workflow name to add
+    function addExpectedWorkflowName(bytes10 _workflowName) external onlyOwner {
+        if (_workflowName == bytes10(0)) {
+            revert InvalidWorkflowName(bytes10(0), bytes10(0));
+        }
+        // Check for duplicates
+        for (uint256 i = 0; i < expectedWorkflowNames.length; i++) {
+            if (expectedWorkflowNames[i] == _workflowName) {
+                revert DuplicateValue();
+            }
+        }
+        expectedWorkflowNames.push(_workflowName);
+        emit ExpectedWorkflowNameAdded(_workflowName);
+    }
+
+    /// @notice Gets the count of authorized forwarders
+    /// @return The number of authorized forwarders
+    function getKeystoneForwarderCount() external view returns (uint256) {
+        return keystoneForwarderAddresses.length;
+    }
+
+    /// @notice Gets the count of authorized workflow IDs
+    /// @return The number of authorized workflow IDs
+    function getExpectedWorkflowIdCount() external view returns (uint256) {
+        return expectedWorkflowIds.length;
+    }
+
+    /// @notice Gets the count of authorized authors
+    /// @return The number of authorized authors
+    function getExpectedAuthorCount() external view returns (uint256) {
+        return expectedAuthors.length;
+    }
+
+    /// @notice Gets the count of authorized workflow names
+    /// @return The number of authorized workflow names
+    function getExpectedWorkflowNameCount() external view returns (uint256) {
+        return expectedWorkflowNames.length;
     }
 
    }

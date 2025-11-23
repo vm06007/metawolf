@@ -20,12 +20,13 @@ contract ExecutionProxyTest is Test {
 
     function setUp() public {
         // Deploy SettlementReceiver first (owner will be this test contract)
-        settlementReceiver = new SettlementReceiver(
-            EXPECTED_AUTHOR,
-            EXPECTED_WORKFLOW_NAME,
-            KEYSTONE_FORWARDER,
-            EXPECTED_WORKFLOW_ID
-        );
+        settlementReceiver = new SettlementReceiver();
+        
+        // Configure all parameters via setters
+        settlementReceiver.addKeystoneForwarder(KEYSTONE_FORWARDER);
+        settlementReceiver.addExpectedWorkflowId(EXPECTED_WORKFLOW_ID);
+        settlementReceiver.addExpectedAuthor(EXPECTED_AUTHOR);
+        settlementReceiver.addExpectedWorkflowName(EXPECTED_WORKFLOW_NAME);
         
         // Deploy ExecutionProxy with SettlementReceiver as authorized caller
         executionProxy = new ExecutionProxy(address(settlementReceiver));

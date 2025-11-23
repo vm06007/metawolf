@@ -42,13 +42,19 @@ contract Deploy is Script {
         
         // Deploy SettlementReceiver first (needed for ExecutionProxy)
         console2.log("\nDeploying SettlementReceiver...");
-        SettlementReceiver settlementReceiver = new SettlementReceiver(
-            DEFAULT_EXPECTED_AUTHOR,
-            DEFAULT_EXPECTED_WORKFLOW_NAME,
-            forwarder,
-            DEFAULT_EXPECTED_WORKFLOW_ID
-        );
+        SettlementReceiver settlementReceiver = new SettlementReceiver();
         console2.log("SettlementReceiver deployed at:", address(settlementReceiver));
+        
+        // Configure SettlementReceiver with all parameters
+        console2.log("\nConfiguring SettlementReceiver...");
+        settlementReceiver.addKeystoneForwarder(forwarder);
+        console2.log("KeystoneForwarder added:", forwarder);
+        settlementReceiver.addExpectedWorkflowId(DEFAULT_EXPECTED_WORKFLOW_ID);
+        console2.log("ExpectedWorkflowId added");
+        settlementReceiver.addExpectedAuthor(DEFAULT_EXPECTED_AUTHOR);
+        console2.log("ExpectedAuthor added");
+        settlementReceiver.addExpectedWorkflowName(DEFAULT_EXPECTED_WORKFLOW_NAME);
+        console2.log("ExpectedWorkflowName added");
         
         // Deploy ExecutionProxy with SettlementReceiver as authorized caller
         console2.log("\nDeploying ExecutionProxy...");
@@ -56,7 +62,6 @@ contract Deploy is Script {
         console2.log("ExecutionProxy deployed at:", address(executionProxy));
         
         // Set ExecutionProxy in SettlementReceiver
-        console2.log("\nConfiguring SettlementReceiver...");
         settlementReceiver.setExecutionProxy(address(executionProxy));
         console2.log("ExecutionProxy set in SettlementReceiver");
         
