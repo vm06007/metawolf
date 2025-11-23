@@ -3220,25 +3220,26 @@ export class PopupApp {
         // Deploy via factory using gas station
         const FACTORY_ABI = [
             'function createMultisig(address[] calldata owners, uint256 threshold, bytes32 salt) external returns (address)',
+            'function computeAddress(address[] calldata owners, uint256 threshold, bytes32 salt) external view returns (address)',
             'event MultisigCreated(address indexed multisig, address[] owners, uint256 threshold)',
         ];
 
         const factory = new ethers.Contract(factoryAddress, FACTORY_ABI, gasStationSigner);
         const data = factory.interface.encodeFunctionData('createMultisig', [owners, threshold, salt]);
 
-        // Get gas price and estimate gas
+        // Get gas price (skip gas estimation and use hardcoded 4M gas limit)
         const feeData = await provider.getFeeData();
-        const gasEstimate = await provider.estimateGas({
-            to: factoryAddress,
-            data: data,
-            from: await gasStationSigner.getAddress(),
-        });
+
+        // Use hardcoded gas limit of 4,000,000 instead of estimating
+        // This allows the transaction to proceed even if estimation fails
+        const gasLimit = BigInt(4000000);
+        console.log('[deployMultisig] Using hardcoded gas limit:', gasLimit.toString());
 
         const transaction = {
             to: factoryAddress,
             data: data,
             value: '0x0',
-            gasLimit: (gasEstimate * BigInt(120)) / BigInt(100),
+            gasLimit: gasLimit,
             maxFeePerGas: feeData.maxFeePerGas?.toString(),
             maxPriorityFeePerGas: feeData.maxPriorityFeePerGas?.toString(),
             chainId: chainId,

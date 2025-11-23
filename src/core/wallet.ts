@@ -190,12 +190,21 @@ export class Wallet {
                 haloLinked: true,
             };
 
-            // Check for duplicates
-            if (this.state.accounts.some(acc => acc.address.toLowerCase() === account.address.toLowerCase())) {
-                throw new Error('Multisig account already exists');
+            // Check if account already exists - if so, update it instead of throwing error
+            const existingIndex = this.state.accounts.findIndex(
+                acc => acc.address.toLowerCase() === account.address.toLowerCase()
+            );
+
+            if (existingIndex >= 0) {
+                // Update existing account with new info (chips might have changed)
+                console.log('[Wallet] Updating existing multisig account:', account.address);
+                this.state.accounts[existingIndex] = account;
+            } else {
+                // Add new account
+                console.log('[Wallet] Adding new multisig account:', account.address);
+                this.state.accounts.push(account);
             }
 
-            this.state.accounts.push(account);
             if (!this.state.selectedAccount) {
                 this.state.selectedAccount = account.address;
             }
