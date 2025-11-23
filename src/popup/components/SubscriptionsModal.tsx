@@ -18,6 +18,14 @@ export function renderSubscriptionsModal(params: RenderSubscriptionsModalParams)
 
     const subscriptionServices = [
         {
+            id: 'bankless',
+            name: 'Bankless Podcast',
+            icon: '🎙️',
+            description: 'Crypto and DeFi podcast',
+            price: '$20/month',
+            url: 'https://www.bankless.com/podcast',
+        },
+        {
             id: 'spotify',
             name: 'Spotify',
             icon: '🎵',
