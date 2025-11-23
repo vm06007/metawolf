@@ -34,6 +34,9 @@ export function renderSendScreen(props: SendScreenProps): string {
         icon: asset.icon,
     }));
 
+    // ETH fallback icon URL
+    const ethFallbackIcon = 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png';
+    
     // Always include ETH as an option if not already present
     const hasETH = availableTokens.some(t => t.symbol === 'ETH' || t.symbol === 'WETH');
     if (!hasETH) {
@@ -41,13 +44,13 @@ export function renderSendScreen(props: SendScreenProps): string {
             symbol: 'ETH',
             balance: '0',
             balanceInFiat: 0,
-            icon: 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png',
+            icon: ethFallbackIcon,
         });
     }
 
     // Get default token (ETH)
     const defaultToken = availableTokens.find(t => t.symbol === 'ETH') || availableTokens[0];
-    const defaultTokenIcon = defaultToken?.icon || (defaultToken?.symbol === 'ETH' ? 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png' : null);
+    const defaultTokenIcon = defaultToken?.icon || (defaultToken?.symbol === 'ETH' ? ethFallbackIcon : null);
     const defaultTokenBalance = defaultToken ? parseFloat(defaultToken.balance) : 0;
 
     // Get available chains from CHAIN_METADATA
@@ -152,7 +155,12 @@ export function renderSendScreen(props: SendScreenProps): string {
                         <div class="send-token-display" id="send-token-display">
                             ${defaultToken ? `
                                 ${defaultTokenIcon ? `
-                                    <img src="${defaultTokenIcon}" alt="${defaultToken.symbol}" class="send-token-display-icon">
+                                    <img src="${defaultTokenIcon}" 
+                                         ${defaultToken.symbol === 'ETH' ? `data-fallback="${ethFallbackIcon}"` : ''}
+                                         alt="${defaultToken.symbol}" 
+                                         class="send-token-display-icon"
+                                         onerror="if(this.dataset.fallback && !this.dataset.triedFallback) { this.src = this.dataset.fallback; this.dataset.triedFallback = 'true'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }">
+                                    <div class="send-token-display-icon-fallback" style="display: none;">${defaultToken.symbol.charAt(0)}</div>
                                 ` : `
                                     <div class="send-token-display-icon-fallback">${defaultToken.symbol.charAt(0)}</div>
                                 `}
@@ -245,7 +253,12 @@ export function renderSendScreen(props: SendScreenProps): string {
                         ${availableTokens.length > 0 ? availableTokens.map(token => `
                             <div class="send-token-option" data-token="${token.symbol}">
                                 ${token.icon ? `
-                                    <img src="${token.icon}" alt="${token.symbol}" class="send-token-option-icon">
+                                    <img src="${token.icon}" 
+                                         ${token.symbol === 'ETH' ? `data-fallback="${ethFallbackIcon}"` : ''}
+                                         alt="${token.symbol}" 
+                                         class="send-token-option-icon"
+                                         onerror="if(this.dataset.fallback && !this.dataset.triedFallback) { this.src = this.dataset.fallback; this.dataset.triedFallback = 'true'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }">
+                                    <div class="send-token-option-icon-fallback" style="display: none;">${token.symbol.charAt(0)}</div>
                                 ` : `
                                     <div class="send-token-option-icon-fallback">${token.symbol.charAt(0)}</div>
                                 `}

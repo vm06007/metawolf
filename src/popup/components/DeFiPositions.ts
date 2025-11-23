@@ -1,6 +1,57 @@
-import type { OctavPortfolio } from '../services/transactions-service';
+import type { OctavPortfolio, OctavPortfolioAsset } from '../services/transactions-service';
 import { getChainColoredLogo, getChainWhiteLogo } from '../utils/chain-icons';
 import { CHAIN_METADATA } from '@avail-project/nexus-core';
+
+// Helper function to get token icon URL
+function getTokenIcon(asset: OctavPortfolioAsset, chainKey?: string): string {
+    // First try the image from OCTAV API (if includeImages=true)
+    if (asset.image) {
+        return asset.image;
+    }
+    
+    // Fallback to TrustWallet assets
+    const chain = chainKey || asset.chain || 'ethereum';
+    const contractAddress = asset.contractAddress;
+    
+    // For native tokens (ETH, MATIC, etc.)
+    if (!contractAddress || contractAddress === '0x0000000000000000000000000000000000000000') {
+        const nativeTokenMap: Record<string, string> = {
+            'ETH': 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png',
+            'MATIC': 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/polygon/info/logo.png',
+            'BNB': 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/smartchain/info/logo.png',
+            'AVAX': 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/avalanchec/info/logo.png',
+            'FTM': 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/fantom/info/logo.png',
+            'OP': 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/optimism/info/logo.png',
+            'ARB': 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/arbitrum/info/logo.png',
+            'BASE': 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/base/info/logo.png',
+        };
+        
+        if (nativeTokenMap[asset.symbol]) {
+            return nativeTokenMap[asset.symbol];
+        }
+        
+        // Generic chain logo
+        return `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${chain}/info/logo.png`;
+    }
+    
+    // For ERC20 tokens, use TrustWallet assets
+    // Format: https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/{chain}/assets/{contractAddress}/logo.png
+    const chainMap: Record<string, string> = {
+        'ethereum': 'ethereum',
+        'arbitrum': 'arbitrum',
+        'optimism': 'optimism',
+        'polygon': 'polygon',
+        'base': 'base',
+        'bsc': 'smartchain',
+        'avalanche': 'avalanchec',
+        'fantom': 'fantom',
+    };
+    
+    const trustwalletChain = chainMap[chain.toLowerCase()] || 'ethereum';
+    const address = contractAddress.toLowerCase();
+    
+    return `https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/${trustwalletChain}/assets/${address}/logo.png`;
+}
 
 export interface DeFiPositionsProps {
     portfolio: OctavPortfolio | null;
@@ -121,6 +172,14 @@ export function renderDeFiPositions(props: DeFiPositionsProps): string {
     // Get all protocols
     const protocols = Object.values(portfolio.assetByProtocols);
     
+    // Debug logging
+    console.log('[DeFiPositions] Rendering with protocols:', protocols.map((p: any) => ({
+        name: p.name,
+        value: p.value,
+        assetCount: p.assets?.length || 0,
+        assets: p.assets?.map((a: any) => ({ symbol: a.symbol, value: a.value, chain: a.chain })) || [],
+    })));
+    
     // Filter by chain if selected
     let filteredProtocols = protocols;
     if (selectedChainId !== null && selectedChainId !== undefined) {
@@ -132,7 +191,8 @@ export function renderDeFiPositions(props: DeFiPositionsProps): string {
         if (chainKey) {
             // Filter protocols that have assets on this chain
             filteredProtocols = protocols.filter(protocol => {
-                return protocol.assets.some(asset => 
+                const assets = protocol.assets || [];
+                return assets.some(asset => 
                     asset.chain?.toLowerCase() === chainKey.toLowerCase()
                 );
             });
@@ -150,7 +210,8 @@ export function renderDeFiPositions(props: DeFiPositionsProps): string {
             const chainAssets: Record<string, { protocol: OctavPortfolio['assetByProtocols'][string]; assets: typeof portfolio.assetByProtocols[string]['assets'] }> = {};
             
             filteredProtocols.forEach(protocol => {
-                const chainAssetsList = protocol.assets.filter(asset => 
+                const protocolAssets = protocol.assets || [];
+                const chainAssetsList = protocolAssets.filter(asset => 
                     asset.chain?.toLowerCase() === chainKey.toLowerCase()
                 );
                 
@@ -197,15 +258,31 @@ export function renderDeFiPositions(props: DeFiPositionsProps): string {
                                         <div class="defi-protocol-value">${formatUSD(protocolValue)}</div>
                                     </div>
                                     <div class="defi-assets-list">
-                                        ${group.assets.map(asset => `
-                                            <div class="defi-asset-item">
-                                                <div class="defi-asset-info">
-                                                    <div class="defi-asset-symbol">${asset.symbol}</div>
-                                                    <div class="defi-asset-balance">${formatBalance(asset.balance)}</div>
+                                        ${(group.assets || []).map(asset => {
+                                            const tokenIcon = getTokenIcon(asset);
+                                            const assetSymbol = asset.symbol || 'N/A';
+                                            const assetName = asset.name || assetSymbol;
+                                            return `
+                                                <div class="defi-asset-item">
+                                                    <div class="defi-asset-info">
+                                                        ${tokenIcon ? `
+                                                            <img src="${tokenIcon}" 
+                                                                 alt="${assetSymbol}" 
+                                                                 class="defi-asset-icon"
+                                                                 onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                                            <div class="defi-asset-icon-fallback" style="display: none;">${assetSymbol.charAt(0).toUpperCase()}</div>
+                                                        ` : `
+                                                            <div class="defi-asset-icon-fallback">${assetSymbol.charAt(0).toUpperCase()}</div>
+                                                        `}
+                                                        <div>
+                                                            <div class="defi-asset-symbol" title="${assetName}">${assetSymbol}</div>
+                                                            <div class="defi-asset-balance">${formatBalance(asset.balance || '0')}</div>
+                                                        </div>
+                                                    </div>
+                                                    <div class="defi-asset-value">${formatUSD(asset.value || '0')}</div>
                                                 </div>
-                                                <div class="defi-asset-value">${formatUSD(asset.value)}</div>
-                                            </div>
-                                        `).join('')}
+                                            `;
+                                        }).join('')}
                                     </div>
                                 </div>
                             `;
@@ -236,10 +313,12 @@ export function renderDeFiPositions(props: DeFiPositionsProps): string {
             <div class="defi-positions-list">
                 ${sortedProtocols.length > 0 ? sortedProtocols.map(protocol => {
                     const protocolValue = parseFloat(protocol.value || '0');
-                    const assetCount = protocol.assets.length;
+                    const assets = protocol.assets || [];
+                    // Never show "0 assets" - if no assets but has value, show "1 asset" as minimum
+                    const assetCount = assets.length > 0 ? assets.length : (protocolValue > 0 ? 1 : 0);
                     
                     // Get unique chains for this protocol
-                    const chainKeys = new Set(protocol.assets.map(a => a.chain).filter(Boolean));
+                    const chainKeys = new Set(assets.map(a => a.chain).filter(Boolean));
                     const chainIds = Array.from(chainKeys)
                         .map(key => key ? getChainIdFromKey(key) : null)
                         .filter((id): id is number => id !== null);
@@ -249,7 +328,7 @@ export function renderDeFiPositions(props: DeFiPositionsProps): string {
                             <div class="defi-protocol-main">
                                 <div class="defi-protocol-info">
                                     <div class="defi-protocol-name">${protocol.name}</div>
-                                    <div class="defi-protocol-meta">${assetCount} asset${assetCount !== 1 ? 's' : ''}</div>
+                                    ${assetCount > 0 ? `<div class="defi-protocol-meta">${assetCount} asset${assetCount !== 1 ? 's' : ''}</div>` : ''}
                                 </div>
                                 <div class="defi-protocol-value">${formatUSD(protocolValue)}</div>
                             </div>
@@ -275,17 +354,33 @@ export function renderDeFiPositions(props: DeFiPositionsProps): string {
                                     }).join('')}
                                 </div>
                             ` : ''}
-                            <div class="defi-protocol-assets">
-                                ${protocol.assets.slice(0, 3).map(asset => `
-                                    <div class="defi-asset-preview">
-                                        <span class="defi-asset-symbol-small">${asset.symbol}</span>
-                                        <span class="defi-asset-value-small">${formatUSD(asset.value)}</span>
-                                    </div>
-                                `).join('')}
-                                ${protocol.assets.length > 3 ? `
-                                    <div class="defi-asset-more">+${protocol.assets.length - 3} more</div>
-                                ` : ''}
-                            </div>
+                            ${assets.length > 0 ? `
+                                <div class="defi-protocol-assets">
+                                    ${assets.map(asset => {
+                                        const tokenIcon = getTokenIcon(asset);
+                                        const assetSymbol = asset.symbol || 'N/A';
+                                        const assetName = asset.name || assetSymbol;
+                                        const assetValue = parseFloat(asset.value || '0');
+                                        return `
+                                            <div class="defi-asset-preview" title="${assetName} - ${formatUSD(assetValue)}">
+                                                ${tokenIcon ? `
+                                                    <img src="${tokenIcon}" 
+                                                         alt="${assetSymbol}" 
+                                                         class="defi-asset-icon"
+                                                         onerror="this.style.display='none'; this.nextElementSibling.style.display='flex';">
+                                                    <div class="defi-asset-icon-fallback" style="display: none;">${assetSymbol.charAt(0).toUpperCase()}</div>
+                                                ` : `
+                                                    <div class="defi-asset-icon-fallback">${assetSymbol.charAt(0).toUpperCase()}</div>
+                                                `}
+                                                <div class="defi-asset-preview-info">
+                                                    <span class="defi-asset-symbol-small" title="${assetName}">${assetSymbol}</span>
+                                                    <span class="defi-asset-value-small">${formatUSD(assetValue)}</span>
+                                                </div>
+                                            </div>
+                                        `;
+                                    }).join('')}
+                                </div>
+                            ` : ''}
                         </div>
                     `;
                 }).join('') : `

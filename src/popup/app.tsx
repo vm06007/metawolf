@@ -194,6 +194,24 @@ export class PopupApp {
                 chains: portfolioData?.chains ? Object.keys(portfolioData.chains) : [],
             });
             
+            // Log detailed protocol info for debugging
+            if (portfolioData?.assetByProtocols) {
+                Object.entries(portfolioData.assetByProtocols).forEach(([key, protocol]: [string, any]) => {
+                    console.log(`[PopupApp] Protocol ${key}:`, {
+                        name: protocol.name,
+                        value: protocol.value,
+                        assetCount: protocol.assets?.length || 0,
+                        assets: protocol.assets?.map((a: any) => ({
+                            symbol: a.symbol,
+                            value: a.value,
+                            balance: a.balance,
+                            chain: a.chain,
+                            hasImage: !!a.image,
+                        })) || [],
+                    });
+                });
+            }
+            
             this.state.portfolioData = portfolioData;
         } catch (error: any) {
             console.error('[PopupApp] Error loading portfolio data:', error);
@@ -1800,7 +1818,8 @@ export class PopupApp {
                     if (token) {
                         sendScreenState.selectedToken = token;
                         const asset = this.state.unifiedBalanceData?.assets.find(a => a.symbol === token);
-                        const tokenIcon = asset?.icon || (token === 'ETH' ? 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png' : null);
+                        const ethFallbackIcon = 'https://raw.githubusercontent.com/trustwallet/assets/master/blockchains/ethereum/info/logo.png';
+                        const tokenIcon = asset?.icon || (token === 'ETH' ? ethFallbackIcon : null);
 
                         // For Firefly accounts with ETH selected, fetch balance for selected chain if available
                         if (this.state.selectedAccount?.isFireflyAccount && token === 'ETH' && sendScreenState.selectedChainId) {
@@ -1821,7 +1840,12 @@ export class PopupApp {
                         if (tokenDisplay) {
                             tokenDisplay.innerHTML = `
                                 ${tokenIcon ? `
-                                    <img src="${tokenIcon}" alt="${token}" class="send-token-display-icon">
+                                    <img src="${tokenIcon}" 
+                                         ${token === 'ETH' ? `data-fallback="${ethFallbackIcon}"` : ''}
+                                         alt="${token}" 
+                                         class="send-token-display-icon"
+                                         onerror="if(this.dataset.fallback && !this.dataset.triedFallback) { this.src = this.dataset.fallback; this.dataset.triedFallback = 'true'; } else { this.style.display='none'; this.nextElementSibling.style.display='flex'; }">
+                                    <div class="send-token-display-icon-fallback" style="display: none;">${token.charAt(0)}</div>
                                 ` : `
                                     <div class="send-token-display-icon-fallback">${token.charAt(0)}</div>
                                 `}
