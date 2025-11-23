@@ -98,6 +98,18 @@ export class WalletService {
                 name: 'Zircuit Mainnet',
                 rpcUrl: 'https://zircuit-mainnet.drpc.org',
                 currency: { name: 'Ether', symbol: 'ETH', decimals: 18 }
+            },
+            {
+                chainId: 5115,
+                name: 'Citrea Testnet',
+                rpcUrl: 'https://rpc.testnet.citrea.xyz',
+                currency: { name: 'cBTC', symbol: 'cBTC', decimals: 18 }
+            },
+            {
+                chainId: 62298,
+                name: 'Citrea Devnet',
+                rpcUrl: 'https://rpc.devnet.citrea.xyz',
+                currency: { name: 'cBTC', symbol: 'cBTC', decimals: 18 }
             }
         ];
     }

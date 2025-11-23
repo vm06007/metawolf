@@ -94,6 +94,8 @@ export interface OctavPortfolioAsset {
     value: string;
     contractAddress?: string;
     chain?: string;
+    image?: string; // Token icon URL when includeImages=true
+    name?: string; // Token name
 }
 
 export interface OctavPortfolioProtocol {

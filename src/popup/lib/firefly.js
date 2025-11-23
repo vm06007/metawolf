@@ -16420,6 +16420,8 @@ function injectCommonNetworks() {
     registerEth("optimism-goerli", 420, {});
     registerEth("optimism-sepolia", 11155420, {});
     registerEth("xdai", 100, { ensNetwork: 1 });
+    registerEth("citrea-testnet", 5115, {});
+    registerEth("citrea-devnet", 62298, {});
 }
 
 function copy$2(obj) {

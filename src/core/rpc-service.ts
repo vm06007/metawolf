@@ -31,6 +31,12 @@ const DEFAULT_RPC_ENDPOINTS: Record<number, string[]> = {
     48900: [ // Zircuit Mainnet
         'https://zircuit-mainnet.drpc.org',
     ],
+    5115: [ // Citrea Testnet
+        'https://rpc.testnet.citrea.xyz',
+    ],
+    62298: [ // Citrea Devnet
+        'https://rpc.devnet.citrea.xyz',
+    ],
 };
 
 class RPCService {
