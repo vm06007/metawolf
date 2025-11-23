@@ -217,7 +217,7 @@ export const Newsletter = () => {
           <h1
             className="font-serif text-5xl italic short:lg:text-8xl sm:text-8xl lg:text-9xl text-white"
             style={{
-              filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.7)) drop-shadow(0 4px 12px rgba(0,0,0,0.6)) drop-shadow(0 0 40px rgba(0,0,0,0.5))'
+              filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.448)) drop-shadow(0 4px 12px rgba(0,0,0,0.384)) drop-shadow(0 0 40px rgba(0,0,0,0.32))'
             }}
           >
             Wolfy Wallet
@@ -243,7 +243,7 @@ export const Newsletter = () => {
               fill
               className="object-contain"
               style={{
-                filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.7)) drop-shadow(0 4px 12px rgba(0,0,0,0.6)) drop-shadow(0 0 40px rgba(0,0,0,0.5))'
+                filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.448)) drop-shadow(0 4px 12px rgba(0,0,0,0.384)) drop-shadow(0 0 40px rgba(0,0,0,0.32))'
               }}
               priority
             />
