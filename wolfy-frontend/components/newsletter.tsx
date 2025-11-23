@@ -10,12 +10,12 @@ import Image from "next/image";
 import { About } from "./about";
 
 // Typewriter component for line-by-line text animation
-const TypewriterText = ({ 
-  lines, 
-  speed = 30, 
-  pauseAtPunctuation = 500 
-}: { 
-  lines: Array<{ text: string; boldParts?: string[]; links?: Array<{ text: string; url: string }> }>, 
+const TypewriterText = ({
+  lines,
+  speed = 30,
+  pauseAtPunctuation = 500
+}: {
+  lines: Array<{ text: string; boldParts?: string[]; links?: Array<{ text: string; url: string }> }>,
   speed?: number,
   pauseAtPunctuation?: number
 }) => {
@@ -34,11 +34,11 @@ const TypewriterText = ({
       if (charIndex < currentLine.text.length) {
         const char = currentLine.text[charIndex];
         setCurrentText(currentLine.text.slice(0, charIndex + 1));
-        
+
         // Check if character is punctuation
         const isPunctuation = /[.,:;!?]/.test(char);
         const delay = isPunctuation ? pauseAtPunctuation : speed;
-        
+
         charIndex++;
         timeoutRef.current = setTimeout(typeNextChar, delay);
       } else {
@@ -64,7 +64,7 @@ const TypewriterText = ({
     let result: React.ReactNode[] = [];
     let lastIndex = 0;
     const processedIndices: Array<{ start: number; end: number; type: 'bold' | 'link' }> = [];
-    
+
     // Collect all formatting positions
     if (boldParts) {
       boldParts.forEach((boldPart) => {
@@ -74,7 +74,7 @@ const TypewriterText = ({
         }
       });
     }
-    
+
     if (links) {
       links.forEach((link) => {
         const index = text.indexOf(link.text);
@@ -83,14 +83,14 @@ const TypewriterText = ({
         }
       });
     }
-    
+
     // Sort by start position
     processedIndices.sort((a, b) => a.start - b.start);
-    
+
     // Remove overlapping (prioritize links over bold)
     const finalIndices: Array<{ start: number; end: number; type: 'bold' | 'link'; content: string }> = [];
     processedIndices.forEach((item) => {
-      const overlapping = finalIndices.find(f => 
+      const overlapping = finalIndices.find(f =>
         (item.start < f.end && item.end > f.start)
       );
       if (!overlapping || item.type === 'link') {
@@ -102,14 +102,14 @@ const TypewriterText = ({
         finalIndices.push({ ...item, content });
       }
     });
-    
+
     // Build result
     finalIndices.forEach((item, idx) => {
       // Add text before this formatting
       if (item.start > lastIndex) {
         result.push(text.slice(lastIndex, item.start));
       }
-      
+
       // Add formatted content
       if (item.type === 'bold') {
         result.push(<strong key={`bold-${idx}`}>{item.content}</strong>);
@@ -117,7 +117,7 @@ const TypewriterText = ({
         const link = links?.find(l => l.text === item.content);
         if (link) {
           result.push(
-            <a 
+            <a
               key={`link-${idx}`}
               href={link.url}
               target="_blank"
@@ -131,15 +131,15 @@ const TypewriterText = ({
           result.push(item.content);
         }
       }
-      
+
       lastIndex = item.end;
     });
-    
+
     // Add remaining text
     if (lastIndex < text.length) {
       result.push(text.slice(lastIndex));
     }
-    
+
     return result.length > 0 ? result : text;
   };
 
@@ -214,7 +214,7 @@ export const Newsletter = () => {
             Introducing Wolfy
           </h1>
         ) : (
-          <h1 
+          <h1
             className="font-serif text-5xl italic short:lg:text-8xl sm:text-8xl lg:text-9xl text-white"
             style={{
               filter: 'drop-shadow(0 2px 6px rgba(0,0,0,0.7)) drop-shadow(0 4px 12px rgba(0,0,0,0.6)) drop-shadow(0 0 40px rgba(0,0,0,0.5))'
@@ -223,7 +223,7 @@ export const Newsletter = () => {
             Wolfy Wallet
           </h1>
         )}
-        
+
         {/* Logo - Hide when manifesto or about is open */}
         {!isOpen && !isAboutOpen && (
           <motion.div
@@ -295,7 +295,7 @@ export const Newsletter = () => {
               >
                 Manifesto
               </Button>
-              
+
               <Button
                 className={cn("relative px-6 py-3 backdrop-blur-md bg-white/20 border-white/40 text-white hover:bg-white/30 hover:border-white/60 transition-all duration-300 shadow-lg hover:shadow-xl")}
                 style={{
@@ -309,7 +309,7 @@ export const Newsletter = () => {
               >
                 About
               </Button>
-              
+
               <Button
                 className={cn("relative px-6 py-3 backdrop-blur-md bg-white/20 border-white/40 text-white hover:bg-white/30 hover:border-white/60 transition-all duration-300 shadow-lg hover:shadow-xl")}
                 style={{
@@ -364,26 +364,26 @@ export const Newsletter = () => {
               >
                 <Cross1Icon className="w-4 h-4 text-white" />
               </button>
-              
+
               <article className="relative overflow-y-auto italic px-8 md:px-10 lg:px-12 pb-8 md:pb-10 lg:pb-12 pt-0 h-full [&_p]:my-4 text-left [&_strong]:text-white [&_strong]:font-semibold">
                 {isOpen && (
                   <TypewriterText
                     lines={[
                       { text: "November 23, 2025", boldParts: ["November 23, 2025"] },
                       { text: "Restate my assumptions:" },
-                      { text: "1. Rabby is one of the best web3 wallets ever built.", boldParts: ["1."] },
+                      { text: "1. Rabby is one of the best web3 wallets of all time.", boldParts: ["1."] },
                       { text: "2. Everything in blockchain can be represented and understood through EIPs.", boldParts: ["2."] },
                       { text: "3. Rabby still doesn't support EIP-7702.", boldParts: ["3."] },
-                      { 
-                        text: "Therefore: Rabby belongs on the wall of shame.", 
+                      {
+                        text: "Therefore: Rabby belongs on the wall of shame.",
                         boldParts: ["Therefore:"],
                         links: [{ text: "the wall of shame", url: "https://swiss-knife.xyz/7702beat#wall-of-shame" }]
                       },
                       { text: "---" },
                       { text: "At DevConnect, we made a promise:" },
-                      { text: "If Rabby remained non-compliant with EIP-7702 by the opening ceremony, we will implement it ourselves." },
+                      { text: "If Rabby remained non-compliant with EIP-7702 before hackathon, we will implement during ETHGlobal Buenos Aires." },
                       { text: "They didn't." },
-                      { text: "We are." },
+                      { text: "So we hacked it." },
                     ]}
                     speed={30}
                     pauseAtPunctuation={500}
@@ -399,7 +399,7 @@ export const Newsletter = () => {
           )}
         </AnimatePresenceGuard>
       </div>
-      
+
       {/* Social Media Icons - Hide when manifesto or about is open */}
       {!isOpen && !isAboutOpen && (
         <motion.div
