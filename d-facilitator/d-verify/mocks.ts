@@ -10,14 +10,15 @@ import {
 } from "x402/types";
 
 /**
- * Default test configuration for base-sepolia
+ * Default test configuration for ethereum-testnet-sepolia
+ * Using LINK token (18 decimals)
  */
 const DEFAULT_CONFIG = {
-  network: "base-sepolia" as const,
+  network: "ethereum-testnet-sepolia" as const,
   payTo: "0xf9711003d9b608e7aa96089cf3bdb510a950705c" as Address,
   payer: "0x46e0d7556C38E6b5Dac66D905814541723A42176" as Address,
-  tokenAddress: "0x036CbD53842c5426634e7929541eC2318f3dCF7e" as Address, // USDC on base-sepolia
-  amount: "1000000", // 1 USDC (6 decimals)
+  tokenAddress: "0x779877A7B0D9E8603169DdbD7836e478b4624789" as Address, // LINK token on Ethereum Sepolia
+  amount: "3", // 3 wei (3 * 10^0, since LINK has 18 decimals)
   resource: "https://webhook.site/defe88ad-5059-4410-904c-95a2feb81dde",
 };
 

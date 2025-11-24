@@ -34,6 +34,14 @@ const USDC_ADDRESSES: Record<string, `0x${string}`> = {
   "polygon-mainnet": "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359",
 };
 
+// LINK token addresses for different networks
+const LINK_ADDRESSES: Record<string, `0x${string}`> = {
+  "ethereum-testnet-sepolia": "0x779877A7B0D9E8603169DdbD7836e478b4624789",
+  "ethereum-mainnet": "0x514910771AF9Ca656af840dff83E8264EcF986CA",
+  "base-sepolia": "0x88Fb150BDc53A65bb5946D59Dae37a8e0b2A01EF", // LINK on Base Sepolia
+  "base": "0x88Fb150BDc53A65bb5946D59Dae37a8e0b2A01EF",
+};
+
 // Network to viem chain mapping
 const NETWORK_TO_CHAIN: Record<string, any> = {
   "base-sepolia": baseSepolia,
