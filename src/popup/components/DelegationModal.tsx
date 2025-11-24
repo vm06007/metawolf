@@ -46,9 +46,8 @@ export function renderDelegationModal(
         ? 'This will delegate your account to the smart account, enabling advanced features.'
         : 'This will clear the delegation, removing the smart account functionality from your account.';
 
-    // For Zircuit, force the use of the only available delegator
-    const isZircuit = chainId === 48900;
-    const effectiveTargetAddress = isZircuit && isUpgrade ? defaultAddress : (targetAddress || defaultAddress);
+    // Use targetAddress if provided, otherwise default to first predefined delegator
+    const effectiveTargetAddress = targetAddress || defaultAddress;
 
     // Get the name for the current address if it's a predefined one
     const currentDelegator = delegatorsForChain.find(d =>
@@ -166,12 +165,11 @@ export function renderDelegationModal(
                                     font-size: 14px;
                                     color: var(--r-neutral-title1);
                                     background: var(--r-neutral-bg1);
-                                    cursor: ${isZircuit ? 'not-allowed' : 'pointer'};
+                                    cursor: pointer;
                                     transition: all 0.2s;
                                     box-sizing: border-box;
-                                    ${isZircuit ? 'pointer-events: none; opacity: 0.7;' : ''}
-                                " onfocus="this.style.borderColor='var(--r-blue-default)'" onblur="this.style.borderColor='var(--r-neutral-line)'" ${isZircuit ? 'disabled' : ''}>
-                                    ${!isZircuit ? `<option value="custom" ${isCustomAddress ? 'selected' : ''}>Custom Address</option>` : ''}
+                                " onfocus="this.style.borderColor='var(--r-blue-default)'" onblur="this.style.borderColor='var(--r-neutral-line)'">
+                                    <option value="custom" ${isCustomAddress ? 'selected' : ''}>Custom Address</option>
                                     ${delegatorsForChain.map(delegator => `
                                         <option value="${delegator.address}" ${delegator.address.toLowerCase() === contractAddress.toLowerCase() ? 'selected' : ''}>
                                             ${delegator.name}
@@ -190,19 +188,19 @@ export function renderDelegationModal(
                                 id="delegator-address-input"
                                 value="${contractAddress}"
                                 placeholder="0x..."
-                                ${!isCustomAddress || isZircuit ? 'readonly' : ''}
+                                ${!isCustomAddress ? 'readonly' : ''}
                                 style="
                                     flex: 1;
                                     font-family: monospace;
                                     font-size: 13px;
                                     color: var(--r-neutral-title1);
-                                    background: ${isCustomAddress && !isZircuit ? 'var(--r-neutral-bg2)' : 'var(--r-neutral-bg1)'};
+                                    background: ${isCustomAddress ? 'var(--r-neutral-bg2)' : 'var(--r-neutral-bg1)'};
                                     padding: 10px 12px;
                                     border: 1px solid var(--r-neutral-line);
                                     border-radius: 8px;
                                     transition: all 0.2s;
                                     box-sizing: border-box;
-                                    cursor: ${isCustomAddress && !isZircuit ? 'text' : 'not-allowed'};
+                                    cursor: ${isCustomAddress ? 'text' : 'not-allowed'};
                                 "
                                 onfocus="if (!this.readOnly) { this.style.borderColor='var(--r-blue-default)'; this.style.background='var(--r-neutral-bg1)'; }"
                                 onblur="if (!this.readOnly) { this.style.borderColor='var(--r-neutral-line)'; this.style.background='var(--r-neutral-bg2)'; }"

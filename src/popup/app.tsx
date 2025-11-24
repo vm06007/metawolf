@@ -4832,8 +4832,8 @@ export class PopupApp {
                 this.hideDelegationModal();
             });
 
-            // Handle delegator selection dropdown (only for non-Zircuit chains)
-            if (delegatorSelect && this.state.delegationModalIsUpgrade && this.state.selectedNetwork !== 48900) {
+            // Handle delegator selection dropdown
+            if (delegatorSelect && this.state.delegationModalIsUpgrade) {
                 delegatorSelect.addEventListener('change', (e) => {
                     const selectedValue = (e.target as HTMLSelectElement).value;
                     if (selectedValue !== 'custom') {
@@ -4871,19 +4871,6 @@ export class PopupApp {
                 });
             }
 
-            // For Zircuit, ensure input is always readonly and set to Zircuit address
-            if (this.state.delegationModalIsUpgrade && this.state.selectedNetwork === 48900 && delegatorInput) {
-                const zircuitAddress = this.getDefaultDelegatorAddress(48900);
-                delegatorInput.value = zircuitAddress;
-                delegatorInput.readOnly = true;
-                delegatorInput.style.background = 'var(--r-neutral-bg1)';
-                delegatorInput.style.cursor = 'not-allowed';
-                this.state.delegationContractAddress = zircuitAddress;
-                // Update Etherscan link
-                if (etherscanLink) {
-                    etherscanLink.href = `https://explorer.zircuit.com/address/${zircuitAddress}#code`;
-                }
-            }
 
             // Handle custom address input (only when not readonly)
             if (delegatorInput && this.state.delegationModalIsUpgrade) {
